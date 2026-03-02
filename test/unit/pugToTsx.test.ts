@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { compilePugToTsx, TsxEmitter } from '../../src/language/pugToTsx';
-import { FULL_FEATURES, CSS_CLASS, SYNTHETIC } from '../../src/language/mapping';
+import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from '../../src/language/mapping';
 
 // Test checklist:
 // [x] Tags: Button -> <Button />, div -> <div />
@@ -22,6 +22,12 @@ import { FULL_FEATURES, CSS_CLASS, SYNTHETIC } from '../../src/language/mapping'
 // [x] TsxEmitter: emitMapped, emitDerived, emitSynthetic, getResult
 // [x] Buffered code: = expr -> {expr}
 // [x] Comments: stripped from output
+// [x] Conditionals: if/else -> ternary, if/else-if/else -> chained ternary
+// [x] Each loops: each item in items -> items.map(), with key/index
+// [x] While loops: while condition -> IIFE with __r array
+// [x] Case/When: case expr / when val -> chained ternaries
+// [x] Code blocks: unbuffered code, IIFE wrapping when mixed with JSX
+// [x] Control flow edge cases: empty blocks, nesting, root-level control flow
 
 // ── TsxEmitter unit tests ────────────────────────────────────────
 
@@ -361,5 +367,524 @@ describe('comments', () => {
     const result = compilePugToTsx('// this is a comment\ndiv');
     expect(result.tsx).toContain('<div');
     expect(result.tsx).not.toContain('this is a comment');
+  });
+});
+
+// ── Conditionals ────────────────────────────────────────────────
+
+describe('conditionals', () => {
+  it('if without else -> condition ? <body> : null', () => {
+    const pug = 'if show\n  span Hello';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('show');
+    expect(result.tsx).toContain('?');
+    expect(result.tsx).toContain('<span');
+    expect(result.tsx).toContain('Hello');
+    // No else branch -> null
+    expect(result.tsx).toContain(': null');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('if/else -> condition ? <consequent> : <alternate>', () => {
+    const pug = 'if isLoggedIn\n  span Welcome\nelse\n  span Login';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('isLoggedIn');
+    expect(result.tsx).toContain('?');
+    expect(result.tsx).toContain(':');
+    expect(result.tsx).toContain('Welcome');
+    expect(result.tsx).toContain('Login');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('if/else-if/else -> chained ternary', () => {
+    const pug = 'if status === "active"\n  span Active\nelse if status === "pending"\n  span Pending\nelse\n  span Unknown';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('status === "active"');
+    expect(result.tsx).toContain('status === "pending"');
+    expect(result.tsx).toContain('Active');
+    expect(result.tsx).toContain('Pending');
+    expect(result.tsx).toContain('Unknown');
+    // Should have at least two ternary operators for chained if/else-if/else
+    const qmarks = result.tsx.match(/\?/g) ?? [];
+    expect(qmarks.length).toBeGreaterThanOrEqual(2);
+    expect(result.parseError).toBeNull();
+  });
+
+  it('condition expression is mapped with FULL_FEATURES', () => {
+    const pug = 'if show\n  div';
+    const result = compilePugToTsx(pug);
+    const condMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'show'.length
+    );
+    expect(condMapping).toBeDefined();
+  });
+
+  it('if with empty consequent -> null placeholder', () => {
+    // pug parser should handle "if cond" with no children
+    // This may be a parser error or produce an empty block
+    const pug = 'if show';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('show');
+    expect(result.tsx).toContain('?');
+    expect(result.tsx).toContain('null');
+  });
+
+  it('nested conditional inside tag', () => {
+    const pug = 'div\n  if visible\n    span Show\n  else\n    span Hide';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('<div>');
+    expect(result.tsx).toContain('visible');
+    expect(result.tsx).toContain('?');
+    expect(result.tsx).toContain('Show');
+    expect(result.tsx).toContain('Hide');
+    expect(result.tsx).toContain('</div>');
+  });
+
+  it('conditional as root node', () => {
+    const pug = 'if active\n  div Hello';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('active');
+    expect(result.tsx).toContain('?');
+    expect(result.tsx).toContain('<div');
+    expect(result.tsx).toContain('Hello');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('multiple else-if chains produce multiple ternaries', () => {
+    const pug = [
+      'if a',
+      '  span A',
+      'else if b',
+      '  span B',
+      'else if c',
+      '  span C',
+      'else',
+      '  span D',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    const qmarks = result.tsx.match(/\?/g) ?? [];
+    expect(qmarks.length).toBeGreaterThanOrEqual(3);
+    expect(result.tsx).toContain('A');
+    expect(result.tsx).toContain('B');
+    expect(result.tsx).toContain('C');
+    expect(result.tsx).toContain('D');
+  });
+});
+
+// ── Each loops ──────────────────────────────────────────────────
+
+describe('each loops', () => {
+  it('basic each -> obj.map((val) => (...))', () => {
+    const pug = 'each item in items\n  li= item';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('items');
+    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('item');
+    expect(result.tsx).toContain('=>');
+    expect(result.tsx).toContain('<li');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('each with key -> obj.map((val, key) => (...))', () => {
+    const pug = 'each item, i in items\n  li= item';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('items');
+    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('item');
+    expect(result.tsx).toContain(', i');
+    expect(result.tsx).toContain('=>');
+  });
+
+  it('obj expression is mapped with FULL_FEATURES', () => {
+    const pug = 'each item in myArray\n  span= item';
+    const result = compilePugToTsx(pug);
+    const objMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'myArray'.length
+    );
+    expect(objMapping).toBeDefined();
+  });
+
+  it('val variable is mapped with FULL_FEATURES', () => {
+    const pug = 'each item in items\n  span= item';
+    const result = compilePugToTsx(pug);
+    // The loop variable 'item' should be mapped (in the .map callback param)
+    const valMappings = result.mappings.filter(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'item'.length
+    );
+    expect(valMappings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('key variable is mapped with FULL_FEATURES', () => {
+    const pug = 'each item, idx in items\n  span= item';
+    const result = compilePugToTsx(pug);
+    const keyMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'idx'.length
+    );
+    expect(keyMapping).toBeDefined();
+  });
+
+  it('each with nested body', () => {
+    const pug = 'each user in users\n  .card\n    h2= user.name\n    p= user.email';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('users');
+    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('<div');
+    expect(result.tsx).toContain('className="card"');
+    expect(result.tsx).toContain('<h2');
+    expect(result.tsx).toContain('user.name');
+    expect(result.tsx).toContain('user.email');
+    expect(result.tsx).toContain('</div>');
+  });
+
+  it('each with empty body -> parse error or null in map', () => {
+    // Bare each with no children may cause a parser error
+    const pug = 'each item in items';
+    const result = compilePugToTsx(pug);
+    // Either parse error (null placeholder) or compiled with null body
+    expect(result.tsx).toContain('null');
+    expect(typeof result.tsx).toBe('string');
+  });
+
+  it('each as root node', () => {
+    const pug = 'each item in list\n  div= item';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('list');
+    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('<div');
+    expect(result.parseError).toBeNull();
+  });
+});
+
+// ── While loops ─────────────────────────────────────────────────
+
+describe('while loops', () => {
+  it('while -> IIFE with __r array pattern', () => {
+    const pug = 'while items.length\n  div= items.pop()';
+    const result = compilePugToTsx(pug);
+    // IIFE wrapper
+    expect(result.tsx).toContain('(() => {');
+    expect(result.tsx).toContain('const __r: JSX.Element[] = []');
+    expect(result.tsx).toContain('while (');
+    expect(result.tsx).toContain('items.length');
+    expect(result.tsx).toContain(') {');
+    expect(result.tsx).toContain('__r.push(');
+    expect(result.tsx).toContain('return __r;');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('test expression is mapped with FULL_FEATURES', () => {
+    const pug = 'while condition\n  div';
+    const result = compilePugToTsx(pug);
+    const testMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'condition'.length
+    );
+    expect(testMapping).toBeDefined();
+  });
+
+  it('while with empty body -> null pushed', () => {
+    const pug = 'while running';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('while (');
+    expect(result.tsx).toContain('running');
+    expect(result.tsx).toContain('null');
+  });
+
+  it('while with nested children', () => {
+    const pug = 'while hasMore()\n  .item\n    span Text';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('hasMore()');
+    expect(result.tsx).toContain('<div');
+    expect(result.tsx).toContain('className="item"');
+    expect(result.tsx).toContain('<span');
+    expect(result.tsx).toContain('Text');
+  });
+});
+
+// ── Case/When ───────────────────────────────────────────────────
+
+describe('case/when', () => {
+  it('case with when clauses -> chained ternaries', () => {
+    const pug = [
+      'case fruit',
+      '  when "apple"',
+      '    span Apple',
+      '  when "banana"',
+      '    span Banana',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('fruit');
+    expect(result.tsx).toContain('===');
+    expect(result.tsx).toContain('"apple"');
+    expect(result.tsx).toContain('Apple');
+    expect(result.tsx).toContain('"banana"');
+    expect(result.tsx).toContain('Banana');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('case with default clause', () => {
+    const pug = [
+      'case color',
+      '  when "red"',
+      '    span Red',
+      '  default',
+      '    span Other',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('color');
+    expect(result.tsx).toContain('===');
+    expect(result.tsx).toContain('"red"');
+    expect(result.tsx).toContain('Red');
+    expect(result.tsx).toContain('Other');
+    // Default should not have '==='
+    // Count === occurrences -- should only be 1 (for "red")
+    const eqs = result.tsx.match(/===/g) ?? [];
+    expect(eqs.length).toBe(1);
+  });
+
+  it('case expression uses VERIFY_ONLY mapping', () => {
+    const pug = [
+      'case myVal',
+      '  when "a"',
+      '    span A',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    const verifyMapping = result.mappings.find(m => m.data === VERIFY_ONLY);
+    expect(verifyMapping).toBeDefined();
+  });
+
+  it('when expression uses FULL_FEATURES mapping', () => {
+    const pug = [
+      'case x',
+      '  when "hello"',
+      '    span Hi',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    const whenMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === '"hello"'.length
+    );
+    expect(whenMapping).toBeDefined();
+  });
+
+  it('case with no when clauses -> parse error or null placeholder', () => {
+    // Bare case with no when children may cause a parser error
+    const pug = 'case empty';
+    const result = compilePugToTsx(pug);
+    // Either parse error (null placeholder) or compiled with {null}
+    expect(result.tsx).toContain('null');
+    expect(typeof result.tsx).toBe('string');
+  });
+
+  it('case with multiple when and default', () => {
+    const pug = [
+      'case size',
+      '  when "sm"',
+      '    span Small',
+      '  when "md"',
+      '    span Medium',
+      '  when "lg"',
+      '    span Large',
+      '  default',
+      '    span Normal',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    const eqs = result.tsx.match(/===/g) ?? [];
+    expect(eqs.length).toBe(3);
+    expect(result.tsx).toContain('Small');
+    expect(result.tsx).toContain('Medium');
+    expect(result.tsx).toContain('Large');
+    expect(result.tsx).toContain('Normal');
+  });
+
+  it('case with empty when body -> null', () => {
+    const pug = [
+      'case val',
+      '  when "a"',
+      '  default',
+      '    span Default',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    // "a" branch should produce null, default should produce span
+    expect(result.tsx).toContain('null');
+    expect(result.tsx).toContain('Default');
+  });
+});
+
+// ── Code blocks ─────────────────────────────────────────────────
+
+describe('code blocks', () => {
+  it('unbuffered code: - const x = 10 -> statement with semicolon', () => {
+    const pug = '- const x = 10\nspan= x';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('const x = 10');
+    expect(result.tsx).toContain(';');
+    expect(result.tsx).toContain('<span');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('unbuffered code mixed with JSX wraps in IIFE', () => {
+    const pug = '- const name = "World"\nh1= name';
+    const result = compilePugToTsx(pug);
+    // Should use IIFE pattern
+    expect(result.tsx).toContain('(() => {');
+    expect(result.tsx).toContain('const name = "World"');
+    expect(result.tsx).toContain(';');
+    expect(result.tsx).toContain('return (');
+    expect(result.tsx).toContain('<h1');
+    expect(result.tsx).toContain('})()');
+  });
+
+  it('code block expression is mapped with FULL_FEATURES', () => {
+    const pug = '- const x = 10\nspan= x';
+    const result = compilePugToTsx(pug);
+    const codeMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'const x = 10'.length
+    );
+    expect(codeMapping).toBeDefined();
+  });
+
+  it('multiple code blocks before JSX', () => {
+    const pug = '- const a = 1\n- const b = 2\nspan= a + b';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('const a = 1');
+    expect(result.tsx).toContain('const b = 2');
+    expect(result.tsx).toContain('<span');
+    // IIFE wrapping
+    expect(result.tsx).toContain('(() => {');
+    expect(result.tsx).toContain('return (');
+  });
+
+  it('code-only block (no JSX) wraps in IIFE returning null', () => {
+    const pug = '- console.log("hello")';
+    const result = compilePugToTsx(pug);
+    // Only code, no JSX -> IIFE returning null
+    expect(result.tsx).toContain('(() => {');
+    expect(result.tsx).toContain('console.log("hello")');
+    expect(result.tsx).toContain('return null;');
+    expect(result.tsx).toContain('})()');
+  });
+
+  it('code block as child of tag', () => {
+    const pug = 'div\n  - const msg = "hi"\n  span= msg';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('<div>');
+    expect(result.tsx).toContain('const msg = "hi"');
+    expect(result.tsx).toContain('<span');
+    expect(result.tsx).toContain('</div>');
+  });
+
+  it('IIFE returns fragment when multiple JSX siblings follow code', () => {
+    const pug = '- const x = 1\nspan First\nspan Second';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('(() => {');
+    expect(result.tsx).toContain('return (');
+    expect(result.tsx).toContain('<>');
+    expect(result.tsx).toContain('First');
+    expect(result.tsx).toContain('Second');
+    expect(result.tsx).toContain('</>');
+  });
+});
+
+// ── Control flow edge cases ─────────────────────────────────────
+
+describe('control flow edge cases', () => {
+  it('conditional inside each loop', () => {
+    const pug = [
+      'each item in items',
+      '  if item.active',
+      '    span= item.name',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('items');
+    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('item.active');
+    expect(result.tsx).toContain('?');
+    expect(result.tsx).toContain('item.name');
+  });
+
+  it('each loop inside conditional', () => {
+    const pug = [
+      'if showList',
+      '  each item in items',
+      '    li= item',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('showList');
+    expect(result.tsx).toContain('?');
+    expect(result.tsx).toContain('items');
+    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('<li');
+  });
+
+  it('control flow with sibling tags uses fragment', () => {
+    const pug = 'div\nif show\n  span Hello';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('<>');
+    expect(result.tsx).toContain('<div');
+    expect(result.tsx).toContain('show');
+    expect(result.tsx).toContain('</>');
+  });
+
+  it('deeply nested control flow', () => {
+    const pug = [
+      'div',
+      '  if a',
+      '    if b',
+      '      span Both',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('<div>');
+    const qmarks = result.tsx.match(/\?/g) ?? [];
+    expect(qmarks.length).toBeGreaterThanOrEqual(2);
+    expect(result.tsx).toContain('Both');
+    expect(result.tsx).toContain('</div>');
+  });
+
+  it('while loop as root with sibling', () => {
+    const pug = 'div\nwhile cond\n  span Item';
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('<>');
+    expect(result.tsx).toContain('<div');
+    expect(result.tsx).toContain('while (');
+    expect(result.tsx).toContain('cond');
+    expect(result.tsx).toContain('</>');
+  });
+
+  it('case/when inside tag children', () => {
+    const pug = [
+      'div',
+      '  case mode',
+      '    when "edit"',
+      '      input(type="text")',
+      '    when "view"',
+      '      span Display',
+      '    default',
+      '      span Unknown',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('<div>');
+    expect(result.tsx).toContain('mode');
+    expect(result.tsx).toContain('===');
+    expect(result.tsx).toContain('"edit"');
+    expect(result.tsx).toContain('<input');
+    expect(result.tsx).toContain('"view"');
+    expect(result.tsx).toContain('Display');
+    expect(result.tsx).toContain('Unknown');
+    expect(result.tsx).toContain('</div>');
+  });
+
+  it('code block with conditional', () => {
+    const pug = [
+      '- const x = getVal()',
+      'if x > 0',
+      '  span Positive',
+      'else',
+      '  span Zero or negative',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('const x = getVal()');
+    expect(result.tsx).toContain('x > 0');
+    expect(result.tsx).toContain('?');
+    expect(result.tsx).toContain('Positive');
+    expect(result.tsx).toContain('Zero or negative');
   });
 });
