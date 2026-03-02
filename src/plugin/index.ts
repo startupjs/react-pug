@@ -282,6 +282,94 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         return results;
       };
 
+      // Helper: map FileTextChanges spans back from shadow -> original
+      function mapFileTextChanges(changes: readonly ts.FileTextChanges[]): ts.FileTextChanges[] {
+        return changes.map(ftc => ({
+          ...ftc,
+          textChanges: ftc.textChanges.map(tc => ({
+            ...tc,
+            span: mapTextSpanBack(ftc.fileName, tc.span),
+          })),
+        }));
+      }
+
+      // Override: getApplicableRefactors
+      proxy.getApplicableRefactors = (fileName, positionOrRange, ...rest) => {
+        const doc = docCache.get(fileName);
+        if (!doc) {
+          return ls.getApplicableRefactors(fileName, positionOrRange, ...rest);
+        }
+        if (typeof positionOrRange === 'number') {
+          const mapped = originalToShadow(doc, positionOrRange);
+          if (mapped == null) return [];
+          return ls.getApplicableRefactors(fileName, mapped, ...rest);
+        }
+        // TextRange
+        const mappedPos = originalToShadow(doc, positionOrRange.pos);
+        const mappedEnd = originalToShadow(doc, positionOrRange.end);
+        if (mappedPos == null || mappedEnd == null) return [];
+        return ls.getApplicableRefactors(fileName, { pos: mappedPos, end: mappedEnd }, ...rest);
+      };
+
+      // Override: getEditsForRefactor
+      proxy.getEditsForRefactor = (fileName, formatOptions, positionOrRange, refactorName, actionName, preferences, interactiveRefactorArguments) => {
+        const doc = docCache.get(fileName);
+        let mappedRange: number | ts.TextRange = positionOrRange;
+        if (doc) {
+          if (typeof positionOrRange === 'number') {
+            const mapped = originalToShadow(doc, positionOrRange);
+            if (mapped == null) return undefined;
+            mappedRange = mapped;
+          } else {
+            const mappedPos = originalToShadow(doc, positionOrRange.pos);
+            const mappedEnd = originalToShadow(doc, positionOrRange.end);
+            if (mappedPos == null || mappedEnd == null) return undefined;
+            mappedRange = { pos: mappedPos, end: mappedEnd };
+          }
+        }
+        const result = ls.getEditsForRefactor(fileName, formatOptions, mappedRange, refactorName, actionName, preferences, interactiveRefactorArguments);
+        if (!result) return result;
+        return {
+          ...result,
+          edits: mapFileTextChanges(result.edits),
+          renameLocation: result.renameLocation != null
+            ? (() => {
+                const renameDoc = docCache.get(result.renameFilename ?? fileName);
+                if (!renameDoc) return result.renameLocation;
+                return shadowToOriginal(renameDoc, result.renameLocation!) ?? result.renameLocation;
+              })()
+            : undefined,
+        };
+      };
+
+      // Override: getCodeFixesAtPosition
+      proxy.getCodeFixesAtPosition = (fileName, start, end, errorCodes, formatOptions, preferences) => {
+        const doc = docCache.get(fileName);
+        let mappedStart = start;
+        let mappedEnd = end;
+        if (doc) {
+          const ms = originalToShadow(doc, start);
+          const me = originalToShadow(doc, end);
+          if (ms == null || me == null) return [];
+          mappedStart = ms;
+          mappedEnd = me;
+        }
+        const results = ls.getCodeFixesAtPosition(fileName, mappedStart, mappedEnd, errorCodes, formatOptions, preferences);
+        return results.map(fix => ({
+          ...fix,
+          changes: mapFileTextChanges(fix.changes),
+        }));
+      };
+
+      // Override: getCombinedCodeFix
+      proxy.getCombinedCodeFix = (scope, fixId, formatOptions, preferences) => {
+        const result = ls.getCombinedCodeFix(scope, fixId, formatOptions, preferences);
+        return {
+          ...result,
+          changes: mapFileTextChanges(result.changes),
+        };
+      };
+
       // Helper: map diagnostics from shadow -> original, filtering unmapped ones
       function mapDiagnostics<T extends ts.Diagnostic>(fileName: string, diagnostics: T[]): T[] {
         const doc = docCache.get(fileName);

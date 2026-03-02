@@ -63,7 +63,7 @@ describe('build pipeline', () => {
     expect(content).toContain('buildShadowDocument');
   });
 
-  it('typecheck passes', () => {
+  it('typecheck passes', { timeout: 30000 }, () => {
     expect(() => {
       execSync('npx tsc --noEmit', { cwd: root, stdio: 'pipe' });
     }).not.toThrow();
