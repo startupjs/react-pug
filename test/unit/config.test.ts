@@ -21,10 +21,6 @@ describe('extractPugRegions with tagName parameter', () => {
     expect(regions[0].pugText).toBe('div');
   });
 
-  // NOTE: findPugTemplates has a bug where recursive calls don't pass tagName,
-  // so custom tagNames only work at the top AST level. The fast path and regex
-  // fallback do support custom tagNames. Tests below reflect current behavior.
-
   it('ignores pug templates when tagName is "html"', () => {
     const text = 'const v = pug`div`;';
     const regions = extractPugRegions(text, 'test.tsx', 'html');
@@ -54,6 +50,37 @@ describe('extractPugRegions with tagName parameter', () => {
     // "html" is not in the text at all, so fast path returns []
     const regions = extractPugRegions(text, 'test.tsx', 'html');
     expect(regions).toHaveLength(0);
+  });
+});
+
+// ── Custom tagName with nested AST ───────────────────────────────
+
+describe('custom tagName works at nested AST levels', () => {
+  it('finds custom tag inside a function body', () => {
+    const text = 'function render() { return html`div`; }';
+    const regions = extractPugRegions(text, 'test.tsx', 'html');
+    expect(regions).toHaveLength(1);
+    expect(regions[0].pugText).toBe('div');
+  });
+
+  it('finds custom tag inside arrow function', () => {
+    const text = 'const v = () => html`span Hello`;';
+    const regions = extractPugRegions(text, 'test.tsx', 'html');
+    expect(regions).toHaveLength(1);
+    expect(regions[0].pugText).toBe('span Hello');
+  });
+
+  it('finds custom tag inside class method', () => {
+    const text = [
+      'class App {',
+      '  render() {',
+      '    return html`div`;',
+      '  }',
+      '}',
+    ].join('\n');
+    const regions = extractPugRegions(text, 'test.tsx', 'html');
+    expect(regions).toHaveLength(1);
+    expect(regions[0].pugText).toBe('div');
   });
 });
 
