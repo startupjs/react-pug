@@ -164,6 +164,81 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         return result;
       };
 
+      // Override: getSignatureHelpItems (parameter hints)
+      proxy.getSignatureHelpItems = (fileName, position, options) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getSignatureHelpItems(fileName, position, options);
+        }
+        if (mapped === null) return undefined;
+
+        const result = ls.getSignatureHelpItems(fileName, mapped, options);
+        if (!result) return result;
+
+        // Map applicableSpan back from shadow -> original
+        result.applicableSpan = mapTextSpanBack(fileName, result.applicableSpan);
+
+        return result;
+      };
+
+      // Helper: map diagnostics from shadow -> original, filtering unmapped ones
+      function mapDiagnostics<T extends ts.Diagnostic>(fileName: string, diagnostics: T[]): T[] {
+        const doc = docCache.get(fileName);
+        if (!doc) return diagnostics;
+
+        const mapped: T[] = [];
+        for (const diag of diagnostics) {
+          if (diag.start == null) {
+            // Diagnostics without a position (e.g. global errors) -- pass through
+            mapped.push(diag);
+            continue;
+          }
+          const origStart = shadowToOriginal(doc, diag.start);
+          if (origStart == null) continue; // falls in synthetic/unmapped region -- filter out
+          const origEnd = diag.length != null ? shadowToOriginal(doc, diag.start + diag.length) : null;
+          mapped.push({
+            ...diag,
+            start: origStart,
+            length: origEnd != null ? origEnd - origStart : diag.length,
+          });
+        }
+
+        // Add pug parse error diagnostics for regions with parseError
+        for (const region of doc.regions) {
+          if (region.parseError) {
+            mapped.push({
+              file: undefined,
+              start: region.pugTextStart + region.parseError.offset,
+              length: 1,
+              messageText: `Pug parse error: ${region.parseError.message}`,
+              category: tsModule.DiagnosticCategory.Error,
+              code: 99001,
+              source: 'pug-react',
+            } as unknown as T);
+          }
+        }
+
+        return mapped;
+      }
+
+      // Override: getSemanticDiagnostics
+      proxy.getSemanticDiagnostics = (fileName) => {
+        const diagnostics = ls.getSemanticDiagnostics(fileName);
+        return mapDiagnostics(fileName, diagnostics);
+      };
+
+      // Override: getSyntacticDiagnostics
+      proxy.getSyntacticDiagnostics = (fileName) => {
+        const diagnostics = ls.getSyntacticDiagnostics(fileName);
+        return mapDiagnostics(fileName, diagnostics as ts.Diagnostic[]) as ts.DiagnosticWithLocation[];
+      };
+
+      // Override: getSuggestionDiagnostics
+      proxy.getSuggestionDiagnostics = (fileName) => {
+        const diagnostics = ls.getSuggestionDiagnostics(fileName);
+        return mapDiagnostics(fileName, diagnostics as ts.Diagnostic[]) as ts.DiagnosticWithLocation[];
+      };
+
       return proxy;
     },
   };
