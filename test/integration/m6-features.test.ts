@@ -164,9 +164,6 @@ describe('getEditsForRefactor through real pipeline', () => {
       init, rootFiles, FIXTURES_DIR, virtualFiles,
     );
     ls = result.ls;
-
-    // Warm the docCache by triggering LS to load the file
-    ls.getSemanticDiagnostics(refactorFile);
   });
 
   it('returns undefined for unmapped position', () => {

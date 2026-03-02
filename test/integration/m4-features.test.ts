@@ -171,9 +171,7 @@ describe('diagnostics through real pipeline', () => {
 
   it('getSemanticDiagnostics returns empty for well-typed pug file', () => {
     const diags = ls.getSemanticDiagnostics(APP_FILE);
-    // app.tsx has correct types -- should have no (or few) semantic errors
-    // Some errors may appear due to missing React types, so just verify it runs
-    expect(Array.isArray(diags)).toBe(true);
+    expect(diags).toHaveLength(0);
   });
 
   it('getSyntacticDiagnostics works for pug file', () => {

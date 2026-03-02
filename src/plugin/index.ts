@@ -64,8 +64,16 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         }
       }
 
+      // Ensure docCache is populated for a file (triggers patched getScriptSnapshot)
+      function ensureCached(fileName: string): void {
+        if (!docCache.has(fileName)) {
+          host.getScriptSnapshot(fileName);
+        }
+      }
+
       // Helper: map an original position to shadow position for a cached file
       function mapToShadow(fileName: string, position: number): number | null | undefined {
+        ensureCached(fileName);
         const doc = docCache.get(fileName);
         if (!doc) return undefined; // no pug regions, use position as-is
         return originalToShadow(doc, position);
@@ -304,6 +312,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
       // Override: getApplicableRefactors
       proxy.getApplicableRefactors = (fileName, positionOrRange, ...rest) => {
+        ensureCached(fileName);
         const doc = docCache.get(fileName);
         if (!doc) {
           return ls.getApplicableRefactors(fileName, positionOrRange, ...rest);
@@ -322,6 +331,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
       // Override: getEditsForRefactor
       proxy.getEditsForRefactor = (fileName, formatOptions, positionOrRange, refactorName, actionName, preferences, interactiveRefactorArguments) => {
+        ensureCached(fileName);
         const doc = docCache.get(fileName);
         let mappedRange: number | ts.TextRange = positionOrRange;
         if (doc) {
@@ -353,6 +363,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
       // Override: getCodeFixesAtPosition
       proxy.getCodeFixesAtPosition = (fileName, start, end, errorCodes, formatOptions, preferences) => {
+        ensureCached(fileName);
         const doc = docCache.get(fileName);
         let mappedStart = start;
         let mappedEnd = end;
@@ -399,6 +410,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
       // Helper: map diagnostics from shadow -> original, filtering unmapped ones
       function mapDiagnostics<T extends ts.Diagnostic>(fileName: string, diagnostics: T[]): T[] {
+        ensureCached(fileName);
         const doc = docCache.get(fileName);
         if (!doc) return diagnostics;
 

@@ -4,6 +4,7 @@ interface ButtonProps {
   onClick: () => void;
   label: string;
   disabled?: boolean;
+  children?: React.ReactNode;
 }
 
 export function Button(props: ButtonProps) {
