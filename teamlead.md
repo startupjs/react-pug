@@ -65,16 +65,16 @@ Follow this cycle strictly for every task:
 ```
 1. PLAN    → You select next task, write clear acceptance criteria
 2. DEV     → Assign to dev, dev implements
-3. QA      → IMMEDIATELY assign a parallel QA task for the feature. QA writes tests AS SOON as dev finishes (or even prepares test infrastructure in parallel while dev works).
-4. REVIEW  → You read dev's code, check it matches plan.md and acceptance criteria
+3. REVIEW  → You read dev's code, check it matches plan.md and acceptance criteria
+4. QA      → Assign QA task for the feature. QA writes comprehensive tests.
 5. VERIFY  → You verify tests are comprehensive and passing
 6. COMMIT  → Create a git commit for this task (see Git Workflow below)
 7. DONE    → Mark task done only after code, tests, and commit are verified
 ```
 
-**CRITICAL: Tests after EVERY task.** Every dev task gets a corresponding QA task. QA writes comprehensive tests covering happy path, edge cases, error cases, and boundary conditions. Maximize test coverage. Never move to the next dev task until the current one has tests written and passing.
+**CRITICAL: Sequential workflow.** Dev implements → QA tests → both verified and committed → THEN move to next task. Do NOT assign dev to the next task until QA finishes testing the current one. This ensures full coverage before moving on.
 
-**Parallel workflow:** While dev works on Task N, QA can be writing tests for Task N-1, or setting up test infrastructure for Task N. Keep both agents busy.
+**CRITICAL: Tests after EVERY task.** Every dev task gets a corresponding QA task. QA writes comprehensive tests covering happy path, edge cases, error cases, and boundary conditions. Maximize test coverage. Never move to the next dev task until the current one has tests written and passing.
 
 If review or verification fails:
 - Send specific feedback to the agent about what's wrong
