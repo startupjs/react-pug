@@ -1,5 +1,5 @@
 import type { CodeMapping, CodeInformation, PugParseError, PugToken } from './mapping';
-import { FULL_FEATURES, CSS_CLASS, SYNTHETIC } from './mapping';
+import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from './mapping';
 
 // ── TsxEmitter ──────────────────────────────────────────────────
 
@@ -180,9 +180,16 @@ function emitNodes(
   emitter: TsxEmitter,
   pugText: string,
 ): void {
+  // If there are unbuffered code blocks mixed with JSX, use IIFE
+  const hasUnbufferedCode = nodes.some(isUnbufferedCode);
+  if (hasUnbufferedCode) {
+    emitBlockWithCodeSupport(nodes, emitter, pugText);
+    return;
+  }
+
   // Multiple sibling nodes that produce JSX need fragment wrapping
   const jsxNodes = nodes.filter(
-    n => n.type === 'Tag' || n.type === 'Code' || n.type === 'Conditional'
+    n => n.type === 'Tag' || (n.type === 'Code' && n.buffer) || n.type === 'Conditional'
       || n.type === 'Each' || n.type === 'While' || n.type === 'Case',
   );
   const needsFragment = jsxNodes.length > 1;
@@ -211,13 +218,20 @@ function emitNode(
     case 'Code':
       emitCode(node, emitter, pugText);
       break;
-    // Control flow: emit placeholders (handled in next task)
     case 'Conditional':
+      emitConditional(node, emitter, pugText);
+      break;
     case 'Each':
+      emitEach(node, emitter, pugText);
+      break;
     case 'While':
+      emitWhile(node, emitter, pugText);
+      break;
     case 'Case':
+      emitCase(node, emitter, pugText);
+      break;
     case 'When':
-      emitSynthetic(node, emitter);
+      // When nodes are handled inside emitCase
       break;
     case 'Comment':
     case 'BlockComment':
@@ -393,8 +407,9 @@ function emitCode(
     emitter.emitSynthetic('}');
   } else {
     // Unbuffered code block: - const x = 10
-    // Placeholder for now (full support in next task)
-    emitter.emitSynthetic('{null}');
+    // Emitted as a statement; IIFE wrapping is handled by emitNodesWithCodeBlocks
+    emitter.emitMapped(node.val, offset, FULL_FEATURES);
+    emitter.emitSynthetic(';');
   }
 }
 
@@ -403,18 +418,296 @@ function emitChildren(
   emitter: TsxEmitter,
   pugText: string,
 ): void {
-  // Separate text and inline code nodes from block nodes for proper text grouping
-  for (const node of nodes) {
-    emitNode(node, emitter, pugText);
+  const hasUnbufferedCode = nodes.some(isUnbufferedCode);
+  if (hasUnbufferedCode) {
+    emitBlockWithCodeSupport(nodes, emitter, pugText);
+  } else {
+    for (const node of nodes) {
+      emitNode(node, emitter, pugText);
+    }
   }
 }
 
-function emitSynthetic(
-  _node: PugNode,
+/** Check if a node is an unbuffered code block */
+function isUnbufferedCode(node: PugNode): node is PugCode {
+  return node.type === 'Code' && !node.buffer;
+}
+
+/** Check if a node produces JSX output */
+function isJsxProducing(node: PugNode): boolean {
+  return node.type === 'Tag' || node.type === 'Conditional'
+    || node.type === 'Each' || node.type === 'While' || node.type === 'Case'
+    || (node.type === 'Code' && node.buffer);
+}
+
+/**
+ * Emit a block of nodes that may contain unbuffered code mixed with JSX.
+ * When code blocks are mixed with JSX-producing nodes, wraps in an IIFE:
+ *   (() => { code; return (<jsx/>); })()
+ */
+function emitBlockWithCodeSupport(
+  nodes: PugNode[],
   emitter: TsxEmitter,
+  pugText: string,
 ): void {
-  // Placeholder for control flow nodes -- next task
-  emitter.emitSynthetic('{null}');
+  const hasUnbufferedCode = nodes.some(isUnbufferedCode);
+  const hasJsx = nodes.some(isJsxProducing);
+
+  if (hasUnbufferedCode && hasJsx) {
+    // IIFE wrapping: (() => { code; return (<jsx/>); })()
+    emitter.emitSynthetic('(() => {');
+
+    // Emit all unbuffered code as statements
+    for (const node of nodes) {
+      if (isUnbufferedCode(node)) {
+        emitNode(node, emitter, pugText);
+      }
+    }
+
+    // Emit JSX-producing nodes as the return value
+    const jsxNodes = nodes.filter(n => !isUnbufferedCode(n));
+    emitter.emitSynthetic('return (');
+    if (jsxNodes.length === 0) {
+      emitter.emitSynthetic('null');
+    } else if (jsxNodes.length === 1) {
+      emitNode(jsxNodes[0], emitter, pugText);
+    } else {
+      emitter.emitSynthetic('<>');
+      for (const node of jsxNodes) {
+        emitNode(node, emitter, pugText);
+      }
+      emitter.emitSynthetic('</>');
+    }
+    emitter.emitSynthetic(');})()');
+  } else if (hasUnbufferedCode) {
+    // Only code, no JSX -- emit as IIFE returning null
+    emitter.emitSynthetic('(() => {');
+    for (const node of nodes) {
+      emitNode(node, emitter, pugText);
+    }
+    emitter.emitSynthetic('return null;})()');
+  } else {
+    // No unbuffered code -- emit normally
+    emitNodes(nodes, emitter, pugText);
+  }
+}
+
+// ── Control flow emitters ──────────────────────────────────────
+
+/** if show -> show ? <consequent> : <alternate> */
+function emitConditional(
+  node: PugConditional,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  const testOffset = lineColToOffset(pugText, node.line, node.column);
+  // 'if ' is 3 chars from the start of the line
+  const exprOffset = testOffset + 3;
+
+  emitter.emitSynthetic('{');
+  emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
+  emitter.emitSynthetic(' ? ');
+
+  // Consequent block
+  const consequentNodes = node.consequent?.nodes ?? [];
+  if (consequentNodes.length === 0) {
+    emitter.emitSynthetic('null');
+  } else {
+    emitBlockWithCodeSupport(consequentNodes, emitter, pugText);
+  }
+
+  emitter.emitSynthetic(' : ');
+
+  // Alternate: can be another Conditional (else if) or a Block (else) or null
+  if (node.alternate == null) {
+    emitter.emitSynthetic('null');
+  } else if (node.alternate.type === 'Conditional') {
+    // Chained: else if -> nested ternary (without wrapping braces)
+    emitConditionalInner(node.alternate, emitter, pugText);
+  } else {
+    // else block
+    const altNodes = (node.alternate as PugBlock).nodes ?? [];
+    if (altNodes.length === 0) {
+      emitter.emitSynthetic('null');
+    } else {
+      emitBlockWithCodeSupport(altNodes, emitter, pugText);
+    }
+  }
+
+  emitter.emitSynthetic('}');
+}
+
+/** Inner conditional for chained else-if (no wrapping {} braces) */
+function emitConditionalInner(
+  node: PugConditional,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  const testOffset = lineColToOffset(pugText, node.line, node.column);
+  // 'else if ' is 8 chars from start of line
+  const exprOffset = testOffset + 8;
+
+  emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
+  emitter.emitSynthetic(' ? ');
+
+  const consequentNodes = node.consequent?.nodes ?? [];
+  if (consequentNodes.length === 0) {
+    emitter.emitSynthetic('null');
+  } else {
+    emitBlockWithCodeSupport(consequentNodes, emitter, pugText);
+  }
+
+  emitter.emitSynthetic(' : ');
+
+  if (node.alternate == null) {
+    emitter.emitSynthetic('null');
+  } else if (node.alternate.type === 'Conditional') {
+    emitConditionalInner(node.alternate, emitter, pugText);
+  } else {
+    const altNodes = (node.alternate as PugBlock).nodes ?? [];
+    if (altNodes.length === 0) {
+      emitter.emitSynthetic('null');
+    } else {
+      emitBlockWithCodeSupport(altNodes, emitter, pugText);
+    }
+  }
+}
+
+/** each item, i in items -> {items.map((item, i) => (<body/>))} */
+function emitEach(
+  node: PugEach,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  const lineOffset = lineColToOffset(pugText, node.line, node.column);
+  // Parse: 'each val[, key] in obj'
+  // 'each ' = 5 chars
+  const pugLine = pugText.split('\n')[node.line - 1] ?? '';
+  const inIndex = pugLine.indexOf(' in ');
+
+  // Object expression offset: after ' in '
+  const objOffset = lineOffset + inIndex + 4;
+  // Value name offset: after 'each '
+  const valOffset = lineOffset + 5;
+  // Key offset: after 'each val, '
+  const keyOffset = node.key != null
+    ? lineOffset + 5 + node.val.length + 2  // +2 for ', '
+    : -1;
+
+  emitter.emitSynthetic('{');
+  emitter.emitMapped(node.obj, objOffset, FULL_FEATURES);
+  emitter.emitSynthetic('.map((');
+  emitter.emitMapped(node.val, valOffset, FULL_FEATURES);
+  if (node.key != null) {
+    emitter.emitSynthetic(', ');
+    emitter.emitMapped(node.key, keyOffset, FULL_FEATURES);
+  }
+  emitter.emitSynthetic(') => (');
+
+  const bodyNodes = node.block?.nodes ?? [];
+  if (bodyNodes.length === 0) {
+    emitter.emitSynthetic('null');
+  } else {
+    emitBlockWithCodeSupport(bodyNodes, emitter, pugText);
+  }
+
+  emitter.emitSynthetic('))}');
+}
+
+/** while test -> {(() => { const __r: JSX.Element[] = []; while (test) { __r.push(<body/>); } return __r; })()} */
+function emitWhile(
+  node: PugWhile,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  const testOffset = lineColToOffset(pugText, node.line, node.column);
+  // 'while ' = 6 chars
+  const exprOffset = testOffset + 6;
+
+  emitter.emitSynthetic('{(() => {const __r: JSX.Element[] = [];while (');
+  emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
+  emitter.emitSynthetic(') {__r.push(');
+
+  const bodyNodes = node.block?.nodes ?? [];
+  if (bodyNodes.length === 0) {
+    emitter.emitSynthetic('null');
+  } else {
+    emitBlockWithCodeSupport(bodyNodes, emitter, pugText);
+  }
+
+  emitter.emitSynthetic(');}return __r;})()}');
+}
+
+/** case expr / when val1 / default -> {expr === val1 ? <c1> : <default>} */
+function emitCase(
+  node: PugCase,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  const caseOffset = lineColToOffset(pugText, node.line, node.column);
+  // 'case ' = 5 chars
+  const exprOffset = caseOffset + 5;
+
+  const whenNodes = (node.block?.nodes ?? []).filter(
+    (n): n is PugWhen => n.type === 'When',
+  );
+
+  if (whenNodes.length === 0) {
+    emitter.emitSynthetic('{null}');
+    return;
+  }
+
+  emitter.emitSynthetic('{');
+  emitWhenChain(whenNodes, 0, node.expr, exprOffset, emitter, pugText);
+  emitter.emitSynthetic('}');
+}
+
+/** Recursively emit chained ternaries for when nodes */
+function emitWhenChain(
+  whens: PugWhen[],
+  index: number,
+  caseExpr: string,
+  caseExprOffset: number,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  if (index >= whens.length) {
+    emitter.emitSynthetic('null');
+    return;
+  }
+
+  const when = whens[index];
+  const whenOffset = lineColToOffset(pugText, when.line, when.column);
+
+  if (when.expr === 'default') {
+    // Default case: just emit the body
+    const bodyNodes = when.block?.nodes ?? [];
+    if (bodyNodes.length === 0) {
+      emitter.emitSynthetic('null');
+    } else {
+      emitBlockWithCodeSupport(bodyNodes, emitter, pugText);
+    }
+    return;
+  }
+
+  // 'when ' = 5 chars
+  const whenExprOffset = whenOffset + 5;
+
+  // Emit: caseExpr === whenExpr ? <body> : <next>
+  emitter.emitMapped(caseExpr, caseExprOffset, VERIFY_ONLY);
+  emitter.emitSynthetic(' === ');
+  emitter.emitMapped(when.expr, whenExprOffset, FULL_FEATURES);
+  emitter.emitSynthetic(' ? ');
+
+  const bodyNodes = when.block?.nodes ?? [];
+  if (bodyNodes.length === 0) {
+    emitter.emitSynthetic('null');
+  } else {
+    emitBlockWithCodeSupport(bodyNodes, emitter, pugText);
+  }
+
+  emitter.emitSynthetic(' : ');
+  emitWhenChain(whens, index + 1, caseExpr, caseExprOffset, emitter, pugText);
 }
 
 // ── Public API ──────────────────────────────────────────────────

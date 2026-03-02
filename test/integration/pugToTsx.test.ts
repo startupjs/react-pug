@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { compilePugToTsx, TsxEmitter } from '../../src/language/pugToTsx';
-import { FULL_FEATURES, CSS_CLASS, SYNTHETIC } from '../../src/language/mapping';
+import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from '../../src/language/mapping';
 
 describe('TsxEmitter', () => {
   it('emitMapped tracks offset and creates mapping', () => {
@@ -188,5 +188,140 @@ describe('compilePugToTsx - mappings', () => {
       m => m.data === FULL_FEATURES && m.lengths[0] === 'onClick'.length,
     );
     expect(attrMapping).toBeDefined();
+  });
+});
+
+// ── Control flow tests ──────────────────────────────────────────
+
+describe('compilePugToTsx - conditionals', () => {
+  it('compiles if/else to ternary', () => {
+    const result = compilePugToTsx('if show\n  div\nelse\n  span');
+    expect(result.tsx).toContain('show ?');
+    expect(result.tsx).toContain('<div />');
+    expect(result.tsx).toContain('<span />');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('compiles if without else (null alternate)', () => {
+    const result = compilePugToTsx('if visible\n  div');
+    expect(result.tsx).toContain('visible ?');
+    expect(result.tsx).toContain(': null');
+  });
+
+  it('compiles chained if/else if/else', () => {
+    const result = compilePugToTsx('if a\n  div A\nelse if b\n  div B\nelse\n  div C');
+    expect(result.tsx).toContain('a ?');
+    expect(result.tsx).toContain('b ?');
+    expect(result.tsx).toContain('<div>A</div>');
+    expect(result.tsx).toContain('<div>B</div>');
+    expect(result.tsx).toContain('<div>C</div>');
+  });
+
+  it('maps test expression with FULL_FEATURES', () => {
+    const result = compilePugToTsx('if myCondition\n  div');
+    const testMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'myCondition'.length,
+    );
+    expect(testMapping).toBeDefined();
+  });
+});
+
+describe('compilePugToTsx - each loops', () => {
+  it('compiles each with value and key', () => {
+    const result = compilePugToTsx('each item, idx in items\n  div= item');
+    expect(result.tsx).toContain('items.map((item, idx)');
+    expect(result.tsx).toContain('{item}');
+  });
+
+  it('compiles each with value only', () => {
+    const result = compilePugToTsx('each item in list\n  span');
+    expect(result.tsx).toContain('list.map((item)');
+    expect(result.tsx).toContain('<span />');
+  });
+
+  it('maps obj, val, and key with FULL_FEATURES', () => {
+    const result = compilePugToTsx('each item, i in items\n  div');
+    // Should have mappings for 'items', 'item', and 'i'
+    const objMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'items'.length,
+    );
+    const valMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'item'.length,
+    );
+    const keyMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'i'.length,
+    );
+    expect(objMapping).toBeDefined();
+    expect(valMapping).toBeDefined();
+    expect(keyMapping).toBeDefined();
+  });
+});
+
+describe('compilePugToTsx - while loops', () => {
+  it('compiles while to IIFE with push pattern', () => {
+    const result = compilePugToTsx('while n > 0\n  div');
+    expect(result.tsx).toContain('while (n > 0)');
+    expect(result.tsx).toContain('__r.push(');
+    expect(result.tsx).toContain('JSX.Element[]');
+  });
+
+  it('maps test expression with FULL_FEATURES', () => {
+    const result = compilePugToTsx('while running\n  div');
+    const testMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'running'.length,
+    );
+    expect(testMapping).toBeDefined();
+  });
+});
+
+describe('compilePugToTsx - case/when', () => {
+  it('compiles case/when to chained ternaries', () => {
+    const result = compilePugToTsx('case color\n  when "red"\n    div Red\n  when "blue"\n    div Blue\n  default\n    div Other');
+    expect(result.tsx).toContain('color === "red"');
+    expect(result.tsx).toContain('color === "blue"');
+    expect(result.tsx).toContain('<div>Red</div>');
+    expect(result.tsx).toContain('<div>Blue</div>');
+    expect(result.tsx).toContain('<div>Other</div>');
+  });
+
+  it('compiles case without default', () => {
+    const result = compilePugToTsx('case x\n  when "a"\n    div A');
+    expect(result.tsx).toContain('x === "a"');
+    // Should end with null for no default
+    expect(result.tsx).toContain(': null');
+  });
+
+  it('maps case expr with VERIFY_ONLY', () => {
+    const result = compilePugToTsx('case myVar\n  when "a"\n    div');
+    const verifyMapping = result.mappings.find(
+      m => m.data === VERIFY_ONLY && m.lengths[0] === 'myVar'.length,
+    );
+    expect(verifyMapping).toBeDefined();
+  });
+});
+
+describe('compilePugToTsx - code blocks', () => {
+  it('compiles unbuffered code with JSX in IIFE', () => {
+    const result = compilePugToTsx('- const x = 10\ndiv= x');
+    expect(result.tsx).toContain('(() => {');
+    expect(result.tsx).toContain('const x = 10;');
+    expect(result.tsx).toContain('return (');
+    expect(result.tsx).toContain('{x}');
+  });
+
+  it('compiles code-only blocks in IIFE returning null', () => {
+    const result = compilePugToTsx('- const x = 10\n- const y = 20');
+    expect(result.tsx).toContain('(() => {');
+    expect(result.tsx).toContain('const x = 10;');
+    expect(result.tsx).toContain('const y = 20;');
+    expect(result.tsx).toContain('return null;');
+  });
+
+  it('maps code expressions with FULL_FEATURES', () => {
+    const result = compilePugToTsx('- const x = 10');
+    const codeMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES && m.lengths[0] === 'const x = 10'.length,
+    );
+    expect(codeMapping).toBeDefined();
   });
 });
