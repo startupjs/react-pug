@@ -1,0 +1,48 @@
+{
+  "name": "vscode-pug-react",
+  "displayName": "Pug React IntelliSense",
+  "description": "JSX-grade IntelliSense for pug`` tagged template literals in React projects",
+  "version": "0.0.1",
+  "publisher": "startupjs",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact"
+  ],
+  "main": "./dist/client.js",
+  "contributes": {
+    "typescriptServerPlugins": [
+      {
+        "name": "vscode-pug-react",
+        "enableForWorkspaceTypeScriptVersions": true
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.29.0",
+    "@startupjs/pug-lexer": "^4.1.0-1",
+    "@volar/source-map": "^2.4.28",
+    "pug-parser": "^6.0.0",
+    "pug-strip-comments": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.109.0",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
