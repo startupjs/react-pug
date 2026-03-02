@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mapping } from '@volar/source-map';
+import { SourceMap } from '@volar/source-map';
 import {
   FULL_FEATURES,
   CSS_CLASS,
@@ -12,6 +13,7 @@ import {
   type PugParseError,
   type PugToken,
 } from '../../src/language/mapping';
+import * as mappingExports from '../../src/language/mapping';
 
 // Test checklist:
 // [x] FULL_FEATURES has all four flags true
@@ -282,5 +284,96 @@ describe('interface structures', () => {
     expect(doc.regions[0].mappings).toHaveLength(1);
     expect(doc.regions[0].mappings[0].data).toBe(FULL_FEATURES);
     expect(doc.regionDeltas).toEqual([0]);
+  });
+});
+
+// ── @volar/source-map SourceMap integration ──────────────────────
+
+describe('SourceMap integration', () => {
+  it('CodeMapping works with @volar/source-map SourceMap constructor', () => {
+    const mappings: CodeMapping[] = [
+      {
+        sourceOffsets: [0],
+        generatedOffsets: [1],
+        lengths: [3],
+        data: FULL_FEATURES,
+      },
+    ];
+
+    // SourceMap constructor accepts CodeMapping[] (Mapping<CodeInformation>[])
+    const sourceMap = new SourceMap(mappings);
+    expect(sourceMap).toBeDefined();
+  });
+
+  it('SourceMap provides bidirectional lookup with CodeMapping', () => {
+    // Mapping: source offsets [0..3) -> generated offsets [5..8)
+    const mappings: CodeMapping[] = [
+      {
+        sourceOffsets: [0],
+        generatedOffsets: [5],
+        lengths: [3],
+        data: FULL_FEATURES,
+      },
+    ];
+
+    const sourceMap = new SourceMap(mappings);
+
+    // Source -> Generated (forward lookup)
+    const generatedPositions = [...sourceMap.toGeneratedLocation(1)];
+    expect(generatedPositions.length).toBeGreaterThan(0);
+    expect(generatedPositions[0][0]).toBe(6); // offset 1 in source -> offset 6 in generated
+
+    // Generated -> Source (reverse lookup)
+    const sourcePositions = [...sourceMap.toSourceLocation(6)];
+    expect(sourcePositions.length).toBeGreaterThan(0);
+    expect(sourcePositions[0][0]).toBe(1); // offset 6 in generated -> offset 1 in source
+  });
+
+  it('SourceMap respects CodeInformation filter callback', () => {
+    const mappings: CodeMapping[] = [
+      {
+        sourceOffsets: [0],
+        generatedOffsets: [0],
+        lengths: [5],
+        data: FULL_FEATURES, // completion: true
+      },
+      {
+        sourceOffsets: [10],
+        generatedOffsets: [10],
+        lengths: [5],
+        data: VERIFY_ONLY, // completion: false
+      },
+    ];
+
+    const sourceMap = new SourceMap(mappings);
+
+    // Filter for completion-enabled mappings only
+    const completionFilter = (data: CodeInformation) => data.completion;
+
+    // Position 2 is in FULL_FEATURES mapping -> should be found
+    const pos1 = [...sourceMap.toGeneratedLocation(2, completionFilter)];
+    expect(pos1.length).toBeGreaterThan(0);
+
+    // Position 12 is in VERIFY_ONLY mapping -> should NOT be found with completion filter
+    const pos2 = [...sourceMap.toGeneratedLocation(12, completionFilter)];
+    expect(pos2).toHaveLength(0);
+  });
+});
+
+// ── Export completeness ──────────────────────────────────────────
+
+describe('module exports', () => {
+  it('exports all expected values', () => {
+    // Value exports (runtime)
+    expect(mappingExports.FULL_FEATURES).toBeDefined();
+    expect(mappingExports.CSS_CLASS).toBeDefined();
+    expect(mappingExports.SYNTHETIC).toBeDefined();
+    expect(mappingExports.VERIFY_ONLY).toBeDefined();
+  });
+
+  it('exports exactly the expected value keys', () => {
+    // Get all non-type exports (only value exports appear at runtime)
+    const exportKeys = Object.keys(mappingExports).sort();
+    expect(exportKeys).toEqual(['CSS_CLASS', 'FULL_FEATURES', 'SYNTHETIC', 'VERIFY_ONLY']);
   });
 });
