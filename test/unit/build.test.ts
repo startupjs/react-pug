@@ -10,7 +10,7 @@ import { resolve } from 'path';
 // [x] client.js is valid CommonJS (has "use strict" and exports)
 // [x] plugin.js is valid CommonJS (has "use strict" and exports)
 // [x] client.js excludes vscode from bundle (external)
-// [x] plugin.js contains plugin logic (transformPugToJsx)
+// [x] plugin.js contains plugin logic (buildShadowDocument)
 // [x] Build succeeds with zero exit code
 
 const root = resolve(__dirname, '../..');
@@ -60,7 +60,7 @@ describe('build pipeline', () => {
 
   it('plugin.js contains plugin logic', () => {
     const content = readFileSync(resolve(distDir, 'plugin.js'), 'utf-8');
-    expect(content).toContain('transformPugToJsx');
+    expect(content).toContain('buildShadowDocument');
   });
 
   it('typecheck passes', () => {
