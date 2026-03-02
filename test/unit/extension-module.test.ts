@@ -26,10 +26,23 @@ vi.mock('vscode', () => ({
   workspace: {
     onDidChangeTextDocument: () => ({ dispose: () => {} }),
     onDidOpenTextDocument: () => ({ dispose: () => {} }),
+    registerTextDocumentContentProvider: () => ({ dispose: () => {} }),
+    openTextDocument: async () => ({}),
+    getConfiguration: () => ({ get: (_key: string, def: any) => def }),
   },
   window: {
     showInformationMessage: () => {},
+    showWarningMessage: () => {},
+    showTextDocument: async () => {},
+    activeTextEditor: undefined,
   },
+  commands: {
+    registerCommand: () => ({ dispose: () => {} }),
+  },
+  Uri: {
+    parse: (s: string) => ({ toString: () => s }),
+  },
+  ViewColumn: { Beside: 2 },
 }));
 
 describe('extension module', () => {

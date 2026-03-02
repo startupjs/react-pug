@@ -45,6 +45,12 @@
         }
       }
     },
+    "commands": [
+      {
+        "command": "pugReact.showShadowTsx",
+        "title": "Pug React: Show Shadow TSX"
+      }
+    ],
     "grammars": [
       {
         "scopeName": "inline.pug-template-literal",
