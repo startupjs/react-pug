@@ -60,6 +60,8 @@ export interface PugParseError {
   line: number;
   /** Column number (1-based) within the pug region text */
   column: number;
+  /** Byte offset within the pug region text */
+  offset: number;
 }
 
 // ── PugToken ────────────────────────────────────────────────────
