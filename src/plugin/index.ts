@@ -181,6 +181,107 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         return result;
       };
 
+      // Override: getRenameInfo
+      proxy.getRenameInfo = (fileName, position, ...rest) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getRenameInfo(fileName, position, ...rest);
+        }
+        if (mapped === null) {
+          return { canRename: false, localizedErrorMessage: 'Cannot rename at this position' };
+        }
+        const result = ls.getRenameInfo(fileName, mapped, ...rest);
+        if (result.canRename && result.triggerSpan) {
+          result.triggerSpan = mapTextSpanBack(fileName, result.triggerSpan);
+        }
+        return result;
+      };
+
+      // Override: findRenameLocations
+      proxy.findRenameLocations = (fileName, position, findInStrings, findInComments, preferences) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.findRenameLocations(fileName, position, findInStrings, findInComments, preferences as any);
+        }
+        if (mapped === null) return undefined;
+        const results = ls.findRenameLocations(fileName, mapped, findInStrings, findInComments, preferences as any);
+        if (results) {
+          for (const loc of results) {
+            loc.textSpan = mapTextSpanBack(loc.fileName, loc.textSpan);
+          }
+        }
+        return results;
+      };
+
+      // Override: findReferences
+      proxy.findReferences = (fileName, position) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.findReferences(fileName, position);
+        }
+        if (mapped === null) return undefined;
+        const results = ls.findReferences(fileName, mapped);
+        if (results) {
+          for (const group of results) {
+            group.definition.textSpan = mapTextSpanBack(group.definition.fileName, group.definition.textSpan);
+            for (const ref of group.references) {
+              ref.textSpan = mapTextSpanBack(ref.fileName, ref.textSpan);
+            }
+          }
+        }
+        return results;
+      };
+
+      // Override: getReferencesAtPosition
+      proxy.getReferencesAtPosition = (fileName, position) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getReferencesAtPosition(fileName, position);
+        }
+        if (mapped === null) return undefined;
+        const results = ls.getReferencesAtPosition(fileName, mapped);
+        if (results) {
+          for (const ref of results) {
+            ref.textSpan = mapTextSpanBack(ref.fileName, ref.textSpan);
+          }
+        }
+        return results;
+      };
+
+      // Override: getDocumentHighlights
+      proxy.getDocumentHighlights = (fileName, position, filesToSearch) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getDocumentHighlights(fileName, position, filesToSearch);
+        }
+        if (mapped === null) return undefined;
+        const results = ls.getDocumentHighlights(fileName, mapped, filesToSearch);
+        if (results) {
+          for (const docHighlight of results) {
+            for (const highlight of docHighlight.highlightSpans) {
+              highlight.textSpan = mapTextSpanBack(docHighlight.fileName, highlight.textSpan);
+            }
+          }
+        }
+        return results;
+      };
+
+      // Override: getImplementationAtPosition
+      proxy.getImplementationAtPosition = (fileName, position) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getImplementationAtPosition(fileName, position);
+        }
+        if (mapped === null) return undefined;
+        const results = ls.getImplementationAtPosition(fileName, mapped);
+        if (results) {
+          for (const impl of results) {
+            impl.textSpan = mapTextSpanBack(impl.fileName, impl.textSpan);
+          }
+        }
+        return results;
+      };
+
       // Helper: map diagnostics from shadow -> original, filtering unmapped ones
       function mapDiagnostics<T extends ts.Diagnostic>(fileName: string, diagnostics: T[]): T[] {
         const doc = docCache.get(fileName);
