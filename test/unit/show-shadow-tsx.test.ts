@@ -33,7 +33,9 @@ vi.mock('vscode', () => ({
     },
     showWarningMessage: (...args: any[]) => showWarningMessage(...args),
     showInformationMessage: (...args: any[]) => showInformationMessage(...args),
+    showErrorMessage: vi.fn(),
     showTextDocument: (...args: any[]) => showTextDocument(...args),
+    createOutputChannel: () => ({ appendLine: () => {}, dispose: () => {} }),
   },
   commands: {
     registerCommand: (name: string, callback: Function) => {

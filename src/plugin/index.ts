@@ -6,6 +6,10 @@ import { originalToShadow, shadowToOriginal } from '../language/positionMapping'
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;
 
+  function log(info: ts.server.PluginCreateInfo, msg: string): void {
+    info.project.projectService.logger.info(`[pug-react] ${msg}`);
+  }
+
   return {
     create(info: ts.server.PluginCreateInfo): ts.LanguageService {
       // Read configuration from info.config (passed by VS Code)
@@ -28,24 +32,29 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         // When disabled, pass through original content
         if (!enabled) return original;
 
-        const text = original.getText(0, original.getLength());
-        const cached = docCache.get(fileName);
+        try {
+          const text = original.getText(0, original.getLength());
+          const cached = docCache.get(fileName);
 
-        // Return cached shadow if original text hasn't changed
-        if (cached && cached.originalText === text) {
-          return tsModule.ScriptSnapshot.fromString(cached.shadowText);
+          // Return cached shadow if original text hasn't changed
+          if (cached && cached.originalText === text) {
+            return tsModule.ScriptSnapshot.fromString(cached.shadowText);
+          }
+
+          const doc = buildShadowDocument(text, fileName, (cached?.version ?? 0) + 1, tagFunction);
+
+          if (doc.regions.length > 0) {
+            docCache.set(fileName, doc);
+            return tsModule.ScriptSnapshot.fromString(doc.shadowText);
+          }
+
+          // File has no pug templates -- clean up cache
+          if (cached) docCache.delete(fileName);
+          return original;
+        } catch (e) {
+          log(info, `getScriptSnapshot error for ${fileName}: ${e}`);
+          return original;
         }
-
-        const doc = buildShadowDocument(text, fileName, (cached?.version ?? 0) + 1, tagFunction);
-
-        if (doc.regions.length > 0) {
-          docCache.set(fileName, doc);
-          return tsModule.ScriptSnapshot.fromString(doc.shadowText);
-        }
-
-        // File has no pug templates -- clean up cache
-        if (cached) docCache.delete(fileName);
-        return original;
       };
 
       host.getScriptVersion = (fileName: string) => {
@@ -64,6 +73,22 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         }
       }
 
+      // Wrap a proxy override so exceptions fall back to the original LS method
+      function safeOverride<K extends keyof ts.LanguageService>(
+        method: K,
+        fn: ts.LanguageService[K],
+      ): void {
+        const original = ls[method];
+        (proxy as any)[method] = (...args: any[]) => {
+          try {
+            return (fn as Function).apply(null, args);
+          } catch (e) {
+            log(info, `${String(method)} error: ${e}`);
+            return (original as Function).apply(ls, args);
+          }
+        };
+      }
+
       // Ensure docCache is populated for a file (triggers patched getScriptSnapshot)
       function ensureCached(fileName: string): void {
         if (!docCache.has(fileName)) {
@@ -80,24 +105,24 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       }
 
       // Override: getCompletionsAtPosition
-      proxy.getCompletionsAtPosition = (fileName, position, ...rest) => {
+      safeOverride('getCompletionsAtPosition', (fileName, position, ...rest) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getCompletionsAtPosition(fileName, position, ...rest);
         }
         if (mapped === null) return undefined; // unmapped/synthetic position
         return ls.getCompletionsAtPosition(fileName, mapped, ...rest);
-      };
+      });
 
       // Override: getCompletionEntryDetails
-      proxy.getCompletionEntryDetails = (fileName, position, ...rest) => {
+      safeOverride('getCompletionEntryDetails', (fileName, position, ...rest) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getCompletionEntryDetails(fileName, position, ...rest);
         }
         if (mapped === null) return undefined;
         return ls.getCompletionEntryDetails(fileName, mapped, ...rest);
-      };
+      });
 
       // Helper: map a textSpan back from shadow -> original for a given file
       function mapTextSpanBack(fileName: string, textSpan: ts.TextSpan): ts.TextSpan {
@@ -113,7 +138,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       }
 
       // Override: getDefinitionAtPosition
-      proxy.getDefinitionAtPosition = (fileName, position) => {
+      safeOverride('getDefinitionAtPosition', (fileName, position) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getDefinitionAtPosition(fileName, position);
@@ -126,10 +151,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           }
         }
         return results;
-      };
+      });
 
       // Override: getDefinitionAndBoundSpan
-      proxy.getDefinitionAndBoundSpan = (fileName, position) => {
+      safeOverride('getDefinitionAndBoundSpan', (fileName, position) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getDefinitionAndBoundSpan(fileName, position);
@@ -137,19 +162,17 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         if (mapped === null) return undefined;
         const result = ls.getDefinitionAndBoundSpan(fileName, mapped);
         if (!result) return result;
-        // Map the bound span (the highlighted word in the source file)
         result.textSpan = mapTextSpanBack(fileName, result.textSpan);
-        // Map each definition's textSpan
         if (result.definitions) {
           for (const def of result.definitions) {
             def.textSpan = mapTextSpanBack(def.fileName, def.textSpan);
           }
         }
         return result;
-      };
+      });
 
       // Override: getTypeDefinitionAtPosition
-      proxy.getTypeDefinitionAtPosition = (fileName, position) => {
+      safeOverride('getTypeDefinitionAtPosition', (fileName, position) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getTypeDefinitionAtPosition(fileName, position);
@@ -162,44 +185,36 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           }
         }
         return results;
-      };
+      });
 
       // Override: getQuickInfoAtPosition (hover)
-      proxy.getQuickInfoAtPosition = (fileName, position) => {
+      safeOverride('getQuickInfoAtPosition', (fileName, position) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getQuickInfoAtPosition(fileName, position);
         }
         if (mapped === null) return undefined;
-
         const result = ls.getQuickInfoAtPosition(fileName, mapped);
         if (!result) return result;
-
-        // Map textSpan back from shadow -> original
         result.textSpan = mapTextSpanBack(fileName, result.textSpan);
-
         return result;
-      };
+      });
 
       // Override: getSignatureHelpItems (parameter hints)
-      proxy.getSignatureHelpItems = (fileName, position, options) => {
+      safeOverride('getSignatureHelpItems', (fileName, position, options) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getSignatureHelpItems(fileName, position, options);
         }
         if (mapped === null) return undefined;
-
         const result = ls.getSignatureHelpItems(fileName, mapped, options);
         if (!result) return result;
-
-        // Map applicableSpan back from shadow -> original
         result.applicableSpan = mapTextSpanBack(fileName, result.applicableSpan);
-
         return result;
-      };
+      });
 
       // Override: getRenameInfo
-      proxy.getRenameInfo = (fileName, position, ...rest) => {
+      safeOverride('getRenameInfo', (fileName, position, ...rest) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getRenameInfo(fileName, position, ...rest);
@@ -212,10 +227,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           result.triggerSpan = mapTextSpanBack(fileName, result.triggerSpan);
         }
         return result;
-      };
+      });
 
       // Override: findRenameLocations
-      proxy.findRenameLocations = (fileName, position, findInStrings, findInComments, preferences) => {
+      safeOverride('findRenameLocations', ((fileName: string, position: number, findInStrings: boolean, findInComments: boolean, preferences?: any) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.findRenameLocations(fileName, position, findInStrings, findInComments, preferences as any);
@@ -228,10 +243,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           }
         }
         return results;
-      };
+      }) as any);
 
       // Override: findReferences
-      proxy.findReferences = (fileName, position) => {
+      safeOverride('findReferences', (fileName, position) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.findReferences(fileName, position);
@@ -247,10 +262,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           }
         }
         return results;
-      };
+      });
 
       // Override: getReferencesAtPosition
-      proxy.getReferencesAtPosition = (fileName, position) => {
+      safeOverride('getReferencesAtPosition', (fileName, position) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getReferencesAtPosition(fileName, position);
@@ -263,10 +278,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           }
         }
         return results;
-      };
+      });
 
       // Override: getDocumentHighlights
-      proxy.getDocumentHighlights = (fileName, position, filesToSearch) => {
+      safeOverride('getDocumentHighlights', (fileName, position, filesToSearch) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getDocumentHighlights(fileName, position, filesToSearch);
@@ -281,10 +296,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           }
         }
         return results;
-      };
+      });
 
       // Override: getImplementationAtPosition
-      proxy.getImplementationAtPosition = (fileName, position) => {
+      safeOverride('getImplementationAtPosition', (fileName, position) => {
         const mapped = mapToShadow(fileName, position);
         if (mapped === undefined) {
           return ls.getImplementationAtPosition(fileName, position);
@@ -297,7 +312,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           }
         }
         return results;
-      };
+      });
 
       // Helper: map FileTextChanges spans back from shadow -> original
       function mapFileTextChanges(changes: readonly ts.FileTextChanges[]): ts.FileTextChanges[] {
@@ -311,7 +326,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       }
 
       // Override: getApplicableRefactors
-      proxy.getApplicableRefactors = (fileName, positionOrRange, ...rest) => {
+      safeOverride('getApplicableRefactors', (fileName, positionOrRange, ...rest) => {
         ensureCached(fileName);
         const doc = docCache.get(fileName);
         if (!doc) {
@@ -322,15 +337,14 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           if (mapped == null) return [];
           return ls.getApplicableRefactors(fileName, mapped, ...rest);
         }
-        // TextRange
         const mappedPos = originalToShadow(doc, positionOrRange.pos);
         const mappedEnd = originalToShadow(doc, positionOrRange.end);
         if (mappedPos == null || mappedEnd == null) return [];
         return ls.getApplicableRefactors(fileName, { pos: mappedPos, end: mappedEnd }, ...rest);
-      };
+      });
 
       // Override: getEditsForRefactor
-      proxy.getEditsForRefactor = (fileName, formatOptions, positionOrRange, refactorName, actionName, preferences, interactiveRefactorArguments) => {
+      safeOverride('getEditsForRefactor', (fileName, formatOptions, positionOrRange, refactorName, actionName, preferences, interactiveRefactorArguments) => {
         ensureCached(fileName);
         const doc = docCache.get(fileName);
         let mappedRange: number | ts.TextRange = positionOrRange;
@@ -359,10 +373,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
               })()
             : undefined,
         };
-      };
+      });
 
       // Override: getCodeFixesAtPosition
-      proxy.getCodeFixesAtPosition = (fileName, start, end, errorCodes, formatOptions, preferences) => {
+      safeOverride('getCodeFixesAtPosition', (fileName, start, end, errorCodes, formatOptions, preferences) => {
         ensureCached(fileName);
         const doc = docCache.get(fileName);
         let mappedStart = start;
@@ -379,16 +393,16 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           ...fix,
           changes: mapFileTextChanges(fix.changes),
         }));
-      };
+      });
 
       // Override: getCombinedCodeFix
-      proxy.getCombinedCodeFix = (scope, fixId, formatOptions, preferences) => {
+      safeOverride('getCombinedCodeFix', (scope, fixId, formatOptions, preferences) => {
         const result = ls.getCombinedCodeFix(scope, fixId, formatOptions, preferences);
         return {
           ...result,
           changes: mapFileTextChanges(result.changes),
         };
-      };
+      });
 
       // Diagnostic codes to suppress in pug regions (false positives from generated TSX)
       const SUPPRESSED_DIAG_CODES = new Set([
@@ -477,22 +491,22 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       }
 
       // Override: getSemanticDiagnostics
-      proxy.getSemanticDiagnostics = (fileName) => {
+      safeOverride('getSemanticDiagnostics', (fileName) => {
         const diagnostics = ls.getSemanticDiagnostics(fileName);
         return mapDiagnostics(fileName, diagnostics);
-      };
+      });
 
       // Override: getSyntacticDiagnostics
-      proxy.getSyntacticDiagnostics = (fileName) => {
+      safeOverride('getSyntacticDiagnostics', (fileName) => {
         const diagnostics = ls.getSyntacticDiagnostics(fileName);
         return mapDiagnostics(fileName, diagnostics as ts.Diagnostic[]) as ts.DiagnosticWithLocation[];
-      };
+      });
 
       // Override: getSuggestionDiagnostics
-      proxy.getSuggestionDiagnostics = (fileName) => {
+      safeOverride('getSuggestionDiagnostics', (fileName) => {
         const diagnostics = ls.getSuggestionDiagnostics(fileName);
         return mapDiagnostics(fileName, diagnostics as ts.Diagnostic[]) as ts.DiagnosticWithLocation[];
-      };
+      });
 
       return proxy;
     },

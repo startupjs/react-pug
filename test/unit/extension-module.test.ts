@@ -33,7 +33,9 @@ vi.mock('vscode', () => ({
   window: {
     showInformationMessage: () => {},
     showWarningMessage: () => {},
+    showErrorMessage: () => {},
     showTextDocument: async () => {},
+    createOutputChannel: () => ({ appendLine: () => {}, dispose: () => {} }),
     activeTextEditor: undefined,
   },
   commands: {
