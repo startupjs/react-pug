@@ -379,6 +379,24 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         };
       };
 
+      // Diagnostic codes to suppress in pug regions (false positives from generated TSX)
+      const SUPPRESSED_DIAG_CODES = new Set([
+        // "Cannot find namespace 'JSX'" -- from null placeholder in error recovery
+        2503,
+        // "Expression expected" -- from structural TSX brackets
+        1109,
+      ]);
+
+      // Helper: check if a shadow offset falls inside any pug region
+      function isInsidePugRegion(doc: PugDocument, shadowOffset: number): boolean {
+        for (const region of doc.regions) {
+          if (shadowOffset >= region.shadowStart && shadowOffset < region.shadowEnd) {
+            return true;
+          }
+        }
+        return false;
+      }
+
       // Helper: map diagnostics from shadow -> original, filtering unmapped ones
       function mapDiagnostics<T extends ts.Diagnostic>(fileName: string, diagnostics: T[]): T[] {
         const doc = docCache.get(fileName);
@@ -391,13 +409,22 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
             mapped.push(diag);
             continue;
           }
+
+          // Suppress known false-positive codes inside pug regions
+          if (SUPPRESSED_DIAG_CODES.has(diag.code) && isInsidePugRegion(doc, diag.start)) {
+            continue;
+          }
+
           const origStart = shadowToOriginal(doc, diag.start);
           if (origStart == null) continue; // falls in synthetic/unmapped region -- filter out
+
           const origEnd = diag.length != null ? shadowToOriginal(doc, diag.start + diag.length) : null;
+          // Ensure length is at least 1 for mapped diagnostics
+          const length = origEnd != null ? Math.max(1, origEnd - origStart) : diag.length;
           mapped.push({
             ...diag,
             start: origStart,
-            length: origEnd != null ? origEnd - origStart : diag.length,
+            length,
           });
         }
 
@@ -405,11 +432,19 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         if (!diagnosticsEnabled) return mapped;
         for (const region of doc.regions) {
           if (region.parseError) {
+            const err = region.parseError;
+            // Compute a meaningful error span length
+            const errorStart = region.pugTextStart + err.offset;
+            // Highlight to end of line or a reasonable length
+            const textAfterError = doc.originalText.slice(errorStart);
+            const nlIdx = textAfterError.indexOf('\n');
+            const errorLength = Math.max(1, nlIdx >= 0 ? nlIdx : Math.min(textAfterError.length, 20));
+
             mapped.push({
               file: undefined,
-              start: region.pugTextStart + region.parseError.offset,
-              length: 1,
-              messageText: `Pug parse error: ${region.parseError.message}`,
+              start: errorStart,
+              length: errorLength,
+              messageText: `Pug parse error: ${err.message}`,
               category: tsModule.DiagnosticCategory.Error,
               code: 99001,
               source: 'pug-react',
