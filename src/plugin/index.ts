@@ -434,9 +434,18 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           if (region.parseError) {
             const err = region.parseError;
             // Compute a meaningful error span length
-            const errorStart = region.pugTextStart + err.offset;
-            // Highlight to end of line or a reasonable length
-            const textAfterError = doc.originalText.slice(errorStart);
+            let errorStart = region.pugTextStart + err.offset;
+            let textAfterError = doc.originalText.slice(errorStart);
+
+            // If error points at a newline, advance to the next non-empty line
+            if (textAfterError.startsWith('\n')) {
+              const nextLineStart = textAfterError.indexOf('\n') + 1;
+              const trimmedNext = textAfterError.slice(nextLineStart);
+              const indentLen = trimmedNext.match(/^\s*/)?.[0].length ?? 0;
+              errorStart += nextLineStart + indentLen;
+              textAfterError = doc.originalText.slice(errorStart);
+            }
+
             const nlIdx = textAfterError.indexOf('\n');
             const errorLength = Math.max(1, nlIdx >= 0 ? nlIdx : Math.min(textAfterError.length, 20));
 
