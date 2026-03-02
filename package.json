@@ -24,6 +24,21 @@
         "name": "vscode-pug-react",
         "enableForWorkspaceTypeScriptVersions": true
       }
+    ],
+    "grammars": [
+      {
+        "scopeName": "inline.pug-template-literal",
+        "path": "./syntaxes/pug-template-literal.json",
+        "injectTo": [
+          "source.ts",
+          "source.tsx",
+          "source.js",
+          "source.jsx"
+        ],
+        "embeddedLanguages": {
+          "source.pug": "jade"
+        }
+      }
     ]
   },
   "scripts": {
