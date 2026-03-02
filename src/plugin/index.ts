@@ -1,7 +1,7 @@
 import type ts from 'typescript';
 import type { PugDocument } from '../language/mapping';
 import { buildShadowDocument } from '../language/shadowDocument';
-import { originalToShadow, shadowToOriginal, findRegionAtShadowOffset } from '../language/positionMapping';
+import { originalToShadow, shadowToOriginal } from '../language/positionMapping';
 
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;
@@ -82,6 +82,71 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         return ls.getCompletionEntryDetails(fileName, mapped, ...rest);
       };
 
+      // Helper: map a textSpan back from shadow -> original for a given file
+      function mapTextSpanBack(fileName: string, textSpan: ts.TextSpan): ts.TextSpan {
+        const doc = docCache.get(fileName);
+        if (!doc) return textSpan;
+        const origStart = shadowToOriginal(doc, textSpan.start);
+        if (origStart == null) return textSpan;
+        const origEnd = shadowToOriginal(doc, textSpan.start + textSpan.length);
+        return {
+          start: origStart,
+          length: origEnd != null ? origEnd - origStart : textSpan.length,
+        };
+      }
+
+      // Override: getDefinitionAtPosition
+      proxy.getDefinitionAtPosition = (fileName, position) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getDefinitionAtPosition(fileName, position);
+        }
+        if (mapped === null) return undefined;
+        const results = ls.getDefinitionAtPosition(fileName, mapped);
+        if (results) {
+          for (const def of results) {
+            def.textSpan = mapTextSpanBack(def.fileName, def.textSpan);
+          }
+        }
+        return results;
+      };
+
+      // Override: getDefinitionAndBoundSpan
+      proxy.getDefinitionAndBoundSpan = (fileName, position) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getDefinitionAndBoundSpan(fileName, position);
+        }
+        if (mapped === null) return undefined;
+        const result = ls.getDefinitionAndBoundSpan(fileName, mapped);
+        if (!result) return result;
+        // Map the bound span (the highlighted word in the source file)
+        result.textSpan = mapTextSpanBack(fileName, result.textSpan);
+        // Map each definition's textSpan
+        if (result.definitions) {
+          for (const def of result.definitions) {
+            def.textSpan = mapTextSpanBack(def.fileName, def.textSpan);
+          }
+        }
+        return result;
+      };
+
+      // Override: getTypeDefinitionAtPosition
+      proxy.getTypeDefinitionAtPosition = (fileName, position) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getTypeDefinitionAtPosition(fileName, position);
+        }
+        if (mapped === null) return undefined;
+        const results = ls.getTypeDefinitionAtPosition(fileName, mapped);
+        if (results) {
+          for (const def of results) {
+            def.textSpan = mapTextSpanBack(def.fileName, def.textSpan);
+          }
+        }
+        return results;
+      };
+
       // Override: getQuickInfoAtPosition (hover)
       proxy.getQuickInfoAtPosition = (fileName, position) => {
         const mapped = mapToShadow(fileName, position);
@@ -94,17 +159,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         if (!result) return result;
 
         // Map textSpan back from shadow -> original
-        const doc = docCache.get(fileName);
-        if (doc) {
-          const origStart = shadowToOriginal(doc, result.textSpan.start);
-          if (origStart != null) {
-            const origEnd = shadowToOriginal(doc, result.textSpan.start + result.textSpan.length);
-            result.textSpan = {
-              start: origStart,
-              length: origEnd != null ? origEnd - origStart : result.textSpan.length,
-            };
-          }
-        }
+        result.textSpan = mapTextSpanBack(fileName, result.textSpan);
 
         return result;
       };
