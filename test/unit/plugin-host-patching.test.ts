@@ -20,6 +20,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 // [x] Transform: bare tag div -> <div />
 // [x] Transform: multiple lines wrapped in fragment
 // [x] Transform: empty content -> null placeholder
+// [x] Edge case: empty string file content
+// [x] Edge case: whitespace-only pug template
+// [x] Edge case: large file with pug templates
+// [x] Edge case: file changes from pug to non-pug (covered in cache tests)
+// [x] Edge case: pug` in a string but not a real tagged template
 // [x] Proxy LS delegates all methods to original
 
 async function loadPlugin() {
@@ -416,6 +421,73 @@ describe('pug-to-JSX transformation', () => {
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
     expect(text).toContain('null');
     expect(text).toContain('JSX.Element');
+  });
+});
+
+// ── Edge case tests ──────────────────────────────────────────────
+
+describe('edge cases', () => {
+  it('handles empty string file content', async () => {
+    const { host } = await setupPlugin({
+      'empty.ts': '',
+    });
+    const snapshot = host.getScriptSnapshot('empty.ts');
+    const text = snapshotText(snapshot);
+    expect(text).toBe('');
+  });
+
+  it('handles whitespace-only pug template', async () => {
+    const { host } = await setupPlugin({
+      'whitespace-pug.tsx': 'const v = pug`   \n   \n   `',
+    });
+    const text = snapshotText(host.getScriptSnapshot('whitespace-pug.tsx'));
+    // Whitespace-only lines are filtered out, treated as empty -> null placeholder
+    expect(text).not.toContain('pug`');
+    expect(text).toContain('null');
+  });
+
+  it('handles large file with pug template', async () => {
+    // Generate a large file (~10K lines of code) with a pug template in the middle
+    const prefix = Array.from({ length: 5000 }, (_, i) => `const x${i} = ${i};`).join('\n');
+    const pugPart = '\nconst view = pug`\n  div Hello\n`;\n';
+    const suffix = Array.from({ length: 5000 }, (_, i) => `const y${i} = ${i};`).join('\n');
+    const largeFile = prefix + pugPart + suffix;
+
+    const { host } = await setupPlugin({
+      'large.tsx': largeFile,
+    });
+
+    const text = snapshotText(host.getScriptSnapshot('large.tsx'));
+    expect(text).not.toContain('pug`');
+    expect(text).toContain('<div>Hello</div>');
+    // Surrounding code should be preserved
+    expect(text).toContain('const x0 = 0');
+    expect(text).toContain('const y4999 = 4999');
+  });
+
+  it('handles string containing pug` that is not a tagged template', async () => {
+    // The regex approach will match pug` even in strings -- this is a known
+    // limitation of the spike's regex-based detection. The real implementation
+    // will use @babel/parser. For now, document the behavior.
+    const { host } = await setupPlugin({
+      'false-positive.ts': "const s = 'this mentions pug`div` in a string';",
+    });
+    const snapshot = host.getScriptSnapshot('false-positive.ts');
+    const text = snapshotText(snapshot);
+    // Regex-based detection will match this -- it's a known spike limitation
+    // The key thing is it doesn't crash
+    expect(snapshot).toBeDefined();
+    expect(text.length).toBeGreaterThan(0);
+  });
+
+  it('handles pug template with only a comment-like line', async () => {
+    const { host } = await setupPlugin({
+      'comment-pug.tsx': 'const v = pug`\n  //- this is a comment\n`',
+    });
+    const text = snapshotText(host.getScriptSnapshot('comment-pug.tsx'));
+    // Comment line doesn't match any pug pattern, falls through to fallback
+    expect(text).not.toContain('pug`');
+    expect(text).toBeDefined();
   });
 });
 
