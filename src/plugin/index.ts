@@ -78,9 +78,6 @@ function buildShadowText(originalText: string): string | undefined {
   return hasMatch ? result : undefined;
 }
 
-/** Document cache: tracks original text, shadow text, and version per file */
-const docCache = new Map<string, { originalText: string; shadowText: string; version: number }>();
-
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;
 
@@ -89,6 +86,9 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       const host = info.languageServiceHost;
       const originalGetSnapshot = host.getScriptSnapshot.bind(host);
       const originalGetVersion = host.getScriptVersion.bind(host);
+
+      // Per-instance cache: tracks original text, shadow text, and version per file
+      const docCache = new Map<string, { originalText: string; shadowText: string; version: number }>();
 
       host.getScriptSnapshot = (fileName: string) => {
         const original = originalGetSnapshot(fileName);
