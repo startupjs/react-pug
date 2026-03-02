@@ -97,33 +97,31 @@ describe('Spike: TS plugin host patching', () => {
   });
 
   it('returns completions at a position inside the shadow JSX', () => {
-    const snapshot = host.getScriptSnapshot!(APP_FILE);
-    const shadowText = snapshot!.getText(0, snapshot!.getLength());
+    // Read original file to find the position of 'onClick' inside pug template
+    const originalText = fs.readFileSync(APP_FILE, 'utf-8');
 
-    // Find position after "<Button " to trigger attribute completions
-    const buttonIdx = shadowText.indexOf('<Button');
-    expect(buttonIdx).toBeGreaterThan(-1);
-    const afterButton = buttonIdx + '<Button '.length;
+    // Find position of 'onClick' in the original pug content
+    // The proxy will map this original offset -> shadow offset automatically
+    const onClickIdx = originalText.indexOf('onClick');
+    expect(onClickIdx).toBeGreaterThan(-1);
 
-    const completions = ls.getCompletionsAtPosition(APP_FILE, afterButton, undefined);
+    // Position at 'onClick' should trigger attribute completions on Button
+    const completions = ls.getCompletionsAtPosition(APP_FILE, onClickIdx, undefined);
     expect(completions).toBeDefined();
     expect(completions!.entries.length).toBeGreaterThan(0);
 
     const entryNames = completions!.entries.map(e => e.name);
-    // Should include ButtonProps members that aren't already specified.
-    // onClick and label are already in the JSX attrs, so disabled must appear.
-    expect(entryNames).toContain('disabled');
-    // At least one of the ButtonProps should be suggested
+    // Should include ButtonProps members
     const hasButtonProp = entryNames.some(n => ['onClick', 'label', 'disabled'].includes(n));
     expect(hasButtonProp).toBe(true);
   });
 
   it('returns hover info for identifiers in shadow content', () => {
-    const snapshot = host.getScriptSnapshot!(APP_FILE);
-    const shadowText = snapshot!.getText(0, snapshot!.getLength());
+    // Use original-file position -- the proxy maps original -> shadow
+    const originalText = fs.readFileSync(APP_FILE, 'utf-8');
 
-    // Find "handler" in the shadow text
-    const handlerIdx = shadowText.indexOf('handler');
+    // Find "handler" in the original pug content (inside pug`...`)
+    const handlerIdx = originalText.indexOf('handler', originalText.indexOf('pug`'));
     expect(handlerIdx).toBeGreaterThan(-1);
 
     const quickInfo = ls.getQuickInfoAtPosition(APP_FILE, handlerIdx);

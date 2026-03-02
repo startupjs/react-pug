@@ -1,6 +1,7 @@
 import type ts from 'typescript';
 import type { PugDocument } from '../language/mapping';
 import { buildShadowDocument } from '../language/shadowDocument';
+import { originalToShadow, shadowToOriginal, findRegionAtShadowOffset } from '../language/positionMapping';
 
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;
@@ -53,6 +54,60 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           (proxy as any)[k] = (...args: any[]) => (value as Function).apply(ls, args);
         }
       }
+
+      // Helper: map an original position to shadow position for a cached file
+      function mapToShadow(fileName: string, position: number): number | null | undefined {
+        const doc = docCache.get(fileName);
+        if (!doc) return undefined; // no pug regions, use position as-is
+        return originalToShadow(doc, position);
+      }
+
+      // Override: getCompletionsAtPosition
+      proxy.getCompletionsAtPosition = (fileName, position, ...rest) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getCompletionsAtPosition(fileName, position, ...rest);
+        }
+        if (mapped === null) return undefined; // unmapped/synthetic position
+        return ls.getCompletionsAtPosition(fileName, mapped, ...rest);
+      };
+
+      // Override: getCompletionEntryDetails
+      proxy.getCompletionEntryDetails = (fileName, position, ...rest) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getCompletionEntryDetails(fileName, position, ...rest);
+        }
+        if (mapped === null) return undefined;
+        return ls.getCompletionEntryDetails(fileName, mapped, ...rest);
+      };
+
+      // Override: getQuickInfoAtPosition (hover)
+      proxy.getQuickInfoAtPosition = (fileName, position) => {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped === undefined) {
+          return ls.getQuickInfoAtPosition(fileName, position);
+        }
+        if (mapped === null) return undefined;
+
+        const result = ls.getQuickInfoAtPosition(fileName, mapped);
+        if (!result) return result;
+
+        // Map textSpan back from shadow -> original
+        const doc = docCache.get(fileName);
+        if (doc) {
+          const origStart = shadowToOriginal(doc, result.textSpan.start);
+          if (origStart != null) {
+            const origEnd = shadowToOriginal(doc, result.textSpan.start + result.textSpan.length);
+            result.textSpan = {
+              start: origStart,
+              length: origEnd != null ? origEnd - origStart : result.textSpan.length,
+            };
+          }
+        }
+
+        return result;
+      };
 
       return proxy;
     },
