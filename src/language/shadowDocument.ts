@@ -14,8 +14,9 @@ export function buildShadowDocument(
   originalText: string,
   uri: string,
   version: number = 1,
+  tagName: string = 'pug',
 ): PugDocument {
-  const regions = extractPugRegions(originalText, uri);
+  const regions = extractPugRegions(originalText, uri, tagName);
 
   if (regions.length === 0) {
     return {

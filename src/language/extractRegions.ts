@@ -34,14 +34,14 @@ function getPluginsForFile(filename: string): any[] {
   return plugins;
 }
 
-/** Walk the AST and collect TaggedTemplateExpression nodes where tag is 'pug' */
-function findPugTemplates(node: Node, results: TaggedTemplateExpression[]): void {
+/** Walk the AST and collect TaggedTemplateExpression nodes where tag matches tagName */
+function findPugTemplates(node: Node, results: TaggedTemplateExpression[], tagName: string = 'pug'): void {
   if (!node || typeof node !== 'object') return;
 
   if (
     node.type === 'TaggedTemplateExpression' &&
     node.tag.type === 'Identifier' &&
-    node.tag.name === 'pug'
+    node.tag.name === tagName
   ) {
     results.push(node);
   }
@@ -52,18 +52,23 @@ function findPugTemplates(node: Node, results: TaggedTemplateExpression[]): void
     if (Array.isArray(child)) {
       for (const item of child) {
         if (item && typeof item === 'object' && typeof item.type === 'string') {
-          findPugTemplates(item, results);
+          findPugTemplates(item, results, tagName);
         }
       }
     } else if (child && typeof child === 'object' && typeof child.type === 'string') {
-      findPugTemplates(child, results);
+      findPugTemplates(child, results, tagName);
     }
   }
 }
 
+/** Escape special regex characters in a string */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** Regex fallback for when @babel/parser fails */
-function extractWithRegex(text: string): PugRegion[] {
-  const re = /\bpug\s*`([\s\S]*?)`/g;
+function extractWithRegex(text: string, tagName: string = 'pug'): PugRegion[] {
+  const re = new RegExp(`\\b${escapeRegExp(tagName)}\\s*\`([\\s\\S]*?)\``, 'g');
   const regions: PugRegion[] = [];
   let match: RegExpExecArray | null;
 
@@ -100,9 +105,9 @@ function extractWithRegex(text: string): PugRegion[] {
  * Extract all pug tagged template literal regions from a source file.
  * Uses @babel/parser for accurate AST-based extraction, with regex fallback.
  */
-export function extractPugRegions(text: string, filename: string): PugRegion[] {
+export function extractPugRegions(text: string, filename: string, tagName: string = 'pug'): PugRegion[] {
   // Fast path: skip parsing if no pug templates
-  if (!text.includes('pug`') && !text.includes('pug `')) return [];
+  if (!text.includes(tagName + '`') && !text.includes(tagName + ' `')) return [];
 
   let templates: TaggedTemplateExpression[];
   try {
@@ -113,10 +118,10 @@ export function extractPugRegions(text: string, filename: string): PugRegion[] {
       ranges: true,
     });
     templates = [];
-    findPugTemplates(ast, templates);
+    findPugTemplates(ast, templates, tagName);
   } catch {
     // @babel/parser failed -- fall back to regex
-    return extractWithRegex(text);
+    return extractWithRegex(text, tagName);
   }
 
   if (templates.length === 0) return [];

@@ -25,6 +25,26 @@
         "enableForWorkspaceTypeScriptVersions": true
       }
     ],
+    "configuration": {
+      "title": "Pug React IntelliSense",
+      "properties": {
+        "pugReact.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable the Pug React IntelliSense extension"
+        },
+        "pugReact.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable pug-specific diagnostics (parse errors)"
+        },
+        "pugReact.tagFunction": {
+          "type": "string",
+          "default": "pug",
+          "description": "The tag function name to recognize (for users who alias the import)"
+        }
+      }
+    },
     "grammars": [
       {
         "scopeName": "inline.pug-template-literal",

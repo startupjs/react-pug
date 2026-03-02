@@ -8,6 +8,12 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
   return {
     create(info: ts.server.PluginCreateInfo): ts.LanguageService {
+      // Read configuration from info.config (passed by VS Code)
+      const config = info.config ?? {};
+      const enabled = config.enabled !== false;
+      const diagnosticsEnabled = config.diagnostics?.enabled !== false;
+      const tagFunction: string = config.tagFunction ?? 'pug';
+
       const host = info.languageServiceHost;
       const originalGetSnapshot = host.getScriptSnapshot.bind(host);
       const originalGetVersion = host.getScriptVersion.bind(host);
@@ -19,6 +25,9 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         const original = originalGetSnapshot(fileName);
         if (!original) return original;
 
+        // When disabled, pass through original content
+        if (!enabled) return original;
+
         const text = original.getText(0, original.getLength());
         const cached = docCache.get(fileName);
 
@@ -27,7 +36,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           return tsModule.ScriptSnapshot.fromString(cached.shadowText);
         }
 
-        const doc = buildShadowDocument(text, fileName, (cached?.version ?? 0) + 1);
+        const doc = buildShadowDocument(text, fileName, (cached?.version ?? 0) + 1, tagFunction);
 
         if (doc.regions.length > 0) {
           docCache.set(fileName, doc);
@@ -392,7 +401,8 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           });
         }
 
-        // Add pug parse error diagnostics for regions with parseError
+        // Add pug parse error diagnostics for regions with parseError (if enabled)
+        if (!diagnosticsEnabled) return mapped;
         for (const region of doc.regions) {
           if (region.parseError) {
             mapped.push({

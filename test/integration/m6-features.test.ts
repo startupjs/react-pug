@@ -6,7 +6,6 @@ import * as fs from 'fs';
 const FIXTURES_DIR = path.resolve(__dirname, '../fixtures/spike');
 const APP_FILE = path.join(FIXTURES_DIR, 'app.tsx');
 const BUTTON_FILE = path.join(FIXTURES_DIR, 'Button.tsx');
-const PLAIN_FILE = path.join(FIXTURES_DIR, 'plain.ts');
 
 async function loadPlugin() {
   const mod = await import('../../src/plugin/index.ts');
@@ -71,11 +70,16 @@ function readOriginal(filePath: string): string {
 describe('getApplicableRefactors through real pipeline', () => {
   let ls: ts.LanguageService;
   let appText: string;
+  let plainVirtualFile: string;
+  const plainVirtualText = 'export function add(a: number, b: number) { return a + b; }';
 
   beforeAll(async () => {
     const init = await loadPlugin();
-    const rootFiles = [APP_FILE, BUTTON_FILE, PLAIN_FILE];
-    const result = createLanguageServiceWithPlugin(init, rootFiles, FIXTURES_DIR);
+    plainVirtualFile = path.join(FIXTURES_DIR, 'plain-refactors.tsx');
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(plainVirtualFile, plainVirtualText);
+    const rootFiles = [APP_FILE, BUTTON_FILE, plainVirtualFile];
+    const result = createLanguageServiceWithPlugin(init, rootFiles, FIXTURES_DIR, virtualFiles);
     ls = result.ls;
     appText = readOriginal(APP_FILE);
   });
@@ -110,10 +114,8 @@ describe('getApplicableRefactors through real pipeline', () => {
   });
 
   it('passes through for non-pug file', () => {
-    const plainText = readOriginal(PLAIN_FILE);
-    const addIdx = plainText.indexOf('add');
-
-    const refactors = ls.getApplicableRefactors(PLAIN_FILE, addIdx, undefined);
+    const addIdx = plainVirtualText.indexOf('add');
+    const refactors = ls.getApplicableRefactors(plainVirtualFile, addIdx, undefined);
     expect(Array.isArray(refactors)).toBe(true);
   });
 
@@ -135,6 +137,8 @@ describe('getEditsForRefactor through real pipeline', () => {
   let ls: ts.LanguageService;
   let refactorFile: string;
   let refactorText: string;
+  let plainVirtualFile: string;
+  const plainVirtualText = 'export function add(a: number, b: number) { return a + b; }';
 
   beforeAll(async () => {
     const init = await loadPlugin();
@@ -149,10 +153,13 @@ describe('getEditsForRefactor through real pipeline', () => {
       '`;',
     ].join('\n');
 
+    plainVirtualFile = path.join(FIXTURES_DIR, 'plain-edits.tsx');
+
     const virtualFiles = new Map<string, string>();
     virtualFiles.set(refactorFile, refactorText);
+    virtualFiles.set(plainVirtualFile, plainVirtualText);
 
-    const rootFiles = [refactorFile, BUTTON_FILE, PLAIN_FILE];
+    const rootFiles = [refactorFile, BUTTON_FILE, plainVirtualFile];
     const result = createLanguageServiceWithPlugin(
       init, rootFiles, FIXTURES_DIR, virtualFiles,
     );
@@ -212,16 +219,15 @@ describe('getEditsForRefactor through real pipeline', () => {
   });
 
   it('passes through for non-pug file', () => {
-    const plainText = readOriginal(PLAIN_FILE);
-    const addIdx = plainText.indexOf('add');
+    const addIdx = plainVirtualText.indexOf('add');
 
-    // Try any refactor on plain file - should pass through without mapping
-    const refactors = ls.getApplicableRefactors(PLAIN_FILE, addIdx, undefined);
+    // Try any refactor on non-pug file - should pass through without mapping
+    const refactors = ls.getApplicableRefactors(plainVirtualFile, addIdx, undefined);
     if (refactors.length > 0) {
       const refactor = refactors[0];
       const action = refactor.actions[0];
       const result = ls.getEditsForRefactor(
-        PLAIN_FILE, {}, addIdx, refactor.name, action.name, undefined,
+        plainVirtualFile, {}, addIdx, refactor.name, action.name, undefined,
       );
       // Should not crash, result can be undefined if refactor doesn't apply
       expect(result === undefined || result.edits != null).toBe(true);
@@ -236,6 +242,8 @@ describe('getCodeFixesAtPosition through real pipeline', () => {
   let ls: ts.LanguageService;
   let fixFile: string;
   let fixText: string;
+  let plainVirtualFile: string;
+  const plainVirtualText = 'export function add(a: number, b: number) { return a + b; }';
 
   beforeAll(async () => {
     const init = await loadPlugin();
@@ -250,10 +258,13 @@ describe('getCodeFixesAtPosition through real pipeline', () => {
       '`;',
     ].join('\n');
 
+    plainVirtualFile = path.join(FIXTURES_DIR, 'plain-fixes.tsx');
+
     const virtualFiles = new Map<string, string>();
     virtualFiles.set(fixFile, fixText);
+    virtualFiles.set(plainVirtualFile, plainVirtualText);
 
-    const rootFiles = [fixFile, BUTTON_FILE, PLAIN_FILE];
+    const rootFiles = [fixFile, BUTTON_FILE, plainVirtualFile];
     const result = createLanguageServiceWithPlugin(
       init, rootFiles, FIXTURES_DIR, virtualFiles,
     );
@@ -316,7 +327,7 @@ describe('getCodeFixesAtPosition through real pipeline', () => {
 
   it('passes through for non-pug file', () => {
     const fixes = ls.getCodeFixesAtPosition(
-      PLAIN_FILE, 0, 1,
+      plainVirtualFile, 0, 1,
       [2304],
       {},
       undefined as any,
@@ -374,11 +385,16 @@ describe('getCodeFixesAtPosition with type error in pug', () => {
 
 describe('getCombinedCodeFix through real pipeline', () => {
   let ls: ts.LanguageService;
+  let plainVirtualFile: string;
+  const plainVirtualText = 'export function add(a: number, b: number) { return a + b; }';
 
   beforeAll(async () => {
     const init = await loadPlugin();
-    const rootFiles = [APP_FILE, BUTTON_FILE, PLAIN_FILE];
-    const result = createLanguageServiceWithPlugin(init, rootFiles, FIXTURES_DIR);
+    plainVirtualFile = path.join(FIXTURES_DIR, 'plain-combined.tsx');
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(plainVirtualFile, plainVirtualText);
+    const rootFiles = [APP_FILE, BUTTON_FILE, plainVirtualFile];
+    const result = createLanguageServiceWithPlugin(init, rootFiles, FIXTURES_DIR, virtualFiles);
     ls = result.ls;
   });
 
@@ -404,7 +420,7 @@ describe('getCombinedCodeFix through real pipeline', () => {
 
   it('passes through for non-pug file', () => {
     const result = ls.getCombinedCodeFix(
-      { type: 'file', fileName: PLAIN_FILE },
+      { type: 'file', fileName: plainVirtualFile },
       'fixMissingImport',
       {},
       undefined as any,
@@ -420,6 +436,8 @@ describe('mapFileTextChanges via getEditsForRefactor', () => {
   let ls: ts.LanguageService;
   let multiFile: string;
   let multiText: string;
+  let plainVirtualFile: string;
+  const plainVirtualText = 'export function add(a: number, b: number) { return a + b; }';
 
   beforeAll(async () => {
     const init = await loadPlugin();
@@ -435,10 +453,13 @@ describe('mapFileTextChanges via getEditsForRefactor', () => {
       'export default view;',
     ].join('\n');
 
+    plainVirtualFile = path.join(FIXTURES_DIR, 'plain-multi.tsx');
+
     const virtualFiles = new Map<string, string>();
     virtualFiles.set(multiFile, multiText);
+    virtualFiles.set(plainVirtualFile, plainVirtualText);
 
-    const rootFiles = [multiFile, BUTTON_FILE, PLAIN_FILE];
+    const rootFiles = [multiFile, BUTTON_FILE, plainVirtualFile];
     const result = createLanguageServiceWithPlugin(
       init, rootFiles, FIXTURES_DIR, virtualFiles,
     );
@@ -482,11 +503,10 @@ describe('mapFileTextChanges via getEditsForRefactor', () => {
   });
 
   it('non-pug file refactor edits are not modified', () => {
-    const plainText = readOriginal(PLAIN_FILE);
-    const returnIdx = plainText.indexOf('return');
+    const returnIdx = plainVirtualText.indexOf('return');
 
     const refactors = ls.getApplicableRefactors(
-      PLAIN_FILE,
+      plainVirtualFile,
       { pos: returnIdx, end: returnIdx + 'return a + b'.length },
       undefined,
     );
@@ -494,7 +514,7 @@ describe('mapFileTextChanges via getEditsForRefactor', () => {
     for (const refactor of refactors) {
       for (const action of refactor.actions) {
         const result = ls.getEditsForRefactor(
-          PLAIN_FILE, {},
+          plainVirtualFile, {},
           { pos: returnIdx, end: returnIdx + 'return a + b'.length },
           refactor.name, action.name, undefined,
         );
