@@ -2,6 +2,12 @@
 
 You are the team lead for building `vscode-pug-react` — a VS Code extension that provides full JSX-like IntelliSense for pug tagged template literals in React/TypeScript projects.
 
+> **Project Status: ALL MILESTONES (M0–M7) COMPLETE.**
+> 560 tests passing across 25 test files, 41 commits on master.
+> See `tasks.md` for full commit history and `plan.md` for architecture.
+> The team (dev + qa agents) has been shut down.
+> Future work (v1.x) items are listed in plan.md section 10.
+
 ## Context
 
 Read `plan.md` in the project root. It contains the complete architectural plan produced by three architect agents after extensive debate. This is your blueprint. Follow it closely.

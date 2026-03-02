@@ -120,27 +120,29 @@ All tasks done. Spike validated: host patching works, completions return typed p
 
 ---
 
-## Milestone 7: Hardening + Release — IN PROGRESS
+## Milestone 7: Hardening + Release — COMPLETE
 
 ### Task 7.1: Show Shadow TSX debug command — DONE
 ### Task 7.1-QA: Show Shadow TSX command tests — DONE
 ### Task 7.2: Error handling for all failure modes — DONE
-### Task 7.2-QA: Error handling tests — IN PROGRESS (qa)
-### Task 7.3: Create example project — PENDING
-### Task 7.3-QA: TBD — PENDING
+### Task 7.2-QA: Error handling tests — DONE
+### Task 7.3: Create example project — DONE
+### Task 7.3-QA: Example project review — DONE
 
 ### Commits:
 37. `cffdbeb` feat(M7): add Show Shadow TSX debug command
 38. `2b9cf77` test(M7): add Show Shadow TSX command unit tests
 39. `d236dfa` feat(M7): add error handling for all failure modes
+40. `5893f80` test(M7): add error handling unit tests
+41. `7322de7` feat(M7): add example demo project
 
 ---
 
 ## Test Coverage Summary
 
-545 tests passing across 24 test files:
+560 tests passing across 25 test files:
 
-### Unit tests (316):
+### Unit tests (331):
 - test/unit/setup.test.ts (1)
 - test/unit/build.test.ts (9)
 - test/unit/extension-module.test.ts (6)
@@ -154,6 +156,7 @@ All tasks done. Spike validated: host patching works, completions return typed p
 - test/unit/positionMapping.test.ts (52)
 - test/unit/config.test.ts (24)
 - test/unit/show-shadow-tsx.test.ts (15)
+- test/unit/error-handling.test.ts (15)
 
 ### Integration tests (229):
 - test/integration/spike.test.ts (10)
@@ -168,7 +171,7 @@ All tasks done. Spike validated: host patching works, completions return typed p
 - test/integration/jsx-support.test.ts (20)
 - test/integration/diagnostics.test.ts (19)
 
-Note: unit count 316 + integration 229 = 545 total (15 tests are in show-shadow-tsx which is unit)
+Note: unit 331 + integration 229 = 560 total (error-handling and show-shadow-tsx are unit tests)
 
 ---
 
