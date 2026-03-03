@@ -417,7 +417,13 @@ function emitText(
   emitter: TsxEmitter,
   pugText: string,
 ): void {
-  const offset = lineColToOffset(pugText, node.line, node.column);
+  const lineText = pugText.split('\n')[node.line - 1] ?? '';
+  const lineStart = lineColToOffset(pugText, node.line, 1);
+  const markerIndex = Math.max(0, node.column - 1);
+  const valueIndex = lineText.indexOf(node.val, markerIndex);
+  const offset = valueIndex >= 0
+    ? lineStart + valueIndex
+    : lineColToOffset(pugText, node.line, node.column);
   emitter.emitMapped(node.val, offset, SYNTHETIC);
 }
 
@@ -425,6 +431,7 @@ function emitCode(
   node: PugCode,
   emitter: TsxEmitter,
   pugText: string,
+  wrapInJsxBraces: boolean = true,
 ): void {
   const markerOffset = lineColToOffset(pugText, node.line, node.column);
   const lineText = pugText.split('\n')[node.line - 1] ?? '';
@@ -436,15 +443,15 @@ function emitCode(
     : markerOffset + fallbackShift;
 
   if (node.buffer && node.isInline) {
-    // Inline interpolation: #{expr} -> {expr}
-    emitter.emitSynthetic('{');
+    // Inline interpolation: #{expr} -> {expr} in JSX child context, bare expr in JS expression context
+    if (wrapInJsxBraces) emitter.emitSynthetic('{');
     emitter.emitMapped(node.val, valueOffset, FULL_FEATURES);
-    emitter.emitSynthetic('}');
+    if (wrapInJsxBraces) emitter.emitSynthetic('}');
   } else if (node.buffer) {
-    // Buffered code: = expr -> {expr}
-    emitter.emitSynthetic('{');
+    // Buffered code: = expr -> {expr} in JSX child context, bare expr in JS expression context
+    if (wrapInJsxBraces) emitter.emitSynthetic('{');
     emitter.emitMapped(node.val, valueOffset, FULL_FEATURES);
-    emitter.emitSynthetic('}');
+    if (wrapInJsxBraces) emitter.emitSynthetic('}');
   } else {
     // Unbuffered code block: - const x = 10
     // Emitted as a statement; IIFE wrapping is handled by emitNodesWithCodeBlocks
@@ -532,6 +539,84 @@ function emitBlockWithCodeSupport(
   }
 }
 
+/** Emit a single node as a JS expression (no JSX-child wrapping braces). */
+function emitNodeAsExpression(
+  node: PugNode,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  switch (node.type) {
+    case 'Tag':
+      emitTag(node, emitter, pugText);
+      break;
+    case 'Text':
+      emitter.emitSynthetic(JSON.stringify(node.val));
+      break;
+    case 'Code':
+      emitCode(node, emitter, pugText, false);
+      break;
+    case 'Conditional':
+      emitConditional(node, emitter, pugText, false);
+      break;
+    case 'Each':
+      emitEach(node, emitter, pugText, false);
+      break;
+    case 'While':
+      emitWhile(node, emitter, pugText, false);
+      break;
+    case 'Case':
+      emitCase(node, emitter, pugText, false);
+      break;
+    case 'When':
+    case 'Comment':
+    case 'BlockComment':
+      emitter.emitSynthetic('null');
+      break;
+  }
+}
+
+/** Emit a block where the caller expects a JS expression result. */
+function emitBlockAsExpression(
+  nodes: PugNode[],
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  const hasUnbufferedCode = nodes.some(isUnbufferedCode);
+
+  if (hasUnbufferedCode) {
+    emitter.emitSynthetic('(() => {');
+    for (const node of nodes) {
+      if (isUnbufferedCode(node)) emitNode(node, emitter, pugText);
+    }
+
+    const exprNodes = nodes.filter((n) => !isUnbufferedCode(n));
+    emitter.emitSynthetic('return ');
+    if (exprNodes.length === 0) {
+      emitter.emitSynthetic('null');
+    } else if (exprNodes.length === 1) {
+      emitNodeAsExpression(exprNodes[0], emitter, pugText);
+    } else {
+      emitter.emitSynthetic('(<>' );
+      for (const node of exprNodes) {
+        emitNode(node, emitter, pugText);
+      }
+      emitter.emitSynthetic('</>)');
+    }
+    emitter.emitSynthetic(';})()');
+    return;
+  }
+
+  if (nodes.length === 0) {
+    emitter.emitSynthetic('null');
+  } else if (nodes.length === 1) {
+    emitNodeAsExpression(nodes[0], emitter, pugText);
+  } else {
+    emitter.emitSynthetic('<>');
+    for (const node of nodes) emitNode(node, emitter, pugText);
+    emitter.emitSynthetic('</>');
+  }
+}
+
 // ── Control flow emitters ──────────────────────────────────────
 
 /** if show -> show ? <consequent> : <alternate> */
@@ -539,6 +624,7 @@ function emitConditional(
   node: PugConditional,
   emitter: TsxEmitter,
   pugText: string,
+  wrapInJsxBraces: boolean = true,
 ): void {
   const testOffset = lineColToOffset(pugText, node.line, node.column);
   const exprOffset = findValueOffsetOnLine(
@@ -549,17 +635,13 @@ function emitConditional(
     testOffset + 3,
   );
 
-  emitter.emitSynthetic('{');
+  if (wrapInJsxBraces) emitter.emitSynthetic('{');
   emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
   emitter.emitSynthetic(' ? ');
 
   // Consequent block
   const consequentNodes = node.consequent?.nodes ?? [];
-  if (consequentNodes.length === 0) {
-    emitter.emitSynthetic('null');
-  } else {
-    emitBlockWithCodeSupport(consequentNodes, emitter, pugText);
-  }
+  emitBlockAsExpression(consequentNodes, emitter, pugText);
 
   emitter.emitSynthetic(' : ');
 
@@ -572,14 +654,10 @@ function emitConditional(
   } else {
     // else block
     const altNodes = (node.alternate as PugBlock).nodes ?? [];
-    if (altNodes.length === 0) {
-      emitter.emitSynthetic('null');
-    } else {
-      emitBlockWithCodeSupport(altNodes, emitter, pugText);
-    }
+    emitBlockAsExpression(altNodes, emitter, pugText);
   }
 
-  emitter.emitSynthetic('}');
+  if (wrapInJsxBraces) emitter.emitSynthetic('}');
 }
 
 /** Inner conditional for chained else-if (no wrapping {} braces) */
@@ -601,11 +679,7 @@ function emitConditionalInner(
   emitter.emitSynthetic(' ? ');
 
   const consequentNodes = node.consequent?.nodes ?? [];
-  if (consequentNodes.length === 0) {
-    emitter.emitSynthetic('null');
-  } else {
-    emitBlockWithCodeSupport(consequentNodes, emitter, pugText);
-  }
+  emitBlockAsExpression(consequentNodes, emitter, pugText);
 
   emitter.emitSynthetic(' : ');
 
@@ -615,11 +689,7 @@ function emitConditionalInner(
     emitConditionalInner(node.alternate, emitter, pugText);
   } else {
     const altNodes = (node.alternate as PugBlock).nodes ?? [];
-    if (altNodes.length === 0) {
-      emitter.emitSynthetic('null');
-    } else {
-      emitBlockWithCodeSupport(altNodes, emitter, pugText);
-    }
+    emitBlockAsExpression(altNodes, emitter, pugText);
   }
 }
 
@@ -628,6 +698,7 @@ function emitEach(
   node: PugEach,
   emitter: TsxEmitter,
   pugText: string,
+  wrapInJsxBraces: boolean = true,
 ): void {
   const pugLine = pugText.split('\n')[node.line - 1] ?? '';
   const lineStart = lineColToOffset(pugText, node.line, 1);
@@ -659,7 +730,7 @@ function emitEach(
       lineStart + Math.max(0, pugLine.indexOf(node.obj)),
     );
 
-  emitter.emitSynthetic('{');
+  if (wrapInJsxBraces) emitter.emitSynthetic('{');
   emitter.emitMapped(node.obj, objOffset, FULL_FEATURES);
   emitter.emitSynthetic('.map((');
   emitter.emitMapped(node.val, valOffset, FULL_FEATURES);
@@ -670,13 +741,10 @@ function emitEach(
   emitter.emitSynthetic(') => (');
 
   const bodyNodes = node.block?.nodes ?? [];
-  if (bodyNodes.length === 0) {
-    emitter.emitSynthetic('null');
-  } else {
-    emitBlockWithCodeSupport(bodyNodes, emitter, pugText);
-  }
+  emitBlockAsExpression(bodyNodes, emitter, pugText);
 
-  emitter.emitSynthetic('))}');
+  emitter.emitSynthetic('))');
+  if (wrapInJsxBraces) emitter.emitSynthetic('}');
 }
 
 /** while test -> {(() => { const __r: JSX.Element[] = []; while (test) { __r.push(<body/>); } return __r; })()} */
@@ -684,6 +752,7 @@ function emitWhile(
   node: PugWhile,
   emitter: TsxEmitter,
   pugText: string,
+  wrapInJsxBraces: boolean = true,
 ): void {
   const testOffset = lineColToOffset(pugText, node.line, node.column);
   const exprOffset = findValueOffsetOnLine(
@@ -694,18 +763,16 @@ function emitWhile(
     testOffset + 6,
   );
 
-  emitter.emitSynthetic('{(() => {const __r: JSX.Element[] = [];while (');
+  if (wrapInJsxBraces) emitter.emitSynthetic('{');
+  emitter.emitSynthetic('(() => {const __r: JSX.Element[] = [];while (');
   emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
   emitter.emitSynthetic(') {__r.push(');
 
   const bodyNodes = node.block?.nodes ?? [];
-  if (bodyNodes.length === 0) {
-    emitter.emitSynthetic('null');
-  } else {
-    emitBlockWithCodeSupport(bodyNodes, emitter, pugText);
-  }
+  emitBlockAsExpression(bodyNodes, emitter, pugText);
 
-  emitter.emitSynthetic(');}return __r;})()}');
+  emitter.emitSynthetic(');}return __r;})()');
+  if (wrapInJsxBraces) emitter.emitSynthetic('}');
 }
 
 /** case expr / when val1 / default -> {expr === val1 ? <c1> : <default>} */
@@ -713,6 +780,7 @@ function emitCase(
   node: PugCase,
   emitter: TsxEmitter,
   pugText: string,
+  wrapInJsxBraces: boolean = true,
 ): void {
   const caseOffset = lineColToOffset(pugText, node.line, node.column);
   const exprOffset = findValueOffsetOnLine(
@@ -728,13 +796,15 @@ function emitCase(
   );
 
   if (whenNodes.length === 0) {
-    emitter.emitSynthetic('{null}');
+    if (wrapInJsxBraces) emitter.emitSynthetic('{');
+    emitter.emitSynthetic('null');
+    if (wrapInJsxBraces) emitter.emitSynthetic('}');
     return;
   }
 
-  emitter.emitSynthetic('{');
+  if (wrapInJsxBraces) emitter.emitSynthetic('{');
   emitWhenChain(whenNodes, 0, node.expr, exprOffset, emitter, pugText);
-  emitter.emitSynthetic('}');
+  if (wrapInJsxBraces) emitter.emitSynthetic('}');
 }
 
 /** Recursively emit chained ternaries for when nodes */
@@ -757,11 +827,7 @@ function emitWhenChain(
   if (when.expr === 'default') {
     // Default case: just emit the body
     const bodyNodes = when.block?.nodes ?? [];
-    if (bodyNodes.length === 0) {
-      emitter.emitSynthetic('null');
-    } else {
-      emitBlockWithCodeSupport(bodyNodes, emitter, pugText);
-    }
+    emitBlockAsExpression(bodyNodes, emitter, pugText);
     return;
   }
 
@@ -780,11 +846,7 @@ function emitWhenChain(
   emitter.emitSynthetic(' ? ');
 
   const bodyNodes = when.block?.nodes ?? [];
-  if (bodyNodes.length === 0) {
-    emitter.emitSynthetic('null');
-  } else {
-    emitBlockWithCodeSupport(bodyNodes, emitter, pugText);
-  }
+  emitBlockAsExpression(bodyNodes, emitter, pugText);
 
   emitter.emitSynthetic(' : ');
   emitWhenChain(whens, index + 1, caseExpr, caseExprOffset, emitter, pugText);
@@ -860,7 +922,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
     emitter.emitSynthetic('(null as any as JSX.Element)');
   } else {
     emitter.emitSynthetic('(');
-    emitNodes(ast.nodes, emitter, pugText);
+    emitBlockAsExpression(ast.nodes, emitter, pugText);
     emitter.emitSynthetic(')');
   }
 

@@ -619,4 +619,73 @@ suite('Extension Host Features (demo workspace)', () => {
       problematicSyntacticCount: problematicSyntactic.length,
     });
   });
+
+  test('else+each and piped text nodes show no false diagnostics', async function () {
+    this.timeout(60000);
+    const content = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'type Todo = { id: number; text: string; done: boolean };',
+      'const activeTodos: Todo[] = [{ id: 1, text: "A", done: false }];',
+      'const view = pug`',
+      '  if activeTodos.length === 0',
+      '    span',
+      '      | Hello',
+      '      | World',
+      '  else',
+      '    each todo in activeTodos',
+      '      span= todo.text',
+      '`;',
+      'export { view };',
+    ].join('\n');
+    const doc = await createTempDoc('__vscode_test_else_each_pipe.tsx', content);
+    const editor = await vscode.window.showTextDocument(doc);
+
+    const eachIdx = content.indexOf('each todo in activeTodos');
+    assert.ok(eachIdx > 0, 'Could not find each todo in activeTodos in test document');
+    const eachPos = doc.positionAt(eachIdx + 'each todo in '.length);
+    editor.selection = new vscode.Selection(eachPos, eachPos);
+    editor.revealRange(new vscode.Range(eachPos, eachPos));
+
+    await captureTestStep('features-before-else-each-pipe-diagnostics', {
+      file: doc.uri.fsPath,
+      position: { line: eachPos.line + 1, character: eachPos.character + 1 },
+    });
+
+    const diagnostics = await retry(async () => {
+      const result = vscode.languages.getDiagnostics(doc.uri);
+      const parserLike = result.filter((d) => d.code === 1136 || d.code === 1109 || d.code === 1005);
+      const falseType = result.filter((d) => d.code === 2322);
+      const pugParse = result.filter((d) => d.code === 99001);
+      const errors = result.filter((d) => d.severity === vscode.DiagnosticSeverity.Error);
+
+      return parserLike.length === 0 && falseType.length === 0 && pugParse.length === 0
+        ? { all: result, errors, parserLike, falseType, pugParse }
+        : null;
+    }, 45000, 500);
+
+    assert.strictEqual(
+      diagnostics.parserLike.length,
+      0,
+      `Unexpected parser-like diagnostics: ${JSON.stringify(diagnostics.parserLike.map((d) => d.code))}`,
+    );
+    assert.strictEqual(
+      diagnostics.falseType.length,
+      0,
+      `Unexpected TS2322 diagnostics: ${JSON.stringify(diagnostics.falseType.map((d) => d.message))}`,
+    );
+    assert.strictEqual(
+      diagnostics.pugParse.length,
+      0,
+      'Unexpected pug parse diagnostics for piped text nodes',
+    );
+
+    await captureTestStep('features-after-else-each-pipe-diagnostics', {
+      diagnosticsCount: diagnostics.all.length,
+      errorCount: diagnostics.errors.length,
+      parserLikeCount: diagnostics.parserLike.length,
+      falseTypeCount: diagnostics.falseType.length,
+      pugParseCount: diagnostics.pugParse.length,
+      codes: diagnostics.all.map((d) => d.code ?? null),
+    });
+  });
 });

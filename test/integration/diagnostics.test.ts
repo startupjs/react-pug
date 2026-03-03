@@ -612,3 +612,57 @@ describe('complex pug expression diagnostics map to exact symbol ranges', () => 
     expect(problematic).toHaveLength(0);
   });
 });
+
+// ── else + each and pipe text regressions ──────────────────────
+
+describe('else branch each and piped text are compiled without false diagnostics', () => {
+  let ls: ts.LanguageService;
+  let file: string;
+  let text: string;
+
+  beforeAll(async () => {
+    const init = await loadPlugin();
+
+    file = path.join(FIXTURES_DIR, 'diag-else-each-pipe.tsx');
+    text = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'type Todo = { id: number; text: string; done: boolean };',
+      'const activeTodos: Todo[] = [{ id: 1, text: "A", done: false }];',
+      'const view = pug`',
+      '  if activeTodos.length === 0',
+      '    span',
+      '      | Hello',
+      '      | World',
+      '  else',
+      '    each todo in activeTodos',
+      '      span= todo.text',
+      '`;',
+    ].join('\n');
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(file, text);
+
+    const rootFiles = [file, BUTTON_FILE];
+    const result = createLanguageServiceWithPlugin(
+      init, rootFiles, FIXTURES_DIR, {}, virtualFiles,
+    );
+    ls = result.ls;
+  });
+
+  it('does not report parser-like syntax diagnostics for else+each', () => {
+    const syntactic = ls.getSyntacticDiagnostics(file);
+    const problematic = syntactic.filter((d) => d.code === 1136 || d.code === 1109 || d.code === 1005);
+    expect(problematic).toHaveLength(0);
+  });
+
+  it('does not report false ReactNode assignment errors for else+each branch', () => {
+    const semantic = ls.getSemanticDiagnostics(file);
+    const falsePositive = semantic.filter((d) => d.code === 2322);
+    expect(falsePositive).toHaveLength(0);
+  });
+
+  it('does not report pug parse errors for piped text nodes', () => {
+    const semantic = ls.getSemanticDiagnostics(file);
+    const pugParseErrors = semantic.filter((d) => d.code === 99001);
+    expect(pugParseErrors).toHaveLength(0);
+  });
+});

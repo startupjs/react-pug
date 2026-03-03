@@ -313,7 +313,7 @@ describe('compilePugToTsx - code blocks', () => {
     const result = compilePugToTsx('- const x = 10\ndiv= x');
     expect(result.tsx).toContain('(() => {');
     expect(result.tsx).toContain('const x = 10;');
-    expect(result.tsx).toContain('return (');
+    expect(result.tsx).toContain('return ');
     expect(result.tsx).toContain('{x}');
   });
 

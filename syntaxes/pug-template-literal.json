@@ -36,6 +36,9 @@
           "include": "#pug-interpolation"
         },
         {
+          "include": "#pug-pipe-text"
+        },
+        {
           "include": "#pug-class-id-shorthand"
         },
         {
@@ -152,6 +155,25 @@
         },
         {
           "include": "source.tsx"
+        }
+      ]
+    },
+    "pug-pipe-text": {
+      "begin": "(^\\s*)(\\|)(\\s*)",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.definition.text.begin.pug"
+        }
+      },
+      "end": "$",
+      "name": "meta.text.pipe.pug",
+      "patterns": [
+        {
+          "include": "#pug-interpolation"
+        },
+        {
+          "match": "[^#\\n]+",
+          "name": "string.unquoted.pug"
         }
       ]
     },

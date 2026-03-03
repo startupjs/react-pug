@@ -188,6 +188,31 @@ describe('text content', () => {
     expect(result.tsx).toContain('{');
     expect(result.tsx).toContain('myVar');
   });
+
+  it('supports piped text nodes across multiple lines', () => {
+    const pug = [
+      'span',
+      '  | Hello',
+      '  | World',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toContain('<span>');
+    expect(result.tsx).toContain('Hello');
+    expect(result.tsx).toContain('World');
+    expect(result.tsx).toContain('</span>');
+  });
+
+  it('supports piped text nodes with interpolation', () => {
+    const pug = [
+      'span',
+      '  | Hello #{user.name}',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toContain('Hello');
+    expect(result.tsx).toContain('{user.name}');
+  });
 });
 
 // ── Nesting and children tests ───────────────────────────────────
@@ -537,6 +562,7 @@ describe('conditionals', () => {
     expect(result.tsx).toContain('?');
     expect(result.tsx).toContain('<div');
     expect(result.tsx).toContain('Hello');
+    expect(result.tsx).not.toContain('{active ?');
     expect(result.parseError).toBeNull();
   });
 
@@ -640,6 +666,7 @@ describe('each loops', () => {
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('list');
     expect(result.tsx).toContain('.map(');
+    expect(result.tsx).not.toContain('{list.map(');
     expect(result.tsx).toContain('<div');
     expect(result.parseError).toBeNull();
   });
@@ -818,7 +845,7 @@ describe('code blocks', () => {
     expect(result.tsx).toContain('(() => {');
     expect(result.tsx).toContain('const name = "World"');
     expect(result.tsx).toContain(';');
-    expect(result.tsx).toContain('return (');
+    expect(result.tsx).toContain('return ');
     expect(result.tsx).toContain('<h1');
     expect(result.tsx).toContain('})()');
   });
@@ -840,7 +867,7 @@ describe('code blocks', () => {
     expect(result.tsx).toContain('<span');
     // IIFE wrapping
     expect(result.tsx).toContain('(() => {');
-    expect(result.tsx).toContain('return (');
+    expect(result.tsx).toContain('return ');
   });
 
   it('code-only block (no JSX) wraps in IIFE returning null', () => {
@@ -903,6 +930,20 @@ describe('control flow edge cases', () => {
     expect(result.tsx).toContain('items');
     expect(result.tsx).toContain('.map(');
     expect(result.tsx).toContain('<li');
+  });
+
+  it('else branch with each emits map expression (not object literal)', () => {
+    const pug = [
+      'if activeTodos.length === 0',
+      '  p.empty All done!',
+      'else',
+      '  each todo in activeTodos',
+      '    span= todo.text',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toContain('activeTodos.map((');
+    expect(result.tsx).not.toMatch(/:\s*\{\s*activeTodos\.map\(/);
   });
 
   it('control flow with sibling tags uses fragment', () => {
