@@ -549,3 +549,66 @@ describe('non-pug file diagnostics are unaffected', () => {
     }
   });
 });
+
+// ── Complex pug expression range mapping precision ──────────────
+
+describe('complex pug expression diagnostics map to exact symbol ranges', () => {
+  let ls: ts.LanguageService;
+  let file: string;
+  let text: string;
+
+  beforeAll(async () => {
+    const init = await loadPlugin();
+
+    file = path.join(FIXTURES_DIR, 'diag-complex-ranges.tsx');
+    text = [
+      'type Row = { id: number };',
+      'const rowsA: Row[] = [];',
+      'const rowsB: Row[] = [];',
+      'const view = pug`',
+      '  h3 Value #{missingInterp + 1}',
+      '  - const localValue = missingCode + 1',
+      '  each row in (missingEach ? rowsA : rowsB)',
+      '    span= row.id',
+      '`;',
+    ].join('\n');
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(file, text);
+
+    const rootFiles = [file, BUTTON_FILE];
+    const result = createLanguageServiceWithPlugin(
+      init, rootFiles, FIXTURES_DIR, {}, virtualFiles,
+    );
+    ls = result.ls;
+  });
+
+  it('maps missing names in interpolation, "-" code line, and each object expression exactly', () => {
+    const diags = ls.getSemanticDiagnostics(file);
+
+    const expected = [
+      'missingInterp',
+      'missingCode',
+      'missingEach',
+    ];
+
+    for (const name of expected) {
+      const expectedStart = text.indexOf(name);
+      expect(expectedStart).toBeGreaterThanOrEqual(0);
+
+      const diag = diags.find((d) => {
+        const msg = typeof d.messageText === 'string' ? d.messageText : '';
+        return d.code === 2304 && msg.includes(name);
+      });
+
+      expect(diag, `Expected TS2304 diagnostic for ${name}`).toBeDefined();
+      expect(diag!.start, `Unexpected mapped start for ${name}`).toBe(expectedStart);
+      expect(diag!.length, `Unexpected mapped length for ${name}`).toBe(name.length);
+    }
+  });
+
+  it('does not report parser-like syntax errors for valid each/object and code block expressions', () => {
+    const syntactic = ls.getSyntacticDiagnostics(file);
+    const problematic = syntactic.filter((d) => d.code === 1136 || d.code === 1109);
+    expect(problematic).toHaveLength(0);
+  });
+});

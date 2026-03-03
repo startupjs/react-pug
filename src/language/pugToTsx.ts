@@ -167,6 +167,39 @@ function lineColToOffset(text: string, line: number, column: number): number {
   return offset + (column - 1);
 }
 
+/** Find a whole-word occurrence in `lineText` starting at `fromIndex` (0-based). */
+function findWordIndex(lineText: string, word: string, fromIndex: number): number {
+  if (!word) return -1;
+  let searchFrom = Math.max(0, fromIndex);
+  while (searchFrom < lineText.length) {
+    const idx = lineText.indexOf(word, searchFrom);
+    if (idx < 0) return -1;
+    const before = idx > 0 ? lineText[idx - 1] : '';
+    const after = idx + word.length < lineText.length ? lineText[idx + word.length] : '';
+    const isWordChar = (ch: string) => /[A-Za-z0-9_$]/.test(ch);
+    if (!isWordChar(before) && !isWordChar(after)) return idx;
+    searchFrom = idx + 1;
+  }
+  return -1;
+}
+
+/** Resolve an expression offset by searching for the expression value on its source line. */
+function findValueOffsetOnLine(
+  pugText: string,
+  line: number,
+  column: number,
+  value: string,
+  fallbackOffset: number,
+): number {
+  if (!value) return fallbackOffset;
+  const lineText = pugText.split('\n')[line - 1] ?? '';
+  const lineStart = lineColToOffset(pugText, line, 1);
+  const fromIndex = Math.max(0, column - 1);
+  const idx = lineText.indexOf(value, fromIndex);
+  if (idx >= 0) return lineStart + idx;
+  return fallbackOffset;
+}
+
 /** HTML void elements that should self-close */
 const VOID_ELEMENTS = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
@@ -393,22 +426,29 @@ function emitCode(
   emitter: TsxEmitter,
   pugText: string,
 ): void {
-  const offset = lineColToOffset(pugText, node.line, node.column);
+  const markerOffset = lineColToOffset(pugText, node.line, node.column);
+  const lineText = pugText.split('\n')[node.line - 1] ?? '';
+  const markerIndex = Math.max(0, node.column - 1);
+  const valueIndex = lineText.indexOf(node.val, markerIndex);
+  const fallbackShift = node.buffer ? 2 : 1;
+  const valueOffset = valueIndex >= 0
+    ? lineColToOffset(pugText, node.line, 1) + valueIndex
+    : markerOffset + fallbackShift;
 
   if (node.buffer && node.isInline) {
     // Inline interpolation: #{expr} -> {expr}
     emitter.emitSynthetic('{');
-    emitter.emitMapped(node.val, offset, FULL_FEATURES);
+    emitter.emitMapped(node.val, valueOffset, FULL_FEATURES);
     emitter.emitSynthetic('}');
   } else if (node.buffer) {
     // Buffered code: = expr -> {expr}
     emitter.emitSynthetic('{');
-    emitter.emitMapped(node.val, offset, FULL_FEATURES);
+    emitter.emitMapped(node.val, valueOffset, FULL_FEATURES);
     emitter.emitSynthetic('}');
   } else {
     // Unbuffered code block: - const x = 10
     // Emitted as a statement; IIFE wrapping is handled by emitNodesWithCodeBlocks
-    emitter.emitMapped(node.val, offset, FULL_FEATURES);
+    emitter.emitMapped(node.val, valueOffset, FULL_FEATURES);
     emitter.emitSynthetic(';');
   }
 }
@@ -501,8 +541,13 @@ function emitConditional(
   pugText: string,
 ): void {
   const testOffset = lineColToOffset(pugText, node.line, node.column);
-  // 'if ' is 3 chars from the start of the line
-  const exprOffset = testOffset + 3;
+  const exprOffset = findValueOffsetOnLine(
+    pugText,
+    node.line,
+    node.column,
+    node.test,
+    testOffset + 3,
+  );
 
   emitter.emitSynthetic('{');
   emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
@@ -544,8 +589,13 @@ function emitConditionalInner(
   pugText: string,
 ): void {
   const testOffset = lineColToOffset(pugText, node.line, node.column);
-  // 'else if ' is 8 chars from start of line
-  const exprOffset = testOffset + 8;
+  const exprOffset = findValueOffsetOnLine(
+    pugText,
+    node.line,
+    node.column,
+    node.test,
+    testOffset + 8,
+  );
 
   emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
   emitter.emitSynthetic(' ? ');
@@ -579,20 +629,35 @@ function emitEach(
   emitter: TsxEmitter,
   pugText: string,
 ): void {
-  const lineOffset = lineColToOffset(pugText, node.line, node.column);
-  // Parse: 'each val[, key] in obj'
-  // 'each ' = 5 chars
   const pugLine = pugText.split('\n')[node.line - 1] ?? '';
-  const inIndex = pugLine.indexOf(' in ');
+  const lineStart = lineColToOffset(pugText, node.line, 1);
+  const nodeStart = Math.max(0, node.column - 1);
+  const valIndex = pugLine.indexOf(node.val, nodeStart);
+  const valOffset = valIndex >= 0
+    ? lineStart + valIndex
+    : lineColToOffset(pugText, node.line, node.column) + 5;
 
-  // Object expression offset: after ' in '
-  const objOffset = lineOffset + inIndex + 4;
-  // Value name offset: after 'each '
-  const valOffset = lineOffset + 5;
-  // Key offset: after 'each val, '
-  const keyOffset = node.key != null
-    ? lineOffset + 5 + node.val.length + 2  // +2 for ', '
+  const keyIndex = node.key != null && valIndex >= 0
+    ? pugLine.indexOf(node.key, valIndex + node.val.length)
     : -1;
+  const keyOffset = keyIndex >= 0 ? lineStart + keyIndex : -1;
+
+  const inSearchStart = keyIndex >= 0
+    ? keyIndex + (node.key?.length ?? 0)
+    : (valIndex >= 0 ? valIndex + node.val.length : nodeStart);
+  const inIndex = findWordIndex(pugLine, 'in', inSearchStart);
+  const objIndex = inIndex >= 0
+    ? pugLine.indexOf(node.obj, inIndex + 2)
+    : -1;
+  const objOffset = objIndex >= 0
+    ? lineStart + objIndex
+    : findValueOffsetOnLine(
+      pugText,
+      node.line,
+      node.column,
+      node.obj,
+      lineStart + Math.max(0, pugLine.indexOf(node.obj)),
+    );
 
   emitter.emitSynthetic('{');
   emitter.emitMapped(node.obj, objOffset, FULL_FEATURES);
@@ -621,8 +686,13 @@ function emitWhile(
   pugText: string,
 ): void {
   const testOffset = lineColToOffset(pugText, node.line, node.column);
-  // 'while ' = 6 chars
-  const exprOffset = testOffset + 6;
+  const exprOffset = findValueOffsetOnLine(
+    pugText,
+    node.line,
+    node.column,
+    node.test,
+    testOffset + 6,
+  );
 
   emitter.emitSynthetic('{(() => {const __r: JSX.Element[] = [];while (');
   emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
@@ -645,8 +715,13 @@ function emitCase(
   pugText: string,
 ): void {
   const caseOffset = lineColToOffset(pugText, node.line, node.column);
-  // 'case ' = 5 chars
-  const exprOffset = caseOffset + 5;
+  const exprOffset = findValueOffsetOnLine(
+    pugText,
+    node.line,
+    node.column,
+    node.expr,
+    caseOffset + 5,
+  );
 
   const whenNodes = (node.block?.nodes ?? []).filter(
     (n): n is PugWhen => n.type === 'When',
@@ -690,8 +765,13 @@ function emitWhenChain(
     return;
   }
 
-  // 'when ' = 5 chars
-  const whenExprOffset = whenOffset + 5;
+  const whenExprOffset = findValueOffsetOnLine(
+    pugText,
+    when.line,
+    when.column,
+    when.expr,
+    whenOffset + 5,
+  );
 
   // Emit: caseExpr === whenExpr ? <body> : <next>
   emitter.emitMapped(caseExpr, caseExprOffset, VERIFY_ONLY);

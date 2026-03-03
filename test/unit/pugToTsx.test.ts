@@ -370,6 +370,84 @@ describe('source mappings', () => {
     const cssMapping = result.mappings.find(m => m.data === CSS_CLASS);
     expect(cssMapping).toBeDefined();
   });
+
+  it('maps interpolation expression start exactly after "#{...}" prefix', () => {
+    const pug = 'h3 Value #{interpVar.deep}';
+    const result = compilePugToTsx(pug);
+    const expr = 'interpVar.deep';
+    const exprOffset = pug.indexOf(expr);
+    expect(exprOffset).toBeGreaterThanOrEqual(0);
+
+    const exactMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === exprOffset
+        && m.lengths[0] === expr.length,
+    );
+    expect(exactMapping).toBeDefined();
+  });
+
+  it('maps interpolation to the expression occurrence after "#{" when identifier appears earlier on line', () => {
+    const pug = 'p interpVar #{interpVar + 1}';
+    const result = compilePugToTsx(pug);
+    const expr = 'interpVar + 1';
+    const exprOffset = pug.indexOf(expr);
+    expect(exprOffset).toBeGreaterThanOrEqual(0);
+
+    const exactMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === exprOffset
+        && m.lengths[0] === expr.length,
+    );
+    expect(exactMapping).toBeDefined();
+  });
+
+  it('maps unbuffered "-" code expression start exactly after marker prefix', () => {
+    const pug = '- const localTotal = missingCode + 1\nspan= localTotal';
+    const result = compilePugToTsx(pug);
+    const codeExpr = 'const localTotal = missingCode + 1';
+    const exprOffset = pug.indexOf(codeExpr);
+    expect(exprOffset).toBeGreaterThanOrEqual(0);
+
+    const exactMapping = result.mappings.find(
+      m => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === exprOffset
+        && m.lengths[0] === codeExpr.length,
+    );
+    expect(exactMapping).toBeDefined();
+  });
+
+  it('maps each value/key/object spans to exact source offsets for complex object expression', () => {
+    const pug = [
+      'each todo, idx in (itemsA.length > 0 ? itemsA : itemsB)',
+      '  span= todo.id',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    const val = 'todo';
+    const key = 'idx';
+    const obj = '(itemsA.length > 0 ? itemsA : itemsB)';
+
+    const valOffset = pug.indexOf('each ') + 'each '.length;
+    const keyOffset = pug.indexOf(', ') + 2;
+    const objOffset = pug.indexOf(obj);
+
+    expect(result.mappings.some(
+      m => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === valOffset
+        && m.lengths[0] === val.length,
+    )).toBe(true);
+
+    expect(result.mappings.some(
+      m => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === keyOffset
+        && m.lengths[0] === key.length,
+    )).toBe(true);
+
+    expect(result.mappings.some(
+      m => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === objOffset
+        && m.lengths[0] === obj.length,
+    )).toBe(true);
+  });
 });
 
 // ── Comments ─────────────────────────────────────────────────────

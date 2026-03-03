@@ -537,4 +537,86 @@ suite('Extension Host Features (demo workspace)', () => {
       hasTypeError,
     });
   });
+
+  test('complex pug expression diagnostics map to exact symbol ranges', async function () {
+    this.timeout(60000);
+    const content = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'type Row = { id: number };',
+      'const rowsA: Row[] = [];',
+      'const rowsB: Row[] = [];',
+      'const view = pug`',
+      '  h3 Value #{missingInterp + 1}',
+      '  - const localValue = missingCode + 1',
+      '  each row in (missingEach ? rowsA : rowsB)',
+      '    span= row.id',
+      '`;',
+      'export { view };',
+    ].join('\n');
+    const doc = await createTempDoc('__vscode_test_complex_ranges.tsx', content);
+    await vscode.window.showTextDocument(doc);
+    await captureTestStep('features-before-complex-range-diagnostics', {
+      file: doc.uri.fsPath,
+    });
+
+    const diagnostics = await retry(async () => {
+      const result = vscode.languages.getDiagnostics(doc.uri);
+      const missing = result.filter((d) => {
+        const msg = typeof d.message === 'string' ? d.message : '';
+        return d.code === 2304
+          && (/missingInterp|missingCode|missingEach/.test(msg));
+      });
+      return missing.length >= 3 ? missing : null;
+    }, 45000, 500);
+    const allDiagnostics = vscode.languages.getDiagnostics(doc.uri);
+    const problematicSyntactic = allDiagnostics.filter((d) => d.code === 1136 || d.code === 1109);
+    assert.strictEqual(
+      problematicSyntactic.length,
+      0,
+      `Unexpected parser-like diagnostic codes: ${JSON.stringify(problematicSyntactic.map((d) => d.code))}`,
+    );
+
+    const text = doc.getText();
+    const expected = ['missingInterp', 'missingCode', 'missingEach'].map((name) => ({
+      name,
+      start: text.indexOf(name),
+      length: name.length,
+    }));
+
+    const mapped = expected.map((e) => {
+      const diag = diagnostics.find((d) => {
+        const msg = typeof d.message === 'string' ? d.message : '';
+        return d.code === 2304 && msg.includes(e.name);
+      });
+      return {
+        name: e.name,
+        expectedStart: e.start,
+        expectedLength: e.length,
+        actualStart: diag ? doc.offsetAt(diag.range.start) : -1,
+        actualLength: diag ? doc.offsetAt(diag.range.end) - doc.offsetAt(diag.range.start) : -1,
+        message: diag?.message ?? null,
+      };
+    });
+
+    for (const item of mapped) {
+      assert.ok(item.expectedStart >= 0, `Expected token not found in source: ${item.name}`);
+      assert.ok(item.actualStart >= 0, `Missing diagnostic for ${item.name}`);
+      assert.strictEqual(
+        item.actualStart,
+        item.expectedStart,
+        `Mapped start offset mismatch for ${item.name}`,
+      );
+      assert.strictEqual(
+        item.actualLength,
+        item.expectedLength,
+        `Mapped length mismatch for ${item.name}`,
+      );
+    }
+
+    await captureTestStep('features-after-complex-range-diagnostics', {
+      mapped,
+      diagnosticsCount: diagnostics.length,
+      problematicSyntacticCount: problematicSyntactic.length,
+    });
+  });
 });
