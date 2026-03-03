@@ -14,6 +14,63 @@ function getSourceMap(region: PugRegion): SourceMap<CodeInformation> {
   return sm;
 }
 
+// ── Raw <-> Stripped offset conversion ─────────────────────────
+
+/**
+ * Convert an offset in the raw backtick content to an offset in the
+ * stripped (common-indent-removed) text.
+ *
+ * Each non-empty line has `commonIndent` characters removed from its start.
+ * Empty lines are unchanged (they become '' in both spaces).
+ */
+function rawToStrippedOffset(rawText: string, rawOffset: number, commonIndent: number): number {
+  if (commonIndent === 0) return rawOffset;
+  let stripped = 0;
+  let raw = 0;
+  const lines = rawText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineEnd = raw + line.length;
+    if (rawOffset <= lineEnd) {
+      // Offset is on this line
+      const colInRaw = rawOffset - raw;
+      const indentToRemove = line.trim().length === 0 ? 0 : commonIndent;
+      const colInStripped = Math.max(0, colInRaw - indentToRemove);
+      return stripped + colInStripped;
+    }
+    // Account for the stripped content of this line
+    const indentToRemove = line.trim().length === 0 ? 0 : commonIndent;
+    stripped += Math.max(0, line.length - indentToRemove);
+    raw = lineEnd + 1; // +1 for \n
+    stripped += 1; // \n
+  }
+  return stripped;
+}
+
+/**
+ * Convert an offset in the stripped text back to an offset in the raw
+ * backtick content.
+ */
+function strippedToRawOffset(rawText: string, strippedOffset: number, commonIndent: number): number {
+  if (commonIndent === 0) return strippedOffset;
+  let stripped = 0;
+  let raw = 0;
+  const lines = rawText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const indentToRemove = line.trim().length === 0 ? 0 : commonIndent;
+    const strippedLineLen = Math.max(0, line.length - indentToRemove);
+    if (strippedOffset <= stripped + strippedLineLen) {
+      // Offset is on this line in stripped space
+      const colInStripped = strippedOffset - stripped;
+      return raw + indentToRemove + colInStripped;
+    }
+    stripped += strippedLineLen + 1; // +1 for \n
+    raw += line.length + 1; // +1 for \n
+  }
+  return raw;
+}
+
 // ── Binary search helpers ──────────────────────────────────────
 
 /** Find the region containing the given original file offset, or null. */
@@ -104,12 +161,16 @@ export function originalToShadow(
 
   if (region != null) {
     // Inside a pug region -- map through SourceMap
-    // Convert original file offset to pug text offset
-    const pugOffset = originalOffset - region.pugTextStart;
-    if (pugOffset < 0) {
+    // Convert original file offset to raw offset within backtick content
+    const rawOffset = originalOffset - region.pugTextStart;
+    if (rawOffset < 0) {
       // Offset is in the pug`...` tag/backtick, not in the pug content
       return null;
     }
+
+    // Convert raw offset to stripped offset (source map uses stripped coordinates)
+    const rawText = doc.originalText.slice(region.pugTextStart, region.pugTextEnd);
+    const pugOffset = rawToStrippedOffset(rawText, rawOffset, region.commonIndent);
 
     const sm = getSourceMap(region);
     // toGeneratedLocation maps source (pug) offset -> generated (TSX) offset
@@ -162,9 +223,12 @@ export function shadowToOriginal(
     const tsxOffset = shadowOffset - region.shadowStart;
 
     const sm = getSourceMap(region);
-    // toSourceLocation maps generated (TSX) offset -> source (pug) offset
-    for (const [pugOffset] of sm.toSourceLocation(tsxOffset)) {
-      return region.pugTextStart + pugOffset;
+    // toSourceLocation maps generated (TSX) offset -> source (pug) offset (in stripped space)
+    for (const [strippedPugOffset] of sm.toSourceLocation(tsxOffset)) {
+      // Convert stripped offset back to raw offset within backtick content
+      const rawText = doc.originalText.slice(region.pugTextStart, region.pugTextEnd);
+      const rawOffset = strippedToRawOffset(rawText, strippedPugOffset, region.commonIndent);
+      return region.pugTextStart + rawOffset;
     }
     // No mapping found -- unmapped/synthetic position
     return null;

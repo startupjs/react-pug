@@ -8,7 +8,7 @@
   ],
   "repository": {
     "pug-tagged-template": {
-      "begin": "(?<=pug)\\s*(`)",
+      "begin": "(?<=(?<![\\w$])pug)\\s*(`)",
       "beginCaptures": {
         "1": {
           "name": "punctuation.definition.string.template.begin.ts"

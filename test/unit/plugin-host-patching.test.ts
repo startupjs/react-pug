@@ -186,8 +186,8 @@ describe('getScriptVersion patching', () => {
     // Must access snapshot first to populate cache
     host.getScriptSnapshot('version-test.tsx');
     const version = host.getScriptVersion('version-test.tsx');
-    // docCache is module-level, so version starts at 1 for a fresh filename
-    expect(version).toBe('1');
+    // Version format is "hostVersion:cachedVersion"
+    expect(version).toBe('1:1');
   });
 
   it('delegates to original for non-pug files', async () => {
@@ -215,7 +215,8 @@ describe('getScriptVersion patching', () => {
     host.getScriptSnapshot('app.tsx');
     const v2 = host.getScriptVersion('app.tsx');
 
-    expect(Number(v2)).toBeGreaterThan(Number(v1));
+    // Version format is "hostVersion:cachedVersion", so v2 string should differ from v1
+    expect(v2).not.toBe(v1);
   });
 });
 
@@ -249,7 +250,8 @@ describe('document cache', () => {
     host.getScriptSnapshot('app.tsx');
     const v2 = host.getScriptVersion('app.tsx');
 
-    expect(Number(v2)).toBe(Number(v1) + 1);
+    // Version format is "hostVersion:cachedVersion"; both parts change
+    expect(v2).not.toBe(v1);
   });
 
   it('removing pug from file cleans cache, restores original passthrough', async () => {
@@ -260,7 +262,8 @@ describe('document cache', () => {
     // First: file has pug, should be cached
     host.getScriptSnapshot('remove-pug-test.tsx');
     const versionWithPug = host.getScriptVersion('remove-pug-test.tsx');
-    expect(Number(versionWithPug)).toBeGreaterThan(0);
+    // Version format is "hostVersion:cachedVersion"
+    expect(versionWithPug).toContain(':');
 
     // Edit to remove pug
     const plainContent = 'const v = <div />;';
@@ -466,18 +469,22 @@ describe('edge cases', () => {
   });
 
   it('handles string containing pug` that is not a tagged template', async () => {
-    // The regex approach will match pug` even in strings -- this is a known
-    // limitation of the spike's regex-based detection. The real implementation
-    // will use @babel/parser. For now, document the behavior.
+    // @babel/parser correctly distinguishes tagged templates from strings.
+    // pug` inside a string literal is not a tagged template expression.
+    const original = "const s = 'this mentions pug`div` in a string';";
     const { host } = await setupPlugin({
-      'false-positive.ts': "const s = 'this mentions pug`div` in a string';",
+      'false-positive.ts': original,
     });
     const snapshot = host.getScriptSnapshot('false-positive.ts');
     const text = snapshotText(snapshot);
-    // Regex-based detection will match this -- it's a known spike limitation
-    // The key thing is it doesn't crash
+    // @babel/parser should not find a tagged template inside a string literal,
+    // so the file passes through unchanged -- OR if it did match via regex fallback
+    // (which is a known limitation), it should still produce valid output
     expect(snapshot).toBeDefined();
+    expect(typeof text).toBe('string');
     expect(text.length).toBeGreaterThan(0);
+    // Either unchanged or transformed, but not empty
+    expect(text).toContain('const s');
   });
 
   it('handles pug template with only a comment-like line', async () => {
@@ -485,9 +492,10 @@ describe('edge cases', () => {
       'comment-pug.tsx': 'const v = pug`\n  //- this is a comment\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('comment-pug.tsx'));
-    // Comment line doesn't match any pug pattern, falls through to fallback
+    // pug` should be replaced with the compiled output
     expect(text).not.toContain('pug`');
-    expect(text).toBeDefined();
+    // The output should still contain 'const v = '
+    expect(text).toContain('const v = ');
   });
 });
 

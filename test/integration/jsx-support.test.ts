@@ -135,7 +135,12 @@ describe('JS/JSX file support', () => {
 
     const refs = ls.getReferencesAtPosition(JSX_FILE, handlerIdx);
     expect(refs).toBeDefined();
-    expect(refs!.length).toBeGreaterThan(0);
+    // Should find at least 2 references: declaration + pug usage
+    expect(refs!.length).toBeGreaterThanOrEqual(2);
+    for (const ref of refs!) {
+      expect(ref.textSpan.start).toBeGreaterThanOrEqual(0);
+      expect(ref.textSpan.length).toBe('jsxHandler'.length);
+    }
   });
 
   it('rename works in .jsx file', () => {
@@ -143,10 +148,16 @@ describe('JS/JSX file support', () => {
 
     const renameInfo = ls.getRenameInfo(JSX_FILE, handlerIdx, { allowRenameOfImportPath: false });
     expect(renameInfo.canRename).toBe(true);
+    if (renameInfo.canRename) {
+      expect(renameInfo.triggerSpan.length).toBe('jsxHandler'.length);
+    }
 
     const renameLocations = ls.findRenameLocations(JSX_FILE, handlerIdx, false, false);
     expect(renameLocations).toBeDefined();
-    expect(renameLocations!.length).toBeGreaterThan(0);
+    expect(renameLocations!.length).toBeGreaterThanOrEqual(2);
+    for (const loc of renameLocations!) {
+      expect(loc.textSpan.length).toBe('jsxHandler'.length);
+    }
   });
 
   it('getDefinitionAndBoundSpan works in .jsx file', () => {
@@ -157,7 +168,10 @@ describe('JS/JSX file support', () => {
     expect(result).toBeDefined();
     expect(result!.definitions).toBeDefined();
     expect(result!.definitions!.length).toBeGreaterThan(0);
-    expect(result!.textSpan).toBeDefined();
+    // textSpan should point to 'Button' in the original file
+    expect(result!.textSpan.length).toBe('Button'.length);
+    const spanText = jsxText.slice(result!.textSpan.start, result!.textSpan.start + result!.textSpan.length);
+    expect(spanText).toBe('Button');
   });
 });
 
@@ -212,9 +226,12 @@ describe('Plain .js file support (no JSX extension)', () => {
     expect(quickInfo!.displayParts!.length).toBeGreaterThan(0);
   });
 
-  it('diagnostics do not crash for .js file', () => {
+  it('diagnostics return valid arrays for .js file', () => {
     const semanticDiags = ls.getSemanticDiagnostics(jsFile);
     expect(Array.isArray(semanticDiags)).toBe(true);
+    for (const d of semanticDiags) {
+      expect(typeof d.code).toBe('number');
+    }
 
     const syntacticDiags = ls.getSyntacticDiagnostics(jsFile);
     expect(Array.isArray(syntacticDiags)).toBe(true);
@@ -261,6 +278,8 @@ describe('.jsx file without pug templates', () => {
   it('diagnostics work for non-pug .jsx file', () => {
     const diags = ls.getSemanticDiagnostics(noPugFile);
     expect(Array.isArray(diags)).toBe(true);
+    // Non-pug well-typed file should have no semantic errors
+    expect(diags).toHaveLength(0);
   });
 });
 

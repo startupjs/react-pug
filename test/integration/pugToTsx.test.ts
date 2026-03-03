@@ -167,7 +167,15 @@ describe('compilePugToTsx - error handling', () => {
     const result = compilePugToTsx('div\n  invalid(((');
     // Should still have tokens from the lexer phase even if parse fails
     // (may or may not fail depending on pug-parser tolerance)
-    expect(result.lexerTokens).toBeDefined();
+    expect(Array.isArray(result.lexerTokens)).toBe(true);
+    if (result.parseError) {
+      // On parse error, tsx should be null placeholder
+      expect(result.tsx).toContain('null');
+    } else {
+      // If no parse error, we should have valid output with tokens
+      expect(result.lexerTokens.length).toBeGreaterThan(0);
+      expect(result.tsx).toContain('<');
+    }
   });
 });
 

@@ -87,8 +87,11 @@ export interface PugRegion {
   pugTextStart: number;
   pugTextEnd: number;
 
-  /** Extracted pug source text (with common indent stripped) */
+  /** Extracted pug source text (with common indent stripped for the pug parser) */
   pugText: string;
+
+  /** Number of characters stripped from each line as common indent (0 if none) */
+  commonIndent: number;
 
   /** Offset of the generated TSX expression in the shadow file */
   shadowStart: number;

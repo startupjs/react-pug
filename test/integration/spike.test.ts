@@ -111,9 +111,8 @@ describe('Spike: TS plugin host patching', () => {
     expect(completions!.entries.length).toBeGreaterThan(0);
 
     const entryNames = completions!.entries.map(e => e.name);
-    // Should include ButtonProps members
-    const hasButtonProp = entryNames.some(n => ['onClick', 'label', 'disabled'].includes(n));
-    expect(hasButtonProp).toBe(true);
+    // Should include ButtonProps member 'onClick' specifically
+    expect(entryNames).toContain('onClick');
   });
 
   it('returns hover info for identifiers in shadow content', () => {

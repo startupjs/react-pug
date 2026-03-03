@@ -42,9 +42,16 @@ describe('buildShadowDocument', () => {
     const region = doc.regions[0];
 
     expect(region.tsxText).toContain('<Button');
-    expect(region.tsxText).toContain('onClick');
+    expect(region.tsxText).toContain('onClick={handler}');
     expect(region.mappings.length).toBeGreaterThan(0);
+    // Mappings should cover Button, onClick, handler
+    const allLengths = region.mappings.flatMap(m => m.lengths);
+    expect(allLengths).toContain('Button'.length);
+    expect(allLengths).toContain('onClick'.length);
+    expect(allLengths).toContain('handler'.length);
     expect(region.lexerTokens.length).toBeGreaterThan(0);
+    const tokenTypes = region.lexerTokens.map(t => t.type);
+    expect(tokenTypes).toContain('tag');
     expect(region.parseError).toBeNull();
   });
 

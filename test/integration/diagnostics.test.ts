@@ -371,15 +371,15 @@ describe('diagnostics without position pass through', () => {
       init, rootFiles, FIXTURES_DIR, {}, virtualFiles,
     );
 
-    // Just verify the pipeline doesn't crash and returns an array
     const diags = result.ls.getSemanticDiagnostics(file);
     expect(Array.isArray(diags)).toBe(true);
 
-    // If any diagnostics lack a start position, they should still be present
+    // Every returned diagnostic should have valid structure
     for (const diag of diags) {
-      // Every returned diagnostic should be valid (not undefined/null)
       expect(diag).toBeDefined();
       expect(typeof diag.code).toBe('number');
+      expect(typeof diag.messageText === 'string' || typeof diag.messageText === 'object').toBe(true);
+      expect(diag.category).toBeGreaterThanOrEqual(0);
     }
   });
 });

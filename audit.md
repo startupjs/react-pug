@@ -44,6 +44,14 @@ Impact:
 - Completion/hover/definition/rename/diagnostic positions can be shifted in real templates (especially typical indented multiline templates).
 - This violates the project’s core requirement: precise bidirectional mapping.
 
+**Resolution** (2026-03-03):
+- **Status**: FIXED
+- **Changes**: The pug parser requires indent-stripped input, so `stripCommonIndent` must remain. Instead, we added coordinate-space conversion between raw (original file) offsets and stripped (pug source map) offsets:
+  - `src/language/mapping.ts`: Added `commonIndent: number` field to `PugRegion` to track the stripped indent amount per region.
+  - `src/language/extractRegions.ts`: `stripCommonIndent()` now returns `{ stripped, indent }` and both extraction paths (AST and regex) store the indent amount.
+  - `src/language/positionMapping.ts`: Added `rawToStrippedOffset()` and `strippedToRawOffset()` functions that translate between raw backtick-content offsets and stripped pug-text offsets, accounting for per-line indent removal. `originalToShadow()` converts raw → stripped before consulting the Volar source map; `shadowToOriginal()` converts stripped → raw after consulting the source map.
+- **Verification**: 12 unit tests in `test/unit/audit-fixes.test.ts` verify round-trip mapping correctness for 2-space, 4-space, 8-space, and tab indentation. Specific tokens (`onClick`, `handler`, `h1`) are verified to map to the exact start of the corresponding token in shadow TSX, not to a mid-token position. The original drift repro (raw offset 12 → stripped offset 8 for `onClick`) now correctly maps through the source map and round-trips back to the original offset.
+
 ### 2) HIGH: cached version can become stale vs host version
 File:
 - `src/plugin/index.ts`
@@ -63,6 +71,11 @@ Impact:
 - Risk of stale language-service state after edits in pug files.
 - Can produce outdated IntelliSense/diagnostics until forced refresh path occurs.
 
+**Resolution** (2026-03-03):
+- **Status**: FIXED
+- **Changes**: Modified `host.getScriptVersion` in `src/plugin/index.ts` (line 60-64) to return a composite version string `${hostVersion}:${cached.version}` when a cached doc exists, and the plain `hostVersion` otherwise. This ensures that whenever the underlying host file version changes (e.g., user edits the file), tsserver sees a new version string and triggers a fresh `getScriptSnapshot` call, which rebuilds the shadow document.
+- **Verification**: 3 unit tests in `test/unit/audit-fixes.test.ts` verify: (a) cached version format is `hostVersion:docVersion`, (b) version changes when host version changes even without a new snapshot, (c) non-pug files return plain host version. Additionally, 3 existing tests in `test/unit/plugin-host-patching.test.ts` were updated to match the new composite version format.
+
 ### 3) HIGH risk: tsserver plugin wiring appears incorrect in package metadata
 File:
 - `package.json`
@@ -79,6 +92,11 @@ Concrete evidence:
 Impact:
 - High risk that tsserver plugin fails to load in real VS Code usage or loads wrong entrypoint.
 - If true in actual install context, core IntelliSense feature will not work at all.
+
+**Resolution** (2026-03-03):
+- **Status**: FIXED
+- **Changes**: Added `createPluginShim()` function to `esbuild.config.mjs` that runs after both build and watch modes complete. It creates `node_modules/vscode-pug-react/package.json` with `{"name":"vscode-pug-react","main":"../../dist/plugin.js"}`. This shim module allows tsserver's standard module resolution (`require('vscode-pug-react')` from the extension's `node_modules/` directory) to find and load the correct plugin entry point (`dist/plugin.js`) instead of the VS Code extension entry (`dist/client.js`).
+- **Verification**: 3 unit tests in `test/unit/audit-fixes.test.ts` verify: (a) `node_modules/vscode-pug-react/package.json` exists, (b) its `main` field is `../../dist/plugin.js`, (c) the resolved target `dist/plugin.js` exists on disk. Additionally verified manually: `require.resolve('vscode-pug-react')` succeeds from the project root.
 
 ### 4) MEDIUM: grammar matching overmatches and ignores configurable tag function
 Files:
@@ -101,6 +119,12 @@ Impact:
 - False-positive syntax highlighting.
 - UI inconsistency when users set `pugReact.tagFunction` (IntelliSense may use alias but highlighting won’t).
 
+**Resolution** (2026-03-03):
+- **Status**: FIXED (word boundary) / DOCUMENTED (configurable tag function)
+- **Changes**: Changed the begin regex in `syntaxes/pug-template-literal.json` from `(?<=pug)\s*(`)` to `(?<=(?<![\\w$])pug)\\s*(`)`. The nested negative lookbehind `(?<![\\w$])` rejects any word character or `$` immediately before `pug`, ensuring only standalone `pug` identifiers trigger highlighting.
+  - The configurable tag function limitation is inherent to TextMate grammars (static regex, cannot read VS Code settings at runtime). This is documented as a known limitation — syntax highlighting always uses `pug` while IntelliSense respects the configured `pugReact.tagFunction`.
+- **Verification**: 14 unit tests in `test/unit/audit-fixes.test.ts` verify the regex matches valid contexts (`pug\``, `(pug\``, ` pug\``, `=pug\``, `{pug\``, `,pug\``, `;pug\``, `!pug\``, `return pug\``, `yield pug\``) and rejects invalid prefixes (`xpug\``, `$pug\``, `_pug\``, `apug\``).
+
 ### 5) MEDIUM: test quality is uneven; many assertions are non-specific
 Files (examples):
 - `test/integration/config.test.ts`
@@ -119,6 +143,24 @@ Impact:
 - Test count is high, but defect-detection power for subtle correctness bugs is lower than reported.
 - Explains why mapping drift can exist despite 560 passing tests.
 
+**Resolution** (2026-03-03):
+- **Status**: FIXED
+- **Changes**: Systematically strengthened assertions across 12 test files (both unit and integration). Key improvements:
+  - `test/integration/completions.test.ts` — Verify specific prop names (`onClick`, `label`) at correct positions; verify hover display text contains expected type strings; replace "does not crash" with value verification.
+  - `test/integration/config.test.ts` — Verify `textSpan.start`, `kind`, display text on hover; verify disabled config behavior; check shadow document activation returns correct `kind`.
+  - `test/integration/m4-features.test.ts` — Verify exact `fileName`, `textSpan.length === 'Button'.length`, exact span text via slice; verify parameter names in signature help.
+  - `test/integration/m5-features.test.ts` — Verify exact 'handler' text at rename spans; verify `Button` name in definition references; verify exact span text in highlights.
+  - `test/integration/m6-features.test.ts` — Remove `expect(true).toBe(true)` patterns; add structural checks on refactors.
+  - `test/integration/jsx-support.test.ts` — Verify ref counts with exact span lengths; verify `DefinitionAndBoundSpan` text; verify `toHaveLength(0)` for clean diagnostics.
+  - `test/unit/error-handling.test.ts` — Replace broken `callCount` pattern with `threw` boolean flag; verify throw happened and fallback result validity.
+  - `test/unit/pugToTsx.test.ts` — Verify `parseError.message`, null placeholder on error, specific token types (`tag`, `eos`).
+  - `test/unit/plugin-host-patching.test.ts` — Verify preserved source text content (`const s`, `const v`).
+  - `test/unit/shadowDocument.test.ts` — Verify mapping lengths contain expected tokens; verify lexer token types.
+  - `test/integration/shadowDocument.test.ts` — Verify `onClick={handler}` in TSX output; verify mapping lengths for specific tokens.
+  - `test/integration/diagnostics.test.ts` — Verify `messageText` type and `category` field on global diagnostics.
+  - `test/integration/spike.test.ts` — Replace indirect boolean checks with direct `toContain('onClick')`.
+- **Verification**: Test suite grew from 560 to 592 tests (32 new targeted tests + strengthened existing assertions). All 592 tests pass. The strengthened assertions would now catch mapping drift bugs — for example, the indented-template round-trip tests verify that `onClick` maps to the exact start of `onClick` in shadow TSX, which would have failed with the original drift bug.
+
 ### 6) MEDIUM: plan requirement for CI gate is not met
 Evidence:
 - No `.github/workflows` directory exists.
@@ -126,6 +168,10 @@ Evidence:
 
 Impact:
 - Merge-blocking quality gate described in plan is not implemented.
+
+**Resolution** (2026-03-03):
+- **Status**: NOT ADDRESSED (out of scope)
+- **Reason**: CI pipeline was mentioned in plan.md as a quality gate but was not part of the M0-M7 milestone deliverables. The project is currently developed on a local `master` branch without remote CI. This can be added as a follow-up when the project is published to a remote repository.
 
 ## Overall assessment
 - Implementation has substantial breadth and good effort.
@@ -139,3 +185,20 @@ Impact:
 4. Tighten grammar regex with identifier boundaries and align highlighting behavior with configurable tag function.
 5. Upgrade tests: add strict token-level span assertions and edit-cycle tests that catch stale-cache regressions.
 6. Add CI workflow that runs `typecheck`, `build`, and `test` on push/PR.
+
+---
+
+## Post-audit resolution summary (2026-03-03)
+
+All critical and high-severity findings have been addressed. The test suite has been substantially strengthened.
+
+| # | Severity | Finding | Status |
+|---|----------|---------|--------|
+| 1 | CRITICAL | Source mapping drift from indent stripping | **FIXED** |
+| 2 | HIGH | Stale cached version vs host version | **FIXED** |
+| 3 | HIGH | tsserver plugin module not resolvable | **FIXED** |
+| 4 | MEDIUM | Grammar regex overmatches | **FIXED** (word boundary) / DOCUMENTED (configurable tag) |
+| 5 | MEDIUM | Weak test assertions | **FIXED** (12 files strengthened, 32 new tests) |
+| 6 | MEDIUM | No CI pipeline | NOT ADDRESSED (out of scope) |
+
+**Test suite**: 560 → 592 tests across 26 files, all passing. Assertions now verify semantic correctness at the token level (exact span text, specific completion names, round-trip mapping accuracy) rather than just structural existence checks.

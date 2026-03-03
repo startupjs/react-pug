@@ -58,9 +58,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       };
 
       host.getScriptVersion = (fileName: string) => {
+        const hostVersion = originalGetVersion(fileName);
         const cached = docCache.get(fileName);
-        if (cached) return String(cached.version);
-        return originalGetVersion(fileName);
+        if (cached) return `${hostVersion}:${cached.version}`;
+        return hostVersion;
       };
 
       // Create proxy LanguageService that delegates all methods to the original

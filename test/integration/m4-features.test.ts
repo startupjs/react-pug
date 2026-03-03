@@ -103,8 +103,15 @@ describe('go-to-definition through real pipeline', () => {
     expect(result!.definitions).toBeDefined();
     expect(result!.definitions!.length).toBeGreaterThan(0);
 
-    // textSpan (the highlighted word) should be in the original file range
+    // textSpan (the highlighted word) should point to 'Button' in original file
     expect(result!.textSpan.start).toBeGreaterThanOrEqual(pugStart);
+    expect(result!.textSpan.length).toBe('Button'.length);
+    const spanText = appText.slice(result!.textSpan.start, result!.textSpan.start + result!.textSpan.length);
+    expect(spanText).toBe('Button');
+
+    // Definition should point to Button.tsx
+    const buttonDef = result!.definitions!.find(d => d.fileName.includes('Button'));
+    expect(buttonDef).toBeDefined();
   });
 
   it('getDefinitionAtPosition on expression navigates to variable', () => {
@@ -128,13 +135,15 @@ describe('go-to-definition through real pipeline', () => {
   });
 
   it('getDefinitionAtPosition works for non-pug positions', () => {
-    // 'handler' const declaration outside pug
     const handlerDef = appText.indexOf('handler');
     expect(handlerDef).toBeLessThan(appText.indexOf('pug`'));
 
     const defs = ls.getDefinitionAtPosition(APP_FILE, handlerDef);
-    // At variable declaration, may or may not return definitions
-    expect(defs === undefined || defs!.length >= 0).toBe(true);
+    expect(defs).toBeDefined();
+    expect(defs!.length).toBeGreaterThan(0);
+    // Should point to the handler declaration in the same file
+    expect(defs![0].fileName).toBe(APP_FILE);
+    expect(defs![0].textSpan.start).toBe(handlerDef);
   });
 
   it('getTypeDefinitionAtPosition on expression navigates to type', () => {
@@ -142,8 +151,14 @@ describe('go-to-definition through real pipeline', () => {
     const handlerIdx = appText.indexOf('handler', pugStart);
 
     const defs = ls.getTypeDefinitionAtPosition(APP_FILE, handlerIdx);
-    // Arrow function type may not have a named type definition, so this could be empty
-    expect(defs === undefined || Array.isArray(defs)).toBe(true);
+    // Arrow function type may not have a named type definition
+    if (defs && defs.length > 0) {
+      // If definitions exist, they should have valid spans
+      for (const def of defs) {
+        expect(def.textSpan.start).toBeGreaterThanOrEqual(0);
+        expect(typeof def.fileName).toBe('string');
+      }
+    }
   });
 
   it('getDefinitionAtPosition in plain file works normally', () => {
@@ -325,24 +340,25 @@ describe('signature help through real pipeline', () => {
     ls = result.ls;
   });
 
-  it('getSignatureHelpItems at function call returns signatures', () => {
-    // Find the '(' after 'greet' in the pug template
+  it('getSignatureHelpItems at function call returns signatures with parameter info', () => {
     const pugStart = sigText.indexOf('pug`');
     const greetCall = sigText.indexOf('greet(', pugStart);
     expect(greetCall).toBeGreaterThan(pugStart);
 
-    // Position inside the parentheses (after the opening paren)
     const parenPos = greetCall + 'greet('.length;
     const sigHelp = ls.getSignatureHelpItems(sigFile, parenPos, undefined);
 
-    // Signature help should return something for the greet call
     if (sigHelp) {
       expect(sigHelp.items.length).toBeGreaterThan(0);
       // Should have 2 parameters (name, age)
       expect(sigHelp.items[0].parameters.length).toBe(2);
+      // Verify parameter names
+      const paramNames = sigHelp.items[0].parameters.map(
+        p => p.displayParts.map(d => d.text).join('')
+      );
+      expect(paramNames[0]).toContain('name');
+      expect(paramNames[1]).toContain('age');
     }
-    // If null/undefined, the position may not have mapped -- just verify no crash
-    expect(sigHelp === undefined || sigHelp!.items.length >= 0).toBe(true);
   });
 
   it('signature help applicableSpan is mapped back if available', () => {
@@ -364,11 +380,10 @@ describe('signature help through real pipeline', () => {
     expect(sigHelp).toBeUndefined();
   });
 
-  it('signature help works for non-pug positions', () => {
-    // The greet function definition itself (outside pug)
+  it('signature help returns undefined at function declaration (non-call position)', () => {
     const greetDef = sigText.indexOf('function greet');
     const sigHelp = ls.getSignatureHelpItems(sigFile, greetDef, undefined);
     // At function declaration, no signature help expected
-    expect(sigHelp === undefined || sigHelp!.items.length >= 0).toBe(true);
+    expect(sigHelp).toBeUndefined();
   });
 });

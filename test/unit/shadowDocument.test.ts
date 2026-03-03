@@ -101,6 +101,11 @@ describe('single pug region', () => {
     const doc = buildShadowDocument(text, 'test.tsx');
     const region = doc.regions[0];
     expect(region.mappings.length).toBeGreaterThan(0);
+    // Should have mappings for 'Button', 'onClick', 'handler'
+    const allLengths = region.mappings.flatMap(m => m.lengths);
+    expect(allLengths).toContain('Button'.length);
+    expect(allLengths).toContain('onClick'.length);
+    expect(allLengths).toContain('handler'.length);
   });
 
   it('populates lexerTokens from compilation', () => {
@@ -108,6 +113,10 @@ describe('single pug region', () => {
     const doc = buildShadowDocument(text, 'test.tsx');
     const region = doc.regions[0];
     expect(region.lexerTokens.length).toBeGreaterThan(0);
+    // Should have a 'tag' token for 'div' and a 'class' token for '.card'
+    const types = region.lexerTokens.map(t => t.type);
+    expect(types).toContain('tag');
+    expect(types).toContain('class');
   });
 
   it('sets parseError to null for valid pug', () => {

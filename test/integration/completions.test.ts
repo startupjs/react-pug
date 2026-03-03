@@ -124,7 +124,7 @@ describe('completions through real pipeline', () => {
     expect(names).toContain('handler');
   });
 
-  it('completions include ButtonProps members', () => {
+  it('completions include ButtonProps members (onClick, children, disabled)', () => {
     const pugStart = appText.indexOf('pug`');
     const onClickIdx = appText.indexOf('onClick', pugStart);
 
@@ -132,11 +132,14 @@ describe('completions through real pipeline', () => {
     expect(completions).toBeDefined();
 
     const names = completions!.entries.map(e => e.name);
-    // Button has onClick, label, disabled props
-    const hasOnClick = names.includes('onClick');
-    const hasLabel = names.includes('label');
-    const hasDisabled = names.includes('disabled');
-    expect(hasOnClick || hasLabel || hasDisabled).toBe(true);
+    // At onClick position, TS filters by prefix 'o' -- onClick should be present
+    expect(names).toContain('onClick');
+    // Also verify other Button props are available by checking label position
+    const labelIdx = appText.indexOf('label', pugStart);
+    const labelCompletions = ls.getCompletionsAtPosition(APP_FILE, labelIdx, undefined);
+    expect(labelCompletions).toBeDefined();
+    const labelNames = labelCompletions!.entries.map(e => e.name);
+    expect(labelNames).toContain('label');
   });
 
   it('completions at component name suggest imported identifiers', () => {
@@ -162,28 +165,32 @@ describe('completions through real pipeline', () => {
 
   it('completions in plain TS file work normally (passthrough)', () => {
     const plainText = readOriginal(PLAIN_FILE);
-    // Position after 'export ' at the start -- TS should offer completions
-    // Use a position inside a function body where completions are typical
     const returnIdx = plainText.indexOf('return');
     expect(returnIdx).toBeGreaterThan(-1);
-    // Position right after 'return ' where TS provides expression completions
     const afterReturn = returnIdx + 'return '.length;
 
     const completions = ls.getCompletionsAtPosition(PLAIN_FILE, afterReturn, undefined);
-    // TS may or may not return completions at every position --
-    // the key is it doesn't crash and returns a valid result
-    expect(completions === undefined || completions!.entries.length >= 0).toBe(true);
+    expect(completions).toBeDefined();
+    const names = completions!.entries.map(e => e.name);
+    // Should include variables in scope like 'a', 'b', and global identifiers
+    expect(names).toContain('a');
+    expect(names).toContain('b');
   });
 
-  it('completions before pug region do not crash', () => {
-    // Test that requesting completions outside pug works without errors
+  it('completions before pug region return valid results', () => {
     const importIdx = appText.indexOf('import');
     expect(importIdx).toBeGreaterThan(-1);
 
-    // Position at start of file (outside any pug region)
     const completions = ls.getCompletionsAtPosition(APP_FILE, importIdx, undefined);
-    // May or may not have completions -- just verify no crash
-    expect(completions === undefined || completions!.entries.length >= 0).toBe(true);
+    // At 'import' keyword, TS may return keyword completions or undefined
+    if (completions) {
+      expect(completions.entries).toBeInstanceOf(Array);
+      // Every entry should have a name property
+      for (const entry of completions.entries) {
+        expect(typeof entry.name).toBe('string');
+        expect(entry.name.length).toBeGreaterThan(0);
+      }
+    }
   });
 });
 
@@ -199,26 +206,30 @@ describe('hover (getQuickInfoAtPosition) through real pipeline', () => {
     appText = readOriginal(APP_FILE);
   });
 
-  it('hover on component name returns type info', () => {
+  it('hover on component name returns type info with "Button" in display', () => {
     const pugStart = appText.indexOf('pug`');
     const buttonIdx = appText.indexOf('Button', pugStart + 4);
     expect(buttonIdx).toBeGreaterThan(pugStart);
 
     const quickInfo = ls.getQuickInfoAtPosition(APP_FILE, buttonIdx);
     expect(quickInfo).toBeDefined();
-    // Should have display parts showing the function type
     expect(quickInfo!.displayParts).toBeDefined();
     expect(quickInfo!.displayParts!.length).toBeGreaterThan(0);
+    // Display text should contain the component name "Button"
+    const displayText = quickInfo!.displayParts!.map(p => p.text).join('');
+    expect(displayText).toContain('Button');
   });
 
-  it('hover on expression variable returns type info', () => {
+  it('hover on expression variable returns arrow function type', () => {
     const pugStart = appText.indexOf('pug`');
     const handlerIdx = appText.indexOf('handler', pugStart);
     expect(handlerIdx).toBeGreaterThan(pugStart);
 
     const quickInfo = ls.getQuickInfoAtPosition(APP_FILE, handlerIdx);
     expect(quickInfo).toBeDefined();
-    expect(quickInfo!.kind).toBeDefined();
+    expect(quickInfo!.kind).toBe('const');
+    const displayText = quickInfo!.displayParts!.map(p => p.text).join('');
+    expect(displayText).toContain('handler');
   });
 
   it('hover textSpan is mapped back to original file range', () => {
@@ -242,7 +253,7 @@ describe('hover (getQuickInfoAtPosition) through real pipeline', () => {
     expect(overlaps).toBe(true);
   });
 
-  it('hover on attribute name returns prop type', () => {
+  it('hover on attribute name returns prop type with onClick', () => {
     const pugStart = appText.indexOf('pug`');
     const onClickIdx = appText.indexOf('onClick', pugStart);
 
@@ -250,6 +261,8 @@ describe('hover (getQuickInfoAtPosition) through real pipeline', () => {
     expect(quickInfo).toBeDefined();
     expect(quickInfo!.displayParts).toBeDefined();
     expect(quickInfo!.displayParts!.length).toBeGreaterThan(0);
+    const displayText = quickInfo!.displayParts!.map(p => p.text).join('');
+    expect(displayText).toContain('onClick');
   });
 
   it('hover returns undefined for unmapped/synthetic position', () => {
@@ -291,27 +304,37 @@ describe('completions edge cases', () => {
     appText = readOriginal(APP_FILE);
   });
 
-  it('does not crash on position 0', () => {
+  it('returns valid completions or undefined at position 0', () => {
     const completions = ls.getCompletionsAtPosition(APP_FILE, 0, undefined);
-    // Position 0 is 'i' of 'import' -- should work
-    expect(completions === undefined || completions!.entries.length >= 0).toBe(true);
+    if (completions) {
+      expect(Array.isArray(completions.entries)).toBe(true);
+      for (const entry of completions.entries) {
+        expect(typeof entry.name).toBe('string');
+      }
+    }
   });
 
-  it('does not crash on position at end of file', () => {
+  it('returns valid completions or undefined at end of file', () => {
     const endPos = appText.length - 1;
     const completions = ls.getCompletionsAtPosition(APP_FILE, endPos, undefined);
-    expect(completions === undefined || completions!.entries.length >= 0).toBe(true);
+    if (completions) {
+      expect(Array.isArray(completions.entries)).toBe(true);
+    }
   });
 
-  it('hover does not crash on position 0', () => {
+  it('hover at position 0 returns undefined (inside import keyword)', () => {
     const quickInfo = ls.getQuickInfoAtPosition(APP_FILE, 0);
-    expect(quickInfo === undefined || quickInfo!.displayParts !== undefined).toBe(true);
+    // Position 0 is the 'i' of 'import' -- TS does not provide hover for keywords
+    expect(quickInfo).toBeUndefined();
   });
 
-  it('hover does not crash on position at end of file', () => {
+  it('hover at end of file returns valid result or undefined', () => {
     const endPos = appText.length - 1;
     const quickInfo = ls.getQuickInfoAtPosition(APP_FILE, endPos);
-    expect(quickInfo === undefined || quickInfo !== null).toBe(true);
+    if (quickInfo) {
+      expect(quickInfo.textSpan).toBeDefined();
+      expect(quickInfo.textSpan.start).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it('completions on plain file without pug are unaffected', () => {
@@ -320,5 +343,8 @@ describe('completions edge cases', () => {
     const numIdx = plainText.indexOf('number');
     const completions = ls.getCompletionsAtPosition(PLAIN_FILE, numIdx, undefined);
     expect(completions).toBeDefined();
+    // Should contain type-related completions like 'number'
+    const names = completions!.entries.map(e => e.name);
+    expect(names).toContain('number');
   });
 });

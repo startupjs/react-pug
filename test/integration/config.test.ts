@@ -80,29 +80,35 @@ describe('plugin with enabled=false', () => {
 
   it('getScriptSnapshot returns original text unchanged (no shadow)', () => {
     // When disabled, the host should return original text containing pug`
-    // We can verify by checking that the LS sees the original text
-    // (semantic diagnostics would be different if shadowing was active)
+    // Semantic diagnostics would contain TS errors since pug` is not transformed
     const diags = ls.getSemanticDiagnostics(APP_FILE);
-    // Should have errors since pug` is not valid TS when not shadowed
-    // The pug tagged template literal would not be transformed
     expect(Array.isArray(diags)).toBe(true);
+    // Should have errors since pug` is not valid TS expression when not shadowed
+    expect(diags.length).toBeGreaterThan(0);
   });
 
-  it('completions still work for non-pug code', () => {
-    // Position at the start of 'handler' const declaration (outside pug)
+  it('completions still work for non-pug code when disabled', () => {
     const handlerIdx = appText.indexOf('handler');
     expect(handlerIdx).toBeLessThan(appText.indexOf('pug`'));
 
-    // Should not crash - LS operates on original text
+    // When disabled, TS sees raw pug` text which causes parse errors.
+    // Completions may be empty but must not crash.
     const completions = ls.getCompletionsAtPosition(APP_FILE, handlerIdx, undefined);
-    expect(completions === undefined || Array.isArray(completions?.entries)).toBe(true);
+    if (completions) {
+      expect(Array.isArray(completions.entries)).toBe(true);
+      // If entries exist, every entry should have a valid name
+      for (const entry of completions.entries) {
+        expect(typeof entry.name).toBe('string');
+      }
+    }
   });
 
   it('hover works for non-pug code', () => {
     const handlerIdx = appText.indexOf('handler');
     const info = ls.getQuickInfoAtPosition(APP_FILE, handlerIdx);
-    // Should not crash
-    expect(info === undefined || info.textSpan != null).toBe(true);
+    expect(info).toBeDefined();
+    expect(info!.textSpan.start).toBe(handlerIdx);
+    expect(info!.kind).toBe('const');
   });
 });
 
@@ -128,10 +134,11 @@ describe('plugin with default config (empty {})', () => {
 
     const info = ls.getQuickInfoAtPosition(APP_FILE, handlerIdx);
     // With shadowing active, hover should work on pug content
-    if (info) {
-      expect(info.textSpan.start).toBeGreaterThanOrEqual(0);
-    }
-    expect(info === undefined || info.textSpan != null).toBe(true);
+    expect(info).toBeDefined();
+    expect(info!.textSpan.start).toBeGreaterThanOrEqual(pugStart);
+    expect(info!.kind).toBe('const');
+    const displayText = info!.displayParts!.map(p => p.text).join('');
+    expect(displayText).toContain('handler');
   });
 
   it('pug parse error diagnostics are injected by default', async () => {
@@ -187,15 +194,25 @@ describe('plugin with diagnostics.enabled=false', () => {
     expect(pugDiag).toBeUndefined();
   });
 
-  it('still returns TS-native diagnostics', () => {
+  it('still returns TS-native diagnostics array', () => {
     const diags = ls.getSemanticDiagnostics(errorFile);
-    // Should still have array (TS may report errors for the placeholder code)
     expect(Array.isArray(diags)).toBe(true);
+    // All returned diagnostics should have valid code properties
+    for (const d of diags) {
+      expect(typeof d.code).toBe('number');
+    }
   });
 
   it('syntactic diagnostics are not affected', () => {
     const diags = ls.getSyntacticDiagnostics(errorFile);
     expect(Array.isArray(diags)).toBe(true);
+    // Syntactic diagnostics should have valid position info
+    for (const d of diags) {
+      expect(typeof d.code).toBe('number');
+      if (d.start != null) {
+        expect(d.start).toBeGreaterThanOrEqual(0);
+      }
+    }
   });
 });
 
@@ -205,18 +222,16 @@ describe('plugin with tagFunction config', () => {
   it('tagFunction defaults to "pug" and processes pug templates', async () => {
     const init = await loadPlugin();
     const rootFiles = [APP_FILE, BUTTON_FILE];
-    // Empty config -- tagFunction defaults to 'pug'
     const result = createLanguageServiceWithPlugin(init, rootFiles, FIXTURES_DIR, {});
     const appText = fs.readFileSync(APP_FILE, 'utf-8');
 
     const pugStart = appText.indexOf('pug`');
     const handlerIdx = appText.indexOf('handler', pugStart);
     const info = result.ls.getQuickInfoAtPosition(APP_FILE, handlerIdx);
-    // Should work -- pug templates are processed with default tagFunction
-    if (info) {
-      expect(info.textSpan.start).toBeGreaterThanOrEqual(0);
-    }
-    expect(info === undefined || info.textSpan != null).toBe(true);
+    expect(info).toBeDefined();
+    expect(info!.textSpan.start).toBeGreaterThanOrEqual(pugStart);
+    const displayText = info!.displayParts!.map(p => p.text).join('');
+    expect(displayText).toContain('handler');
   });
 
   it('tagFunction="pug" explicitly works same as default', async () => {
@@ -230,10 +245,9 @@ describe('plugin with tagFunction config', () => {
     const pugStart = appText.indexOf('pug`');
     const handlerIdx = appText.indexOf('handler', pugStart);
     const info = result.ls.getQuickInfoAtPosition(APP_FILE, handlerIdx);
-    if (info) {
-      expect(info.textSpan.start).toBeGreaterThanOrEqual(0);
-    }
-    expect(info === undefined || info.textSpan != null).toBe(true);
+    expect(info).toBeDefined();
+    expect(info!.textSpan.start).toBeGreaterThanOrEqual(pugStart);
+    expect(info!.kind).toBe('const');
   });
 
   it('tagFunction="html" causes pug` templates to be ignored', async () => {

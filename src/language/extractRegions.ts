@@ -2,8 +2,8 @@ import { parse } from '@babel/parser';
 import type { Node, TaggedTemplateExpression } from '@babel/types';
 import type { PugRegion } from './mapping';
 
-/** Strip the common leading whitespace from all non-empty lines */
-function stripCommonIndent(text: string): string {
+/** Strip the common leading whitespace from all non-empty lines, returning the stripped text and indent amount */
+function stripCommonIndent(text: string): { stripped: string; indent: number } {
   const lines = text.split('\n');
   let minIndent = Infinity;
 
@@ -13,11 +13,13 @@ function stripCommonIndent(text: string): string {
     if (indent < minIndent) minIndent = indent;
   }
 
-  if (minIndent === Infinity || minIndent === 0) return text;
+  if (minIndent === Infinity || minIndent === 0) return { stripped: text, indent: 0 };
 
-  return lines
+  const stripped = lines
     .map(line => (line.trim().length === 0 ? '' : line.slice(minIndent)))
     .join('\n');
+
+  return { stripped, indent: minIndent };
 }
 
 /** Determine babel parser plugins based on filename */
@@ -82,12 +84,15 @@ function extractWithRegex(text: string, tagName: string = 'pug'): PugRegion[] {
     const pugTextStart = backtickStart + 1;
     const pugTextEnd = pugTextStart + rawContent.length;
 
+    const { stripped, indent } = stripCommonIndent(rawContent);
+
     regions.push({
       originalStart: fullMatchStart,
       originalEnd: fullMatchEnd,
       pugTextStart,
       pugTextEnd,
-      pugText: stripCommonIndent(rawContent),
+      pugText: stripped,
+      commonIndent: indent,
       // Shadow fields populated later by the generator
       shadowStart: 0,
       shadowEnd: 0,
@@ -145,12 +150,15 @@ export function extractPugRegions(text: string, filename: string, tagName: strin
     // Check for ${} interpolations
     const hasInterpolations = quasi.expressions.length > 0;
 
+    const { stripped, indent } = stripCommonIndent(rawContent);
+
     const region: PugRegion = {
       originalStart,
       originalEnd,
       pugTextStart,
       pugTextEnd,
-      pugText: stripCommonIndent(rawContent),
+      pugText: stripped,
+      commonIndent: indent,
       // Shadow fields populated later by the generator
       shadowStart: 0,
       shadowEnd: 0,

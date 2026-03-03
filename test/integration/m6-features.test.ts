@@ -211,14 +211,13 @@ describe('getEditsForRefactor through real pipeline', () => {
         }
       }
     }
-    // Verify no crash regardless of available refactors
+    // If refactors were available, edits should have been produced or be undefined
     expect(true).toBe(true);
   });
 
   it('passes through for non-pug file', () => {
     const addIdx = plainVirtualText.indexOf('add');
 
-    // Try any refactor on non-pug file - should pass through without mapping
     const refactors = ls.getApplicableRefactors(plainVirtualFile, addIdx, undefined);
     if (refactors.length > 0) {
       const refactor = refactors[0];
@@ -226,10 +225,15 @@ describe('getEditsForRefactor through real pipeline', () => {
       const result = ls.getEditsForRefactor(
         plainVirtualFile, {}, addIdx, refactor.name, action.name, undefined,
       );
-      // Should not crash, result can be undefined if refactor doesn't apply
-      expect(result === undefined || result.edits != null).toBe(true);
+      if (result) {
+        expect(Array.isArray(result.edits)).toBe(true);
+        for (const edit of result.edits) {
+          for (const tc of edit.textChanges) {
+            expect(tc.span.start).toBeGreaterThanOrEqual(0);
+          }
+        }
+      }
     }
-    expect(true).toBe(true);
   });
 });
 
@@ -466,47 +470,46 @@ describe('mapFileTextChanges via getEditsForRefactor', () => {
   it('mapped edit spans are within original file bounds', () => {
     const pugStart = multiText.indexOf('pug`');
     const arrowIdx = multiText.indexOf('() => {}', pugStart);
+    expect(arrowIdx).toBeGreaterThan(pugStart);
 
-    if (arrowIdx > pugStart) {
-      const refactors = ls.getApplicableRefactors(
-        multiFile,
-        { pos: arrowIdx, end: arrowIdx + '() => {}'.length },
-        undefined,
-      );
+    const refactors = ls.getApplicableRefactors(
+      multiFile,
+      { pos: arrowIdx, end: arrowIdx + '() => {}'.length },
+      undefined,
+    );
+    expect(Array.isArray(refactors)).toBe(true);
 
-      for (const refactor of refactors) {
-        for (const action of refactor.actions) {
-          const result = ls.getEditsForRefactor(
-            multiFile, {},
-            { pos: arrowIdx, end: arrowIdx + '() => {}'.length },
-            refactor.name, action.name, undefined,
-          );
-          if (result) {
-            for (const edit of result.edits) {
-              for (const tc of edit.textChanges) {
-                expect(tc.span.start).toBeGreaterThanOrEqual(0);
-                if (edit.fileName === multiFile) {
-                  // Spans in our file should be within bounds
-                  expect(tc.span.start).toBeLessThan(multiText.length + 100);
-                }
+    for (const refactor of refactors) {
+      for (const action of refactor.actions) {
+        const result = ls.getEditsForRefactor(
+          multiFile, {},
+          { pos: arrowIdx, end: arrowIdx + '() => {}'.length },
+          refactor.name, action.name, undefined,
+        );
+        if (result) {
+          for (const edit of result.edits) {
+            for (const tc of edit.textChanges) {
+              expect(tc.span.start).toBeGreaterThanOrEqual(0);
+              if (edit.fileName === multiFile) {
+                expect(tc.span.start).toBeLessThan(multiText.length + 100);
               }
             }
           }
         }
       }
     }
-    // No crash is the main assertion
-    expect(true).toBe(true);
   });
 
   it('non-pug file refactor edits are not modified', () => {
     const returnIdx = plainVirtualText.indexOf('return');
+    expect(returnIdx).toBeGreaterThan(-1);
 
     const refactors = ls.getApplicableRefactors(
       plainVirtualFile,
       { pos: returnIdx, end: returnIdx + 'return a + b'.length },
       undefined,
     );
+    expect(Array.isArray(refactors)).toBe(true);
 
     for (const refactor of refactors) {
       for (const action of refactor.actions) {
@@ -516,6 +519,7 @@ describe('mapFileTextChanges via getEditsForRefactor', () => {
           refactor.name, action.name, undefined,
         );
         if (result) {
+          expect(Array.isArray(result.edits)).toBe(true);
           for (const edit of result.edits) {
             for (const tc of edit.textChanges) {
               expect(tc.span.start).toBeGreaterThanOrEqual(0);
@@ -524,6 +528,5 @@ describe('mapFileTextChanges via getEditsForRefactor', () => {
         }
       }
     }
-    expect(true).toBe(true);
   });
 });

@@ -67,43 +67,39 @@ describe('Plugin safeOverride fallback', () => {
   });
 
   it('getCompletionsAtPosition falls back when override throws', () => {
-    // Monkey-patch the original LS to throw on the first call
-    // but the proxy should catch and fall back to the original LS
     const original = mockLs.getCompletionsAtPosition.bind(mockLs);
-    let callCount = 0;
+    let threw = false;
     mockLs.getCompletionsAtPosition = (...args: any) => {
-      callCount++;
-      if (callCount === 1) {
-        // First call is from the proxy override (with mapped position)
-        throw new Error('simulated crash');
-      }
-      // Second call is the fallback to original
-      return original(...args);
+      threw = true;
+      throw new Error('simulated crash');
     };
 
-    // Should not throw -- safeOverride catches and falls back
+    // Should not throw -- safeOverride catches and falls back to the original
     const result = proxiedLs.getCompletionsAtPosition(APP_FILE, 0, undefined);
-    // Result may be undefined or completions -- the key is it didn't crash
-    expect(true).toBe(true); // If we reach here, no crash
+    // The patched mock was invoked and threw
+    expect(threw).toBe(true);
+    // Fallback returns a valid result from the original (pre-patch) LS
+    if (result) {
+      expect(Array.isArray(result.entries)).toBe(true);
+    }
 
-    // Restore
     mockLs.getCompletionsAtPosition = original;
   });
 
   it('getQuickInfoAtPosition falls back when override throws', () => {
     const original = mockLs.getQuickInfoAtPosition.bind(mockLs);
-    let callCount = 0;
+    let threw = false;
     mockLs.getQuickInfoAtPosition = (...args: any) => {
-      callCount++;
-      if (callCount === 1) {
-        throw new Error('simulated hover crash');
-      }
-      return original(...args);
+      threw = true;
+      throw new Error('simulated hover crash');
     };
 
     const result = proxiedLs.getQuickInfoAtPosition(APP_FILE, 0);
-    // Should not throw
-    expect(true).toBe(true);
+    expect(threw).toBe(true);
+    // Fallback result at position 0 (import keyword) is typically undefined
+    if (result) {
+      expect(result.textSpan).toBeDefined();
+    }
 
     mockLs.getQuickInfoAtPosition = original;
   });
@@ -127,34 +123,36 @@ describe('Plugin safeOverride fallback', () => {
 
   it('getDefinitionAtPosition falls back when override throws', () => {
     const original = mockLs.getDefinitionAtPosition.bind(mockLs);
-    let callCount = 0;
+    let threw = false;
     mockLs.getDefinitionAtPosition = (...args: any) => {
-      callCount++;
-      if (callCount === 1) {
-        throw new Error('simulated definition crash');
-      }
-      return original(...args);
+      threw = true;
+      throw new Error('simulated definition crash');
     };
 
     const result = proxiedLs.getDefinitionAtPosition(APP_FILE, 0);
-    expect(true).toBe(true);
+    expect(threw).toBe(true);
+    // Fallback returns the original LS result (may be undefined at position 0)
+    if (result) {
+      expect(Array.isArray(result)).toBe(true);
+    }
 
     mockLs.getDefinitionAtPosition = original;
   });
 
   it('findReferences falls back when override throws', () => {
     const original = mockLs.findReferences.bind(mockLs);
-    let callCount = 0;
+    let threw = false;
     mockLs.findReferences = (...args: any) => {
-      callCount++;
-      if (callCount === 1) {
-        throw new Error('simulated references crash');
-      }
-      return original(...args);
+      threw = true;
+      throw new Error('simulated references crash');
     };
 
     const result = proxiedLs.findReferences(APP_FILE, 0);
-    expect(true).toBe(true);
+    expect(threw).toBe(true);
+    // Fallback returns the original LS result
+    if (result) {
+      expect(Array.isArray(result)).toBe(true);
+    }
 
     mockLs.findReferences = original;
   });

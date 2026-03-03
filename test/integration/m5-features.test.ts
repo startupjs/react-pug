@@ -99,18 +99,18 @@ describe('rename through real pipeline', () => {
     const handlerIdx = appText.indexOf('handler', pugStart);
 
     const locations = ls.findRenameLocations(APP_FILE, handlerIdx, false, false, undefined as any);
-    if (locations) {
-      expect(locations.length).toBeGreaterThan(0);
-      for (const loc of locations) {
-        // All textSpans should be within original file bounds
-        expect(loc.textSpan.start).toBeGreaterThanOrEqual(0);
-        expect(loc.textSpan.start).toBeLessThan(
-          loc.fileName === APP_FILE ? appText.length : Infinity,
-        );
+    expect(locations).toBeDefined();
+    expect(locations!.length).toBeGreaterThan(0);
+    for (const loc of locations!) {
+      expect(loc.textSpan.start).toBeGreaterThanOrEqual(0);
+      expect(loc.textSpan.length).toBe('handler'.length);
+      if (loc.fileName === APP_FILE) {
+        expect(loc.textSpan.start).toBeLessThan(appText.length);
+        // The text at this span should be 'handler'
+        const spanText = appText.slice(loc.textSpan.start, loc.textSpan.start + loc.textSpan.length);
+        expect(spanText).toBe('handler');
       }
     }
-    // Verify no crash even if locations is undefined
-    expect(locations === undefined || Array.isArray(locations)).toBe(true);
   });
 
   it('getRenameInfo on unmapped position returns canRename: false', () => {
@@ -133,20 +133,22 @@ describe('rename through real pipeline', () => {
   });
 
   it('findRenameLocations for non-pug variable finds both declaration and pug usage', () => {
-    // Start from the declaration of 'handler' (outside pug)
     const handlerDef = appText.indexOf('handler');
     expect(handlerDef).toBeLessThan(appText.indexOf('pug`'));
 
     const locations = ls.findRenameLocations(APP_FILE, handlerDef, false, false, undefined as any);
-    if (locations) {
-      // Should find at least the declaration
-      expect(locations.length).toBeGreaterThan(0);
-      // All locations should have valid textSpans
-      for (const loc of locations) {
-        expect(loc.textSpan.start).toBeGreaterThanOrEqual(0);
+    expect(locations).toBeDefined();
+    // Should find at least 2 locations: declaration + usage in pug
+    expect(locations!.length).toBeGreaterThanOrEqual(2);
+    // All locations should reference 'handler' text
+    for (const loc of locations!) {
+      expect(loc.textSpan.start).toBeGreaterThanOrEqual(0);
+      expect(loc.textSpan.length).toBe('handler'.length);
+      if (loc.fileName === APP_FILE) {
+        const spanText = appText.slice(loc.textSpan.start, loc.textSpan.start + loc.textSpan.length);
+        expect(spanText).toBe('handler');
       }
     }
-    expect(locations === undefined || Array.isArray(locations)).toBe(true);
   });
 
   it('getRenameInfo in plain file works normally', () => {
@@ -181,18 +183,17 @@ describe('references through real pipeline', () => {
     expect(buttonIdx).toBeGreaterThan(pugStart);
 
     const refs = ls.findReferences(APP_FILE, buttonIdx);
-    if (refs) {
-      expect(refs.length).toBeGreaterThan(0);
-      for (const group of refs) {
-        // Definition textSpan should be valid
-        expect(group.definition.textSpan.start).toBeGreaterThanOrEqual(0);
-        for (const ref of group.references) {
-          // All reference textSpans should be valid
-          expect(ref.textSpan.start).toBeGreaterThanOrEqual(0);
-        }
+    expect(refs).toBeDefined();
+    expect(refs!.length).toBeGreaterThan(0);
+    for (const group of refs!) {
+      expect(group.definition.textSpan.start).toBeGreaterThanOrEqual(0);
+      // Definition should reference Button
+      expect(group.definition.name).toContain('Button');
+      for (const ref of group.references) {
+        expect(ref.textSpan.start).toBeGreaterThanOrEqual(0);
+        expect(ref.textSpan.length).toBe('Button'.length);
       }
     }
-    expect(refs === undefined || Array.isArray(refs)).toBe(true);
   });
 
   it('getReferencesAtPosition on variable in pug returns references', () => {
@@ -201,16 +202,18 @@ describe('references through real pipeline', () => {
     expect(handlerIdx).toBeGreaterThan(pugStart);
 
     const refs = ls.getReferencesAtPosition(APP_FILE, handlerIdx);
-    if (refs) {
-      expect(refs.length).toBeGreaterThan(0);
-      for (const ref of refs) {
-        expect(ref.textSpan.start).toBeGreaterThanOrEqual(0);
-        if (ref.fileName === APP_FILE) {
-          expect(ref.textSpan.start).toBeLessThan(appText.length);
-        }
+    expect(refs).toBeDefined();
+    // Should find at least 2 references: declaration + usage in pug
+    expect(refs!.length).toBeGreaterThanOrEqual(2);
+    for (const ref of refs!) {
+      expect(ref.textSpan.start).toBeGreaterThanOrEqual(0);
+      expect(ref.textSpan.length).toBe('handler'.length);
+      if (ref.fileName === APP_FILE) {
+        expect(ref.textSpan.start).toBeLessThan(appText.length);
+        const spanText = appText.slice(ref.textSpan.start, ref.textSpan.start + ref.textSpan.length);
+        expect(spanText).toBe('handler');
       }
     }
-    expect(refs === undefined || Array.isArray(refs)).toBe(true);
   });
 
   it('findReferences on unmapped position returns undefined', () => {
@@ -230,13 +233,13 @@ describe('references through real pipeline', () => {
     expect(handlerDef).toBeLessThan(appText.indexOf('pug`'));
 
     const refs = ls.findReferences(APP_FILE, handlerDef);
-    if (refs) {
-      expect(refs.length).toBeGreaterThan(0);
-      for (const group of refs) {
-        expect(group.definition.textSpan.start).toBeGreaterThanOrEqual(0);
-      }
+    expect(refs).toBeDefined();
+    expect(refs!.length).toBeGreaterThan(0);
+    for (const group of refs!) {
+      expect(group.definition.textSpan.start).toBeGreaterThanOrEqual(0);
+      // Should find references across declaration and pug usage
+      expect(group.references.length).toBeGreaterThanOrEqual(2);
     }
-    expect(refs === undefined || Array.isArray(refs)).toBe(true);
   });
 
   it('getReferencesAtPosition in plain file works normally', () => {
@@ -270,18 +273,21 @@ describe('document highlights through real pipeline', () => {
     expect(handlerIdx).toBeGreaterThan(pugStart);
 
     const highlights = ls.getDocumentHighlights(APP_FILE, handlerIdx, [APP_FILE]);
-    if (highlights) {
-      expect(highlights.length).toBeGreaterThan(0);
-      for (const docHighlight of highlights) {
-        for (const span of docHighlight.highlightSpans) {
-          expect(span.textSpan.start).toBeGreaterThanOrEqual(0);
-          if (docHighlight.fileName === APP_FILE) {
-            expect(span.textSpan.start).toBeLessThan(appText.length);
-          }
+    expect(highlights).toBeDefined();
+    expect(highlights!.length).toBeGreaterThan(0);
+    for (const docHighlight of highlights!) {
+      // Should have at least 2 highlights (declaration + usage in pug)
+      expect(docHighlight.highlightSpans.length).toBeGreaterThanOrEqual(2);
+      for (const span of docHighlight.highlightSpans) {
+        expect(span.textSpan.start).toBeGreaterThanOrEqual(0);
+        expect(span.textSpan.length).toBe('handler'.length);
+        if (docHighlight.fileName === APP_FILE) {
+          expect(span.textSpan.start).toBeLessThan(appText.length);
+          const spanText = appText.slice(span.textSpan.start, span.textSpan.start + span.textSpan.length);
+          expect(spanText).toBe('handler');
         }
       }
     }
-    expect(highlights === undefined || Array.isArray(highlights)).toBe(true);
   });
 
   it('getDocumentHighlights on unmapped position returns undefined', () => {
@@ -295,15 +301,15 @@ describe('document highlights through real pipeline', () => {
     expect(handlerDef).toBeLessThan(appText.indexOf('pug`'));
 
     const highlights = ls.getDocumentHighlights(APP_FILE, handlerDef, [APP_FILE]);
-    if (highlights) {
-      expect(highlights.length).toBeGreaterThan(0);
-      for (const docHighlight of highlights) {
-        for (const span of docHighlight.highlightSpans) {
-          expect(span.textSpan.start).toBeGreaterThanOrEqual(0);
-        }
+    expect(highlights).toBeDefined();
+    expect(highlights!.length).toBeGreaterThan(0);
+    for (const docHighlight of highlights!) {
+      expect(docHighlight.highlightSpans.length).toBeGreaterThanOrEqual(2);
+      for (const span of docHighlight.highlightSpans) {
+        expect(span.textSpan.start).toBeGreaterThanOrEqual(0);
+        expect(span.textSpan.length).toBe('handler'.length);
       }
     }
-    expect(highlights === undefined || Array.isArray(highlights)).toBe(true);
   });
 
   it('getDocumentHighlights in plain file works normally', () => {
@@ -331,22 +337,19 @@ describe('implementation through real pipeline', () => {
     appText = readOriginal(APP_FILE);
   });
 
-  it('getImplementationAtPosition on component in pug returns results with mapped textSpans', () => {
+  it('getImplementationAtPosition on component in pug returns Button.tsx', () => {
     const pugStart = appText.indexOf('pug`');
     const buttonIdx = appText.indexOf('Button', pugStart + 4);
     expect(buttonIdx).toBeGreaterThan(pugStart);
 
     const impls = ls.getImplementationAtPosition(APP_FILE, buttonIdx);
-    if (impls) {
-      expect(impls.length).toBeGreaterThan(0);
-      for (const impl of impls) {
-        expect(impl.textSpan.start).toBeGreaterThanOrEqual(0);
-      }
-      // Should find Button implementation in Button.tsx
-      const buttonImpl = impls.find(i => i.fileName.includes('Button'));
-      expect(buttonImpl).toBeDefined();
-    }
-    expect(impls === undefined || Array.isArray(impls)).toBe(true);
+    expect(impls).toBeDefined();
+    expect(impls!.length).toBeGreaterThan(0);
+    // Should find Button implementation in Button.tsx
+    const buttonImpl = impls!.find(i => i.fileName.includes('Button'));
+    expect(buttonImpl).toBeDefined();
+    expect(buttonImpl!.textSpan.start).toBeGreaterThanOrEqual(0);
+    expect(buttonImpl!.fileName).toContain('Button.tsx');
   });
 
   it('getImplementationAtPosition on unmapped position returns undefined', () => {
@@ -360,8 +363,12 @@ describe('implementation through real pipeline', () => {
     expect(handlerDef).toBeLessThan(appText.indexOf('pug`'));
 
     const impls = ls.getImplementationAtPosition(APP_FILE, handlerDef);
-    // At variable declaration, implementation may or may not return results
-    expect(impls === undefined || Array.isArray(impls)).toBe(true);
+    // At const declaration, should return the declaration itself
+    if (impls) {
+      expect(impls.length).toBeGreaterThan(0);
+      expect(impls[0].fileName).toBe(APP_FILE);
+      expect(impls[0].textSpan.start).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it('getImplementationAtPosition in plain file works normally', () => {

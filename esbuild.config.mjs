@@ -1,4 +1,6 @@
 import * as esbuild from 'esbuild';
+import fs from 'fs';
+import path from 'path';
 
 const watch = process.argv.includes('--watch');
 
@@ -25,13 +27,25 @@ const configs = [
   },
 ];
 
+/** Create a shim module so tsserver can resolve the plugin by name */
+function createPluginShim() {
+  const shimDir = path.resolve('node_modules/vscode-pug-react');
+  fs.mkdirSync(shimDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(shimDir, 'package.json'),
+    JSON.stringify({ name: 'vscode-pug-react', main: '../../dist/plugin.js' }),
+  );
+}
+
 async function main() {
   if (watch) {
     const contexts = await Promise.all(configs.map(c => esbuild.context(c)));
     await Promise.all(contexts.map(c => c.watch()));
+    createPluginShim();
     console.log('Watching for changes...');
   } else {
     await Promise.all(configs.map(c => esbuild.build(c)));
+    createPluginShim();
   }
 }
 

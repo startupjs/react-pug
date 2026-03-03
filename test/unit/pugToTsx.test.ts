@@ -288,9 +288,15 @@ describe('error handling', () => {
     // This should cause a lexer error (invalid indentation)
     const result = compilePugToTsx('  div\n span');
     // Whether this causes an error depends on the lexer --
-    // if it does, parseError should be set; if not, it still shouldn't crash
-    expect(result).toBeDefined();
-    expect(result.tsx).toBeDefined();
+    // if it does, parseError should be set; if not, tsx should contain valid JSX
+    expect(typeof result.tsx).toBe('string');
+    expect(result.tsx.length).toBeGreaterThan(0);
+    if (result.parseError) {
+      expect(result.parseError.message).toBeDefined();
+      expect(result.tsx).toContain('null');
+    } else {
+      expect(result.tsx).toContain('<');
+    }
   });
 
   it('result always has tsx string even on error', () => {
@@ -298,6 +304,11 @@ describe('error handling', () => {
     const result = compilePugToTsx('div(\n  !!!invalid');
     expect(typeof result.tsx).toBe('string');
     expect(result.tsx.length).toBeGreaterThan(0);
+    // On error, the tsx should be the null placeholder
+    if (result.parseError) {
+      expect(result.tsx).toContain('null');
+      expect(result.tsx).toContain('JSX.Element');
+    }
   });
 });
 
@@ -320,11 +331,12 @@ describe('lexer tokens', () => {
     }
   });
 
-  it('returns empty tokens on lexer error', () => {
-    // If this triggers a lexer error, tokens should be empty
-    // If it doesn't error, tokens should be present
+  it('tokens include tag and eos for simple input', () => {
     const result = compilePugToTsx('div');
     expect(Array.isArray(result.lexerTokens)).toBe(true);
+    const types = result.lexerTokens.map(t => t.type);
+    expect(types).toContain('tag');
+    expect(types).toContain('eos');
   });
 });
 
