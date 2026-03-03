@@ -62,6 +62,7 @@
           "source.jsx"
         ],
         "embeddedLanguages": {
+          "source.pug": "jade",
           "text.pug": "jade"
         }
       }

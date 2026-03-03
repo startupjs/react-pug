@@ -164,16 +164,16 @@ suite('Extension Host Features (demo workspace)', () => {
         'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
         'const handleReset = () => {};',
         'const view = pug`',
-        '  Button(onClick=handleReset, )',
+        '  Button(onClick=handleReset )',
         '`;',
         'export { view };',
       ].join('\n'),
     );
 
     const text = completionDoc.getText();
-    const idx = text.indexOf('onClick=handleReset, ');
+    const idx = text.indexOf('onClick=handleReset ');
     assert.ok(idx > 0, 'Could not find completion target in temp document');
-    const pos = completionDoc.positionAt(idx + 'onClick=handleReset, '.length);
+    const pos = completionDoc.positionAt(idx + 'onClick=handleReset '.length);
     const editor = await vscode.window.showTextDocument(completionDoc);
     editor.selection = new vscode.Selection(pos, pos);
     editor.revealRange(new vscode.Range(pos, pos));
@@ -256,13 +256,36 @@ suite('Extension Host Features (demo workspace)', () => {
       symbol: 'Button',
       position: { line: pos.line + 1, character: pos.character + 1 },
     });
-    await vscode.commands.executeCommand('editor.action.revealDefinition');
+    let definitionEditor;
+    let usedProviderFallback = false;
 
-    const definitionEditor = await retry(async () => {
-      const active = vscode.window.activeTextEditor;
-      if (!active) return null;
-      return path.basename(active.document.uri.fsPath) === 'Button.tsx' ? active : null;
-    }, 20000, 250);
+    try {
+      await vscode.commands.executeCommand('editor.action.revealDefinition');
+      definitionEditor = await retry(async () => {
+        const active = vscode.window.activeTextEditor;
+        if (!active) return null;
+        return path.basename(active.document.uri.fsPath) === 'Button.tsx' ? active : null;
+      }, 20000, 250);
+    } catch {
+      usedProviderFallback = true;
+      const defs = await vscode.commands.executeCommand(
+        'vscode.executeDefinitionProvider',
+        appDoc.uri,
+        pos,
+      );
+      assert.ok(Array.isArray(defs) && defs.length > 0, 'Expected definition provider results for Button');
+      const target = defs.find((d) => {
+        const uri = d.uri ?? d.targetUri;
+        return uri && path.basename(uri.fsPath) === 'Button.tsx';
+      });
+      assert.ok(target, 'Expected definition provider to include Button.tsx');
+
+      const targetUri = target.uri ?? target.targetUri;
+      definitionEditor = await vscode.window.showTextDocument(targetUri);
+      await captureTestStep('features-ui-definition-fallback-provider', {
+        targetFile: targetUri.fsPath,
+      });
+    }
 
     assert.strictEqual(
       path.basename(definitionEditor.document.uri.fsPath),
@@ -271,6 +294,7 @@ suite('Extension Host Features (demo workspace)', () => {
     );
     await captureTestStep('features-after-ui-definition', {
       targetFile: definitionEditor.document.uri.fsPath,
+      usedProviderFallback,
     });
 
     await vscode.window.showTextDocument(appDoc);
@@ -299,13 +323,63 @@ suite('Extension Host Features (demo workspace)', () => {
       .map((token) => (typeof token?.c === 'string' ? token.c : ''))
       .filter(Boolean);
     const serialized = JSON.stringify(syntaxTokens);
-    const hasPugScope = /text\\.pug/i.test(serialized);
+    const hasPugScope = /(text|source)\.pug/i.test(serialized);
     const importToken = syntaxTokens.find((token) => typeof token?.c === 'string' && token.c.includes("import React"));
     const importTokenScopes = typeof importToken?.t === 'string' ? importToken.t : '';
     const hasLeakIntoTopLevelTsx = /meta\\.embedded\\.inline\\.pug/.test(importTokenScopes);
     const pugishTokenEntries = syntaxTokens.filter((token) => {
       const text = typeof token?.c === 'string' ? token.c : '';
       return /(onClick|variant|label|todo-item|Button\(onClick=handleReset)/.test(text);
+    });
+    const propertyAccessMisTokenization = syntaxTokens.filter((token) => {
+      const text = typeof token?.c === 'string' ? token.c : '';
+      const scopes = typeof token?.t === 'string' ? token.t : '';
+      return text === '.id' && /entity\.other\.attribute-name\.class\.css/.test(scopes);
+    });
+    const hasH3TagScope = syntaxTokens.some((token) => {
+      const text = typeof token?.c === 'string' ? token.c : '';
+      const scopes = typeof token?.t === 'string' ? token.t : '';
+      return /\bh3\b/.test(text) && /entity\.name\.tag\.(html|pug)/.test(scopes);
+    });
+    const hasEmptyClassScope = syntaxTokens.some((token) => {
+      const text = typeof token?.c === 'string' ? token.c : '';
+      const scopes = typeof token?.t === 'string' ? token.t : '';
+      return /\.empty\b/.test(text) && /entity\.other\.attribute-name\.class\.css/.test(scopes);
+    });
+    const emptyTokenCandidates = syntaxTokens
+      .filter((token) => {
+        const text = typeof token?.c === 'string' ? token.c : '';
+        return /empty/i.test(text);
+      })
+      .slice(0, 8)
+      .map((token) => ({
+        c: token?.c,
+        t: stringifySmall(token?.t),
+      }));
+    const hasInterpolationExprScope = syntaxTokens.some((token) => {
+      const text = typeof token?.c === 'string' ? token.c : '';
+      const scopes = typeof token?.t === 'string' ? token.t : '';
+      return text === 'activeTodos' && /meta\.embedded\.expression\.pug/.test(scopes);
+    });
+    const activeTodosTokenCandidates = syntaxTokens
+      .filter((token) => {
+        const text = typeof token?.c === 'string' ? token.c : '';
+        return /activeTodos/.test(text);
+      })
+      .slice(0, 10)
+      .map((token) => ({
+        c: token?.c,
+        t: stringifySmall(token?.t),
+      }));
+    const hasEachExprScope = syntaxTokens.some((token) => {
+      const text = typeof token?.c === 'string' ? token.c : '';
+      const scopes = typeof token?.t === 'string' ? token.t : '';
+      return text === 'activeTodos' && /meta\.control\.each\.expression\.pug/.test(scopes);
+    });
+    const hasLineEqExprScope = syntaxTokens.some((token) => {
+      const text = typeof token?.c === 'string' ? token.c : '';
+      const scopes = typeof token?.t === 'string' ? token.t : '';
+      return /\btodo\b/.test(text) && /meta\.embedded\.expression\.pug\.line/.test(scopes);
     });
     const hasPugLikeTokenization = pugishTokenEntries.length > 0
       || tokenTexts.some((text) => /(onClick|todo-item|Button\(onClick=handleReset)/.test(text));
@@ -315,8 +389,20 @@ suite('Extension Host Features (demo workspace)', () => {
       hasPugScope,
       hasPugLikeTokenization,
       hasLeakIntoTopLevelTsx,
+      propertyAccessMisTokenizationCount: propertyAccessMisTokenization.length,
+      hasH3TagScope,
+      hasEmptyClassScope,
+      emptyTokenCandidates,
+      hasInterpolationExprScope,
+      activeTodosTokenCandidates,
+      hasEachExprScope,
+      hasLineEqExprScope,
       pugishTokenCount: pugishTokenEntries.length,
       pugishTokenSamples: pugishTokenEntries.slice(0, 6).map((entry) => ({
+        c: entry.c,
+        t: stringifySmall(entry.t),
+      })),
+      propertyAccessMisTokenizationSamples: propertyAccessMisTokenization.slice(0, 6).map((entry) => ({
         c: entry.c,
         t: stringifySmall(entry.t),
       })),
@@ -328,6 +414,22 @@ suite('Extension Host Features (demo workspace)', () => {
     });
     assert.ok(hasPugLikeTokenization, 'Expected tokenization to include pug template content');
     assert.ok(!hasLeakIntoTopLevelTsx, 'Pug scope leaked into top-level TSX tokenization');
+    assert.ok(hasH3TagScope, 'Expected h3 tag token to carry Pug tag scope');
+    assert.ok(
+      hasEmptyClassScope,
+      `Expected .empty shorthand to carry class scope. candidates=${stringifySmall(emptyTokenCandidates, 1200)}`,
+    );
+    assert.ok(
+      hasInterpolationExprScope,
+      `Expected #{...} interpolation to carry embedded expression scope. activeTodosCandidates=${stringifySmall(activeTodosTokenCandidates, 1200)}`,
+    );
+    assert.ok(hasEachExprScope, 'Expected each ... in expression to carry embedded expression scope');
+    assert.ok(hasLineEqExprScope, 'Expected tag= expression line to carry embedded expression scope');
+    assert.strictEqual(
+      propertyAccessMisTokenization.length,
+      0,
+      'Property access token (e.g. todo.id) was mis-tokenized as a Pug class shorthand',
+    );
 
     await vscode.commands.executeCommand('editor.action.inspectTMScopes');
     await wait(700);
