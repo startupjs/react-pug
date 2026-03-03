@@ -666,3 +666,66 @@ describe('else branch each and piped text are compiled without false diagnostics
     expect(pugParseErrors).toHaveLength(0);
   });
 });
+
+// ── unbuffered "-" code line diagnostics/hover mapping ─────────
+
+describe('unbuffered "-" code lines map diagnostics and hover correctly', () => {
+  let ls: ts.LanguageService;
+  let file: string;
+  let text: string;
+
+  beforeAll(async () => {
+    const init = await loadPlugin();
+
+    file = path.join(FIXTURES_DIR, 'diag-unbuffered-code.tsx');
+    text = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const todos = [1, 2, 3];',
+      'const format = (n: number) => String(n);',
+      'const view = pug`',
+      '  - const total = todos.length + missingTotal',
+      '  - const label = format(total)',
+      '  - missingFn(total + missingArg)',
+      '  span= label',
+      '`;',
+    ].join('\n');
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(file, text);
+
+    const rootFiles = [file, BUTTON_FILE];
+    const result = createLanguageServiceWithPlugin(
+      init, rootFiles, FIXTURES_DIR, {}, virtualFiles,
+    );
+    ls = result.ls;
+  });
+
+  it('reports unmapped-name diagnostics on unbuffered code lines at exact offsets', () => {
+    const diags = ls.getSemanticDiagnostics(file);
+
+    for (const name of ['missingTotal', 'missingFn', 'missingArg']) {
+      const expectedStart = text.indexOf(name);
+      expect(expectedStart).toBeGreaterThanOrEqual(0);
+
+      const diag = diags.find((d) => {
+        const msg = typeof d.messageText === 'string' ? d.messageText : '';
+        return d.code === 2304 && msg.includes(name);
+      });
+
+      expect(diag, `Expected TS2304 diagnostic for ${name}`).toBeDefined();
+      expect(diag!.start, `Unexpected mapped start for ${name}`).toBe(expectedStart);
+      expect(diag!.length, `Unexpected mapped length for ${name}`).toBe(name.length);
+    }
+  });
+
+  it('hover/quickinfo works on symbols referenced in unbuffered code lines', () => {
+    const formatIdx = text.indexOf('format(total)');
+    expect(formatIdx).toBeGreaterThanOrEqual(0);
+    const formatPos = formatIdx;
+    const qi = ls.getQuickInfoAtPosition(file, formatPos);
+
+    expect(qi).toBeDefined();
+    const display = ts.displayPartsToString(qi?.displayParts ?? []);
+    expect(display).toMatch(/format/);
+    expect(display).toMatch(/number/);
+  });
+});

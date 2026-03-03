@@ -208,6 +208,19 @@ describe('highlighting regressions for tag/class/equals lines', () => {
     expect('Button.primary').toMatch(componentWithClass);
     expect('span.bold').toMatch(tagWithClass);
   });
+
+  it('defines unbuffered "-" code rule with embedded TS/TSX patterns', () => {
+    grammar = grammar ?? JSON.parse(readFileSync(grammarPath, 'utf-8'));
+    const rule = grammar.repository?.['pug-unbuffered-code-expression'];
+    expect(rule).toBeDefined();
+    expect(typeof rule.begin).toBe('string');
+    expect(rule.begin).toContain('(-)');
+    expect(rule.name).toBe('meta.embedded.expression.pug.unbuffered');
+    expect(Array.isArray(rule.patterns)).toBe(true);
+    const includes = rule.patterns.map((p: any) => p.include);
+    expect(includes).toContain('source.ts');
+    expect(includes).toContain('source.tsx');
+  });
 });
 
 // ── package.json contributes.grammars tests ──────────────────────

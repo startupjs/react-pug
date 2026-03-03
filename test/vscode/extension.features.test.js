@@ -775,4 +775,115 @@ suite('Extension Host Features (demo workspace)', () => {
       codes: diagnostics.all.map((d) => d.code ?? null),
     });
   });
+
+  test('unbuffered "-" code lines support diagnostics, hover, completion, and highlighting', async function () {
+    this.timeout(60000);
+    const content = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const todos = [1, 2, 3];',
+      'const format = (n: number) => String(n);',
+      'const view = pug`',
+      '  - const total = todos.length + missingTotal',
+      '  - const label = format(total)',
+      '  - missingFn(total + missingArg)',
+      '  - const alias = form',
+      '  span= label',
+      '`;',
+      'export { view };',
+    ].join('\n');
+
+    const doc = await createTempDoc('__vscode_test_unbuffered_code.tsx', content);
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+
+    const missIdx = text.indexOf('missingFn');
+    assert.ok(missIdx > 0, 'Could not find missingFn in unbuffered code fixture');
+    const missPos = doc.positionAt(missIdx);
+    editor.selection = new vscode.Selection(missPos, missPos);
+    editor.revealRange(new vscode.Range(missPos, missPos));
+    await captureTestStep('features-before-unbuffered-code-checks', {
+      file: doc.uri.fsPath,
+      position: { line: missPos.line + 1, character: missPos.character + 1 },
+    });
+
+    const diagnostics = await retry(async () => {
+      const result = vscode.languages.getDiagnostics(doc.uri);
+      const missing = result.filter((d) => {
+        const msg = typeof d.message === 'string' ? d.message : '';
+        return d.code === 2304
+          && (/missingTotal|missingFn|missingArg/.test(msg));
+      });
+      return missing.length >= 3 ? result : null;
+    }, 45000, 500);
+
+    const findDiag = (name) => diagnostics.find((d) => {
+      const msg = typeof d.message === 'string' ? d.message : '';
+      return d.code === 2304 && msg.includes(name);
+    });
+
+    for (const name of ['missingTotal', 'missingFn', 'missingArg']) {
+      const diag = findDiag(name);
+      assert.ok(diag, `Expected TS2304 diagnostic for ${name}`);
+      const expectedStart = text.indexOf(name);
+      const actualStart = doc.offsetAt(diag.range.start);
+      const actualLength = doc.offsetAt(diag.range.end) - actualStart;
+      assert.strictEqual(actualStart, expectedStart, `Unexpected mapped start for ${name}`);
+      assert.strictEqual(actualLength, name.length, `Unexpected mapped length for ${name}`);
+    }
+
+    const formatIdx = text.indexOf('format(total)');
+    assert.ok(formatIdx > 0, 'Could not find format(total) in unbuffered code fixture');
+    const formatPos = doc.positionAt(formatIdx);
+    const hovers = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeHoverProvider',
+        doc.uri,
+        formatPos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    }, 30000, 300);
+    const hoverCombined = hovers.map(hoverText).join('\n');
+    assert.ok(/format/.test(hoverCombined), 'Expected hover over unbuffered code symbol to include format');
+
+    const completionIdx = text.indexOf('= form');
+    assert.ok(completionIdx > 0, 'Could not find completion anchor "= form" in unbuffered code fixture');
+    const completionPos = doc.positionAt(completionIdx + '= '.length + 'form'.length);
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        doc.uri,
+        completionPos,
+      );
+      return result && Array.isArray(result.items) && result.items.length > 0 ? result : null;
+    }, 30000, 300);
+    const completionLabels = completions.items.map((item) => labelText(item.label));
+    assert.ok(
+      completionLabels.includes('format'),
+      'Expected completion suggestions in unbuffered code to include format',
+    );
+
+    const syntaxTokens = await retry(async () => {
+      const result = await vscode.commands.executeCommand('_workbench.captureSyntaxTokens', doc.uri);
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    }, 45000, 500);
+    const tokenEntries = syntaxTokens.map((token) => ({
+      text: typeof token?.c === 'string' ? token.c : '',
+      scopes: typeof token?.t === 'string' ? token.t : '',
+    }));
+    const hasUnbufferedScope = tokenEntries.some((entry) =>
+      /(const|missingFn|missingArg|format)/.test(entry.text)
+      && /meta\.embedded\.expression\.pug\.unbuffered/.test(entry.scopes)
+    );
+    assert.ok(
+      hasUnbufferedScope,
+      'Expected "-" lines to carry unbuffered embedded-expression scope for TS highlighting',
+    );
+
+    await captureTestStep('features-after-unbuffered-code-checks', {
+      diagnosticsCount: diagnostics.length,
+      hasHoverForFormat: /format/.test(hoverCombined),
+      completionContainsFormat: completionLabels.includes('format'),
+      hasUnbufferedScope,
+    });
+  });
 });

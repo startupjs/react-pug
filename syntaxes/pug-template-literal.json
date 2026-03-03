@@ -30,6 +30,9 @@
           "include": "#pug-control-flow"
         },
         {
+          "include": "#pug-unbuffered-code-expression"
+        },
+        {
           "include": "#pug-tag-output-expression"
         },
         {
@@ -72,6 +75,24 @@
               "name": "keyword.control.pug"
             }
           }
+        }
+      ]
+    },
+    "pug-unbuffered-code-expression": {
+      "begin": "(^\\s*)(-)(\\s+)",
+      "beginCaptures": {
+        "2": {
+          "name": "keyword.operator.unbuffered.pug"
+        }
+      },
+      "end": "$",
+      "name": "meta.embedded.expression.pug.unbuffered",
+      "patterns": [
+        {
+          "include": "source.ts"
+        },
+        {
+          "include": "source.tsx"
         }
       ]
     },
