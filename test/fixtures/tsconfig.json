@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "outDir": "out",
     "plugins": [
-      { "name": "vscode-pug-react" }
+      { "name": "vscode-pug-react-ts-plugin" }
     ]
   },
   "include": ["*.tsx", "*.ts"]

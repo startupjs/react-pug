@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "plugins": [
-      { "name": "vscode-pug-react" }
+      { "name": "vscode-pug-react-ts-plugin" }
     ]
   },
   "include": ["src"]

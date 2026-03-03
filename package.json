@@ -21,7 +21,7 @@
   "contributes": {
     "typescriptServerPlugins": [
       {
-        "name": "vscode-pug-react",
+        "name": "vscode-pug-react-ts-plugin",
         "enableForWorkspaceTypeScriptVersions": true
       }
     ],
@@ -78,7 +78,8 @@
     "@startupjs/pug-lexer": "^4.1.0-1",
     "@volar/source-map": "^2.4.28",
     "pug-parser": "^6.0.0",
-    "pug-strip-comments": "^2.0.0"
+    "pug-strip-comments": "^2.0.0",
+    "vscode-pug-react-ts-plugin": "file:./ts-plugin"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",

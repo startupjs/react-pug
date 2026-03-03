@@ -102,7 +102,7 @@ For the best experience, add the TypeScript plugin to your `tsconfig.json`:
 {
   "compilerOptions": {
     "plugins": [
-      { "name": "vscode-pug-react" }
+      { "name": "vscode-pug-react-ts-plugin" }
     ]
   }
 }

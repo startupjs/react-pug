@@ -22,8 +22,9 @@ function getSourceMap(region: PugRegion): SourceMap<CodeInformation> {
  *
  * Each non-empty line has `commonIndent` characters removed from its start.
  * Empty lines are unchanged (they become '' in both spaces).
+ * Returns null if the raw offset points inside removed indentation.
  */
-function rawToStrippedOffset(rawText: string, rawOffset: number, commonIndent: number): number {
+function rawToStrippedOffset(rawText: string, rawOffset: number, commonIndent: number): number | null {
   if (commonIndent === 0) return rawOffset;
   let stripped = 0;
   let raw = 0;
@@ -35,6 +36,10 @@ function rawToStrippedOffset(rawText: string, rawOffset: number, commonIndent: n
       // Offset is on this line
       const colInRaw = rawOffset - raw;
       const indentToRemove = line.trim().length === 0 ? 0 : commonIndent;
+      // If the cursor is inside removed indentation, treat as unmapped.
+      if (indentToRemove > 0 && colInRaw < indentToRemove) {
+        return null;
+      }
       const colInStripped = Math.max(0, colInRaw - indentToRemove);
       return stripped + colInStripped;
     }
@@ -171,6 +176,7 @@ export function originalToShadow(
     // Convert raw offset to stripped offset (source map uses stripped coordinates)
     const rawText = doc.originalText.slice(region.pugTextStart, region.pugTextEnd);
     const pugOffset = rawToStrippedOffset(rawText, rawOffset, region.commonIndent);
+    if (pugOffset == null) return null;
 
     const sm = getSourceMap(region);
     // toGeneratedLocation maps source (pug) offset -> generated (TSX) offset

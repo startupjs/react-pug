@@ -1,0 +1,5 @@
+{
+  "name": "vscode-pug-react-ts-plugin",
+  "private": true,
+  "main": "../../dist/plugin.js"
+}

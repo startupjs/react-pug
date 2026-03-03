@@ -60,6 +60,18 @@ describe('source mapping with indented templates (Finding 1)', () => {
     expect(doc.shadowText.slice(shadowPos!, shadowPos! + 7)).toBe('onClick');
   });
 
+  it('leading indentation inside pug content is unmapped (returns null)', () => {
+    const source = 'const view = pug`\\n    Button(onClick=handler)\\n`;';
+    const doc = makeDoc(source);
+    const lineStart = source.indexOf('    Button');
+    expect(lineStart).toBeGreaterThan(-1);
+
+    for (let i = 0; i < 4; i++) {
+      const pos = lineStart + i;
+      expect(originalToShadow(doc, pos)).toBeNull();
+    }
+  });
+
   it('handler maps correctly with 2-space common indent', () => {
     const doc = makeDoc(source2sp);
     const handlerOrig = source2sp.indexOf('handler');
@@ -358,30 +370,42 @@ describe('version incorporates host version (Finding 2)', () => {
 
 describe('plugin module resolvability (Finding 3)', () => {
   const root = resolve(__dirname, '../..');
-  const shimPkgPath = resolve(root, 'node_modules/vscode-pug-react/package.json');
+  const depPkgPath = resolve(root, 'node_modules/vscode-pug-react-ts-plugin/package.json');
+  const rootPkgPath = resolve(root, 'package.json');
   const distPluginPath = resolve(root, 'dist/plugin.js');
 
-  it('node_modules/vscode-pug-react/package.json exists', () => {
-    expect(existsSync(shimPkgPath)).toBe(true);
+  it('package.json declares vscode-pug-react-ts-plugin dependency', () => {
+    const pkg = JSON.parse(readFileSync(rootPkgPath, 'utf-8'));
+    expect(pkg.dependencies?.['vscode-pug-react-ts-plugin']).toBe('file:./ts-plugin');
   });
 
-  it('shim package.json has main field pointing to ../../dist/plugin.js', () => {
-    const content = JSON.parse(readFileSync(shimPkgPath, 'utf-8'));
+  it('node_modules/vscode-pug-react-ts-plugin/package.json exists', () => {
+    expect(existsSync(depPkgPath)).toBe(true);
+  });
+
+  it('dependency package.json points to dist/plugin.js', () => {
+    const content = JSON.parse(readFileSync(depPkgPath, 'utf-8'));
     expect(content.main).toBe('../../dist/plugin.js');
   });
 
   it('the resolved dist/plugin.js file actually exists', () => {
-    const shimDir = resolve(root, 'node_modules/vscode-pug-react');
-    const shimPkg = JSON.parse(readFileSync(shimPkgPath, 'utf-8'));
-    const resolvedPath = resolve(shimDir, shimPkg.main);
+    const depDir = resolve(root, 'node_modules/vscode-pug-react-ts-plugin');
+    const depPkg = JSON.parse(readFileSync(depPkgPath, 'utf-8'));
+    const resolvedPath = resolve(depDir, depPkg.main);
     expect(existsSync(resolvedPath)).toBe(true);
   });
 
   it('resolved path matches dist/plugin.js', () => {
-    const shimDir = resolve(root, 'node_modules/vscode-pug-react');
-    const shimPkg = JSON.parse(readFileSync(shimPkgPath, 'utf-8'));
-    const resolvedPath = resolve(shimDir, shimPkg.main);
+    const depDir = resolve(root, 'node_modules/vscode-pug-react-ts-plugin');
+    const depPkg = JSON.parse(readFileSync(depPkgPath, 'utf-8'));
+    const resolvedPath = resolve(depDir, depPkg.main);
     expect(resolvedPath).toBe(distPluginPath);
+  });
+
+  it('typescriptServerPlugins contribution uses vscode-pug-react-ts-plugin', () => {
+    const pkg = JSON.parse(readFileSync(rootPkgPath, 'utf-8'));
+    const tsPlugins = pkg.contributes?.typescriptServerPlugins ?? [];
+    expect(tsPlugins[0]?.name).toBe('vscode-pug-react-ts-plugin');
   });
 });
 

@@ -202,3 +202,128 @@ All critical and high-severity findings have been addressed. The test suite has 
 | 6 | MEDIUM | No CI pipeline | NOT ADDRESSED (out of scope) |
 
 **Test suite**: 560 → 592 tests across 26 files, all passing. Assertions now verify semantic correctness at the token level (exact span text, specific completion names, round-trip mapping accuracy) rather than just structural existence checks.
+
+---
+
+## Re-Audit Validation (2026-03-03, pass 2)
+
+### What was re-validated
+1. Re-read this file (`audit.md`) and validated each claimed fix against current source.
+2. Re-ran project checks:
+   - `npm run typecheck` -> pass
+   - `npm run build` -> pass
+   - `npm test` -> pass (592 tests)
+3. Re-ran targeted repros for:
+   - indented-template mapping correctness
+   - host-version staleness behavior
+   - grammar overmatch behavior
+   - plugin module resolvability
+
+### Validation verdict by original finding
+1. **Finding 1 (mapping drift)**: Mostly fixed.
+   - Token-level mapping now works for indented templates (`Button`, `onClick`, `handler`, `label` map to correct shadow tokens and round-trip).
+   - New edge case found: offsets in stripped leading indentation spaces map to the first token of the line instead of being treated as unmapped/null.
+2. **Finding 2 (version staleness)**: Fixed.
+   - `getScriptVersion` now includes host version and changes even without fresh snapshot (`1:1` -> `2:1`).
+3. **Finding 3 (plugin wiring)**: Partially fixed in local dev, still high risk for packaging/distribution.
+   - Current fix creates `node_modules/vscode-pug-react` shim at build time.
+   - `npm ls` reports this shim as **extraneous**.
+   - `npm prune --production --dry-run` shows it would be removed (`remove vscode-pug-react undefined`).
+   - This strongly suggests the shim is brittle for VSIX/production packaging workflows.
+4. **Finding 4 (grammar overmatch)**: Fixed.
+   - Updated regex no longer matches `notpug\``/`my_pug\``/`$pug\`` and still matches valid contexts.
+5. **Finding 5 (weak tests)**: Improved.
+   - Test suite increased and stronger assertions are present.
+   - Not all tests are strict, but quality is materially better.
+6. **Finding 6 (CI missing)**: Still not addressed.
+
+### New/remaining findings after re-audit
+
+#### A) HIGH: Plugin entrypoint fix relies on extraneous shim under `node_modules`
+Files:
+- `esbuild.config.mjs`
+- `node_modules/vscode-pug-react/package.json` (generated artifact)
+
+Why:
+- The fix depends on a generated module not declared in dependencies.
+- Packaging/prune steps can remove it, breaking tsserver resolution again.
+
+Evidence:
+- `npm ls vscode-pug-react --depth=0` -> `vscode-pug-react@ extraneous`
+- `npm prune --production --dry-run` includes `remove vscode-pug-react undefined`
+
+Impact:
+- Works locally after build, but may fail in packaged/published extension workflows.
+
+#### B) MEDIUM: Leading indentation spaces inside pug content are not treated as unmapped
+Files:
+- `src/language/positionMapping.ts` (`rawToStrippedOffset`)
+
+Why:
+- Raw offsets within stripped indent are clamped to stripped column `0`.
+- Multiple raw positions collapse to one mapped token position.
+
+Evidence:
+- For a line `    Button(...)`, all four leading spaces map to the same shadow position as `Button`.
+
+Impact:
+- Cursor on indentation whitespace may produce token-context IntelliSense instead of null/unmapped behavior.
+
+### Updated overall status
+- Substantial progress and most previously critical issues are genuinely improved.
+- Project is **closer to production quality**, but not fully clean yet due to:
+  1. fragile plugin resolvability strategy for packaging (HIGH)
+  2. indentation-whitespace mapping edge case (MEDIUM)
+  3. missing CI gate (MEDIUM)
+
+---
+
+## Patch follow-up (2026-03-03, pass 3 by Codex)
+
+Patched the two remaining code issues from pass 2:
+
+1. **Plugin resolvability packaging fix (HIGH)**
+   - Replaced build-time shim creation in `node_modules` with a real file dependency package:
+     - Added `ts-plugin/package.json` (`name: vscode-pug-react-ts-plugin`, `main: ../../dist/plugin.js`)
+     - Added dependency in root `package.json`:
+       - `"vscode-pug-react-ts-plugin": "file:./ts-plugin"`
+     - Updated `contributes.typescriptServerPlugins[0].name` to `vscode-pug-react-ts-plugin`
+     - Removed `createPluginShim()` from `esbuild.config.mjs`
+   - Validation:
+     - `npm ls vscode-pug-react-ts-plugin --depth=0` shows installed (non-extraneous local file dep).
+     - `npm prune --production --dry-run` no longer reports removal of plugin module.
+     - `require.resolve('vscode-pug-react-ts-plugin')` resolves to `dist/plugin.js`.
+
+2. **Indentation-whitespace mapping behavior (MEDIUM)**
+   - Updated `src/language/positionMapping.ts`:
+     - `rawToStrippedOffset()` now returns `null` when cursor is inside stripped indentation.
+     - `originalToShadow()` now returns `null` for that case instead of collapsing to line-start token.
+   - Validation:
+     - Repro now returns `[null, null, null, null]` for four leading spaces before `Button(...)`.
+
+Additional updates:
+- Strengthened/updated tests in `test/unit/audit-fixes.test.ts` for new packaging strategy and indentation-whitespace behavior.
+- Updated plugin name references in `README.md`, `test/fixtures/tsconfig.json`, and `examples/demo/tsconfig.json`.
+
+Final status after pass 3:
+- Finding A (packaging/shim fragility): **FIXED**
+- Finding B (indent whitespace mapping): **FIXED**
+- CI gate: **still not addressed** (unchanged)
+
+---
+
+## CI follow-up (2026-03-03, pass 4 by Codex)
+
+CI quality gate is now implemented.
+
+- Added GitHub Actions workflow: `.github/workflows/ci.yml`
+- Trigger: `push` and `pull_request` on `master`
+- Job: `quality-gates` on `ubuntu-latest`
+- Steps:
+  1. `npm ci`
+  2. `npm run typecheck`
+  3. `npm run build`
+  4. `npm test`
+
+Status update:
+- Finding 6 (missing CI): **FIXED**
