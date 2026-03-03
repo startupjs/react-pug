@@ -443,6 +443,93 @@ suite('Extension Host Features (demo workspace)', () => {
     await vscode.commands.executeCommand('editor.action.inspectTMScopes');
   });
 
+  test('textmate highlighting keeps tag/component scopes with class shorthand and "=" output', async function () {
+    this.timeout(60000);
+    const content = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const activeTodos = [1, 2, 3];',
+      'const view = pug`',
+      '  span One',
+      '  span.classOnly Two',
+      '  span= activeTodos.length',
+      '  span.classEq= activeTodos.length',
+      '  Button',
+      '  Button.primary',
+      '  Button= activeTodos.length',
+      '`;',
+      'export { view };',
+    ].join('\n');
+    const doc = await createTempDoc('__vscode_test_highlight_tag_class.tsx', content);
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+
+    const idx = text.indexOf('span.classOnly');
+    assert.ok(idx > 0, 'Could not find span.classOnly in highlight regression fixture');
+    const pos = doc.positionAt(idx);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+    await captureTestStep('features-before-highlight-tag-class-capture', {
+      file: doc.uri.fsPath,
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+
+    const syntaxTokens = await retry(async () => {
+      const result = await vscode.commands.executeCommand('_workbench.captureSyntaxTokens', doc.uri);
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    }, 45000, 500);
+
+    const tokenEntries = syntaxTokens
+      .map((token) => ({
+        text: typeof token?.c === 'string' ? token.c : '',
+        scopes: typeof token?.t === 'string' ? token.t : '',
+      }))
+      .filter((entry) => entry.text.length > 0);
+
+    const scopeHas = (fragment, scopeRegex) => tokenEntries.some((entry) =>
+      entry.text.includes(fragment) && scopeRegex.test(entry.scopes)
+    );
+
+    const spanTagScopeCount = tokenEntries.filter((entry) =>
+      entry.text.includes('span') && /entity\.name\.tag\.(html|pug)/.test(entry.scopes)
+    ).length;
+
+    const buttonComponentScopeCount = tokenEntries.filter((entry) =>
+      entry.text.includes('Button') && /support\.class\.component\.tsx/.test(entry.scopes)
+    ).length;
+
+    const classScopeRegex = /entity\.other\.attribute-name\.class\.css/;
+    const hasClassOnlyScope = scopeHas('.classOnly', classScopeRegex);
+    const hasClassEqScope = scopeHas('.classEq', classScopeRegex);
+    const hasPrimaryScope = scopeHas('.primary', classScopeRegex);
+
+    assert.ok(
+      spanTagScopeCount >= 4,
+      `Expected span tags to keep tag scope across plain/class/= lines, got ${spanTagScopeCount}`,
+    );
+    assert.ok(
+      buttonComponentScopeCount >= 3,
+      `Expected Button components to keep component scope across plain/class/= lines, got ${buttonComponentScopeCount}`,
+    );
+    assert.ok(hasClassOnlyScope, 'Expected .classOnly to have class shorthand scope');
+    assert.ok(hasClassEqScope, 'Expected .classEq to have class shorthand scope in span.classEq=');
+    assert.ok(hasPrimaryScope, 'Expected .primary to have class shorthand scope in Button.primary');
+
+    await captureTestStep('features-after-highlight-tag-class-capture', {
+      spanTagScopeCount,
+      buttonComponentScopeCount,
+      hasClassOnlyScope,
+      hasClassEqScope,
+      hasPrimaryScope,
+      tokenSamples: tokenEntries
+        .filter((entry) => /(span|Button|classOnly|classEq|primary)/.test(entry.text))
+        .slice(0, 20)
+        .map((entry) => ({
+          text: entry.text,
+          scopes: stringifySmall(entry.scopes, 240),
+        })),
+    });
+  });
+
   test('go to definition inside pug resolves in-scope symbol', async () => {
     const idx = appText.indexOf('handleReset');
     assert.ok(idx > 0, 'Could not find handleReset in App.tsx');

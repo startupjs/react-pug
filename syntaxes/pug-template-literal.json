@@ -118,20 +118,72 @@
       ]
     },
     "pug-tag-output-expression": {
-      "begin": "(^\\s*(?!if\\b|else\\b|each\\b|while\\b|unless\\b|case\\b|when\\b)[^\\n(=][^\\n(]*?=\\s*)",
-      "beginCaptures": {
-        "1": {
-          "name": "meta.tag.assignment.pug"
-        }
-      },
-      "end": "$",
-      "name": "meta.embedded.expression.pug.line",
       "patterns": [
         {
-          "include": "source.ts"
+          "begin": "(^\\s*)([A-Z][\\w$]*)(\\.[A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)*)?(\\s*=\\s*)",
+          "beginCaptures": {
+            "2": {
+              "name": "support.class.component.tsx"
+            },
+            "3": {
+              "name": "entity.other.attribute-name.class.css"
+            },
+            "4": {
+              "name": "keyword.operator.assignment.pug"
+            }
+          },
+          "end": "$",
+          "name": "meta.embedded.expression.pug.line",
+          "patterns": [
+            {
+              "include": "source.ts"
+            },
+            {
+              "include": "source.tsx"
+            }
+          ]
         },
         {
-          "include": "source.tsx"
+          "begin": "(^\\s*)(?!if\\b|else\\b|each\\b|while\\b|unless\\b|case\\b|when\\b)([a-z][\\w:-]*)(\\.[A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)*)?(\\s*=\\s*)",
+          "beginCaptures": {
+            "2": {
+              "name": "entity.name.tag.html"
+            },
+            "3": {
+              "name": "entity.other.attribute-name.class.css"
+            },
+            "4": {
+              "name": "keyword.operator.assignment.pug"
+            }
+          },
+          "end": "$",
+          "name": "meta.embedded.expression.pug.line",
+          "patterns": [
+            {
+              "include": "source.ts"
+            },
+            {
+              "include": "source.tsx"
+            }
+          ]
+        },
+        {
+          "begin": "(^\\s*(?!if\\b|else\\b|each\\b|while\\b|unless\\b|case\\b|when\\b)[^\\n(=][^\\n(]*?=\\s*)",
+          "beginCaptures": {
+            "1": {
+              "name": "meta.tag.assignment.pug"
+            }
+          },
+          "end": "$",
+          "name": "meta.embedded.expression.pug.line",
+          "patterns": [
+            {
+              "include": "source.ts"
+            },
+            {
+              "include": "source.tsx"
+            }
+          ]
         }
       ]
     },
@@ -180,7 +232,7 @@
     "pug-tag-line": {
       "patterns": [
         {
-          "match": "(^\\s*)([A-Z][\\w$]*)(?=\\s|$|[#.(])",
+          "match": "(^\\s*)([A-Z][\\w$]*)(?=\\s|$|[#.(=])",
           "captures": {
             "2": {
               "name": "support.class.component.tsx"
@@ -188,7 +240,7 @@
           }
         },
         {
-          "match": "(^\\s*)([a-z][\\w:-]*)(?=\\s|$|[#.(])",
+          "match": "(^\\s*)([a-z][\\w:-]*)(?=\\s|$|[#.(=])",
           "captures": {
             "2": {
               "name": "entity.name.tag.html"
@@ -208,9 +260,23 @@
           }
         },
         {
-          "match": "(^\\s*(?:[A-Z][\\w$]*|[a-z][\\w:-]*))(\\.[A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)*)",
+          "match": "(^\\s*)([A-Z][\\w$]*)(\\.[A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)*)",
           "captures": {
             "2": {
+              "name": "support.class.component.tsx"
+            },
+            "3": {
+              "name": "entity.other.attribute-name.class.css"
+            }
+          }
+        },
+        {
+          "match": "(^\\s*)([a-z][\\w:-]*)(\\.[A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)*)",
+          "captures": {
+            "2": {
+              "name": "entity.name.tag.html"
+            },
+            "3": {
               "name": "entity.other.attribute-name.class.css"
             }
           }
@@ -224,9 +290,23 @@
           }
         },
         {
-          "match": "(^\\s*(?:[A-Z][\\w$]*|[a-z][\\w:-]*))(#[A-Za-z_][\\w-]*)",
+          "match": "(^\\s*)([A-Z][\\w$]*)(#[A-Za-z_][\\w-]*)",
           "captures": {
             "2": {
+              "name": "support.class.component.tsx"
+            },
+            "3": {
+              "name": "entity.other.attribute-name.id.css"
+            }
+          }
+        },
+        {
+          "match": "(^\\s*)([a-z][\\w:-]*)(#[A-Za-z_][\\w-]*)",
+          "captures": {
+            "2": {
+              "name": "entity.name.tag.html"
+            },
+            "3": {
               "name": "entity.other.attribute-name.id.css"
             }
           }

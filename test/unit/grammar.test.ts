@@ -141,6 +141,73 @@ describe('pug-tagged-template grammar rule', () => {
     // The begin pattern should have a lookbehind for "pug"
     expect(rule.begin).toContain('pug');
   });
+
+  it('keeps class shorthand matching available before generic tag-line matching', () => {
+    const rule = getRule();
+    const includes = rule.patterns.map((p: any) => p.include);
+    const tagLineIdx = includes.indexOf('#pug-tag-line');
+    const classIdx = includes.indexOf('#pug-class-id-shorthand');
+    expect(tagLineIdx).toBeGreaterThanOrEqual(0);
+    expect(classIdx).toBeGreaterThanOrEqual(0);
+    expect(classIdx).toBeLessThan(tagLineIdx);
+  });
+});
+
+describe('highlighting regressions for tag/class/equals lines', () => {
+  function getTagLineRule() {
+    grammar = grammar ?? JSON.parse(readFileSync(grammarPath, 'utf-8'));
+    return grammar.repository?.['pug-tag-line'];
+  }
+
+  function getTagOutputRule() {
+    grammar = grammar ?? JSON.parse(readFileSync(grammarPath, 'utf-8'));
+    return grammar.repository?.['pug-tag-output-expression'];
+  }
+
+  it('tag-line regex matches tags/components followed by class shorthand and "="', () => {
+    const rule = getTagLineRule();
+    expect(rule).toBeDefined();
+    expect(Array.isArray(rule.patterns)).toBe(true);
+
+    const componentRegex = new RegExp(rule.patterns[0].match);
+    const htmlRegex = new RegExp(rule.patterns[1].match);
+
+    expect('Button').toMatch(componentRegex);
+    expect('Button.primary').toMatch(componentRegex);
+    expect('Button=').toMatch(componentRegex);
+
+    expect('span').toMatch(htmlRegex);
+    expect('span.bold').toMatch(htmlRegex);
+    expect('span=').toMatch(htmlRegex);
+    expect('span.bold=').toMatch(htmlRegex);
+  });
+
+  it('tag output expression has specialized begin patterns for component/tag with optional class', () => {
+    const rule = getTagOutputRule();
+    expect(rule).toBeDefined();
+    expect(Array.isArray(rule.patterns)).toBe(true);
+    expect(rule.patterns.length).toBeGreaterThanOrEqual(3);
+
+    const componentBegin = new RegExp(rule.patterns[0].begin);
+    const tagBegin = new RegExp(rule.patterns[1].begin);
+
+    expect('Button.primary= activeTodos.length').toMatch(componentBegin);
+    expect('span.bold= activeTodos.length').toMatch(tagBegin);
+    expect('if a = b').not.toMatch(tagBegin);
+  });
+
+  it('class shorthand regex captures both tag/component prefix and class suffix', () => {
+    grammar = grammar ?? JSON.parse(readFileSync(grammarPath, 'utf-8'));
+    const classRule = grammar.repository?.['pug-class-id-shorthand'];
+    expect(classRule).toBeDefined();
+    expect(Array.isArray(classRule.patterns)).toBe(true);
+
+    const componentWithClass = new RegExp(classRule.patterns[1].match);
+    const tagWithClass = new RegExp(classRule.patterns[2].match);
+
+    expect('Button.primary').toMatch(componentWithClass);
+    expect('span.bold').toMatch(tagWithClass);
+  });
 });
 
 // ── package.json contributes.grammars tests ──────────────────────
