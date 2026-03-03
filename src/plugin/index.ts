@@ -326,6 +326,64 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         }));
       }
 
+      // Helper: map a requested original span to shadow span for classification queries.
+      // Returns null when a clean range mapping is not possible.
+      function mapQuerySpanToShadow(doc: PugDocument, span: ts.TextSpan): ts.TextSpan | null {
+        const shadowStart = originalToShadow(doc, span.start);
+        const shadowEnd = originalToShadow(doc, span.start + span.length);
+        if (shadowStart == null || shadowEnd == null || shadowEnd < shadowStart) {
+          return null;
+        }
+        return { start: shadowStart, length: shadowEnd - shadowStart };
+      }
+
+      // Helper: map encoded classifications (triples: start,length,class) back to original file.
+      function mapEncodedClassifications(
+        fileName: string,
+        requestedOriginalSpan: ts.TextSpan,
+        classifications: ts.Classifications,
+      ): ts.Classifications {
+        const doc = docCache.get(fileName);
+        if (!doc) return classifications;
+
+        const originalStart = requestedOriginalSpan.start;
+        const originalEnd = requestedOriginalSpan.start + requestedOriginalSpan.length;
+        const maxOriginal = doc.originalText.length;
+        const mappedSpans: number[] = [];
+        const encoded = classifications.spans ?? [];
+
+        for (let i = 0; i + 2 < encoded.length; i += 3) {
+          const shadowStart = encoded[i];
+          const shadowLength = encoded[i + 1];
+          const classification = encoded[i + 2];
+          if (!Number.isFinite(shadowStart) || !Number.isFinite(shadowLength) || shadowLength <= 0) continue;
+
+          const mappedStart = shadowToOriginal(doc, shadowStart);
+          const mappedEnd = shadowToOriginal(doc, shadowStart + shadowLength);
+          if (mappedStart == null || mappedEnd == null) continue;
+
+          let start = mappedStart;
+          let end = mappedEnd;
+          if (end <= start) continue;
+
+          if (end <= originalStart || start >= originalEnd) continue;
+          if (start < originalStart) start = originalStart;
+          if (end > originalEnd) end = originalEnd;
+
+          if (start < 0) start = 0;
+          if (end > maxOriginal) end = maxOriginal;
+          const length = end - start;
+          if (length <= 0) continue;
+
+          mappedSpans.push(start, length, classification);
+        }
+
+        return {
+          spans: mappedSpans,
+          endOfLineState: classifications.endOfLineState,
+        };
+      }
+
       // Override: getApplicableRefactors
       safeOverride('getApplicableRefactors', (fileName, positionOrRange, ...rest) => {
         ensureCached(fileName);
@@ -403,6 +461,30 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           ...result,
           changes: mapFileTextChanges(result.changes),
         };
+      });
+
+      // Override: getEncodedSyntacticClassifications
+      safeOverride('getEncodedSyntacticClassifications', (fileName, span) => {
+        ensureCached(fileName);
+        const doc = docCache.get(fileName);
+        if (!doc) return ls.getEncodedSyntacticClassifications(fileName, span);
+
+        const querySpan = mapQuerySpanToShadow(doc, span)
+          ?? { start: 0, length: doc.shadowText.length };
+        const result = ls.getEncodedSyntacticClassifications(fileName, querySpan);
+        return mapEncodedClassifications(fileName, span, result);
+      });
+
+      // Override: getEncodedSemanticClassifications
+      safeOverride('getEncodedSemanticClassifications', (fileName, span, format) => {
+        ensureCached(fileName);
+        const doc = docCache.get(fileName);
+        if (!doc) return ls.getEncodedSemanticClassifications(fileName, span, format);
+
+        const querySpan = mapQuerySpanToShadow(doc, span)
+          ?? { start: 0, length: doc.shadowText.length };
+        const result = ls.getEncodedSemanticClassifications(fileName, querySpan, format);
+        return mapEncodedClassifications(fileName, span, result);
       });
 
       // Diagnostic codes to suppress in pug regions (false positives from generated TSX)

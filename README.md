@@ -197,12 +197,25 @@ npm run build
 # Run tests
 npm test
 
+# Run extension-host tests in fresh VS Code
+npm run test:vscode
+
+# Run extension-host tests for a specific workspace
+npm run test:vscode:demo
+npm run test:vscode:sample-project
+
+# Run extension-host tests with desktop screenshots captured at each step
+npm run test:vscode:demo:screenshots
+npm run test:vscode:sample-project:screenshots
+
 # Type check
 npm run typecheck
 
 # Watch mode
 npm run watch
 ```
+
+When screenshot capture is enabled, artifacts are written to `artifacts/vscode-screenshots/<workspace>/` with a `.png` image and matching `.json` state file per step.
 
 ### Project Structure
 

@@ -8,9 +8,9 @@
   ],
   "repository": {
     "pug-tagged-template": {
-      "begin": "(?<=(?<![\\w$])pug)\\s*(`)",
+      "begin": "(?<![\\w$])pug([ \\t]*)(`)",
       "beginCaptures": {
-        "1": {
+        "2": {
           "name": "punctuation.definition.string.template.begin.ts"
         }
       },
@@ -20,10 +20,168 @@
           "name": "punctuation.definition.string.template.end.ts"
         }
       },
-      "contentName": "source.pug",
+      "name": "meta.embedded.inline.pug",
       "patterns": [
         {
-          "include": "source.pug"
+          "include": "#pug-comment"
+        },
+        {
+          "include": "#pug-keywords"
+        },
+        {
+          "include": "#pug-interpolation"
+        },
+        {
+          "include": "#pug-tag-line"
+        },
+        {
+          "include": "#pug-class-id-shorthand"
+        },
+        {
+          "include": "#pug-attributes"
+        },
+        {
+          "include": "text.pug"
+        }
+      ]
+    },
+    "pug-comment": {
+      "begin": "^\\s*//-?",
+      "end": "$",
+      "name": "comment.line.double-slash.pug"
+    },
+    "pug-keywords": {
+      "match": "\\b(?:if|else(?:\\s+if)?|each|in|case|when|default|while|unless)\\b",
+      "name": "keyword.control.pug"
+    },
+    "pug-interpolation": {
+      "begin": "([#!]\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.pug"
+        }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.pug"
+        }
+      },
+      "name": "meta.embedded.expression.pug",
+      "patterns": [
+        {
+          "include": "source.tsx"
+        },
+        {
+          "include": "source.ts"
+        }
+      ]
+    },
+    "pug-tag-line": {
+      "patterns": [
+        {
+          "match": "(^\\s*)([A-Z][\\w$]*)(?=\\s*(?:\\(|$|[#.]))",
+          "captures": {
+            "2": {
+              "name": "entity.name.type.class.tsx"
+            }
+          }
+        },
+        {
+          "match": "(^\\s*)([a-z][\\w:-]*)(?=\\s*(?:\\(|$|[#.]))",
+          "captures": {
+            "2": {
+              "name": "entity.name.tag.html"
+            }
+          }
+        }
+      ]
+    },
+    "pug-class-id-shorthand": {
+      "patterns": [
+        {
+          "match": "\\.[A-Za-z_][\\w-]*",
+          "name": "entity.other.attribute-name.class.css"
+        },
+        {
+          "match": "#[A-Za-z_][\\w-]*",
+          "name": "entity.other.attribute-name.id.css"
+        }
+      ]
+    },
+    "pug-attributes": {
+      "begin": "\\(",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.group.begin.pug"
+        }
+      },
+      "end": "\\)",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.group.end.pug"
+        }
+      },
+      "name": "meta.tag.attributes.pug",
+      "patterns": [
+        {
+          "match": "\\b([A-Za-z_][\\w-]*)(?=\\s*=)",
+          "name": "entity.other.attribute-name.jsx"
+        },
+        {
+          "match": "(?<=\\s|\\(|,)([A-Za-z_][\\w-]*)(?=\\s*(?:,|\\)))",
+          "name": "entity.other.attribute-name.jsx"
+        },
+        {
+          "match": "=",
+          "name": "keyword.operator.assignment.pug"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.comma.pug"
+        },
+        {
+          "begin": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.pug"
+            }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.pug"
+            }
+          },
+          "name": "string.quoted.double.pug"
+        },
+        {
+          "begin": "'",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.pug"
+            }
+          },
+          "end": "'",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.pug"
+            }
+          },
+          "name": "string.quoted.single.pug"
+        },
+        {
+          "begin": "(?<==)",
+          "end": "(?=,|\\))",
+          "name": "meta.embedded.expression.pug.attribute",
+          "patterns": [
+            {
+              "include": "source.tsx"
+            },
+            {
+              "include": "source.ts"
+            }
+          ]
         }
       ]
     }

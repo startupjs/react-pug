@@ -62,7 +62,7 @@
           "source.jsx"
         ],
         "embeddedLanguages": {
-          "source.pug": "jade"
+          "text.pug": "jade"
         }
       }
     ]
@@ -71,7 +71,14 @@
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "test:vscode": "vscode-test --config .vscode-test.mjs",
+    "test:vscode:demo": "vscode-test --config .vscode-test.mjs --label demo",
+    "test:vscode:sample-project": "vscode-test --config .vscode-test.mjs --label sample-project",
+    "test:vscode:demo:screenshots": "VSCODE_CAPTURE_SCREENSHOTS=1 vscode-test --config .vscode-test.mjs --label demo",
+    "test:vscode:sample-project:screenshots": "VSCODE_CAPTURE_SCREENSHOTS=1 vscode-test --config .vscode-test.mjs --label sample-project",
+    "typecheck": "tsc --noEmit",
+    "vscode:fresh:demo": "node scripts/open-vscode-fresh.mjs examples/demo",
+    "vscode:fresh:sample-project": "node scripts/open-vscode-fresh.mjs examples/sample-project"
   },
   "dependencies": {
     "@babel/parser": "^7.29.0",
@@ -84,6 +91,8 @@
   "devDependencies": {
     "@types/node": "^25.3.3",
     "@types/vscode": "^1.109.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.27.3",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

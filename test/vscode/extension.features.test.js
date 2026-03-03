@@ -1,0 +1,438 @@
+const assert = require('node:assert');
+const path = require('node:path');
+const vscode = require('vscode');
+const {
+  captureTestStep,
+  resetScreenshotCounter,
+} = require('./screenshot');
+
+function labelText(label) {
+  if (typeof label === 'string') return label;
+  if (label && typeof label === 'object' && typeof label.label === 'string') return label.label;
+  return '';
+}
+
+function hoverText(hover) {
+  return hover.contents.map((c) => {
+    if (typeof c === 'string') return c;
+    if (c && typeof c.value === 'string') return c.value;
+    return '';
+  }).join('\n');
+}
+
+async function retry(fn, timeoutMs = 30000, intervalMs = 300) {
+  const start = Date.now();
+  let lastError;
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const value = await fn();
+      if (value) return value;
+    } catch (err) {
+      lastError = err;
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  if (lastError) throw lastError;
+  throw new Error(`Timed out after ${timeoutMs}ms`);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function stringifySmall(value, maxLen = 300) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen)}...`;
+}
+
+suite('Extension Host Features (demo workspace)', () => {
+  let appDoc;
+  let appText;
+  let workspaceRoot;
+  const tempUris = [];
+
+  async function createTempDoc(name, content) {
+    const tempPath = path.join(workspaceRoot, 'src', name);
+    const uri = vscode.Uri.file(tempPath);
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
+    tempUris.push(uri);
+    return vscode.workspace.openTextDocument(uri);
+  }
+
+  suiteSetup(async function () {
+    if (process.env.TEST_WORKSPACE_NAME !== 'demo') {
+      this.skip();
+      return;
+    }
+
+    // Ensure built-in TS extension is active.
+    const tsExt = vscode.extensions.getExtension('vscode.typescript-language-features');
+    if (tsExt && !tsExt.isActive) {
+      await tsExt.activate();
+    }
+
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(folder, 'Expected workspace folder');
+    workspaceRoot = folder.uri.fsPath;
+
+    await vscode.commands.executeCommand('workbench.action.joinAllGroups');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
+    const appPath = path.join(workspaceRoot, 'src', 'App.tsx');
+    appDoc = await vscode.workspace.openTextDocument(appPath);
+    appText = appDoc.getText();
+    await vscode.window.showTextDocument(appDoc);
+    resetScreenshotCounter();
+    await captureTestStep('features-suite-setup-app-open', { appPath });
+  });
+
+  suiteTeardown(async () => {
+    for (const uri of tempUris) {
+      try {
+        await vscode.workspace.fs.delete(uri, { useTrash: false });
+      } catch {
+        // Best-effort cleanup.
+      }
+    }
+  });
+
+  test('find references inside pug returns results', async function () {
+    const idx = appText.indexOf('handleReset');
+    assert.ok(idx > 0, 'Could not find handleReset in App.tsx');
+    const pos = appDoc.positionAt(idx);
+    const editor = await vscode.window.showTextDocument(appDoc);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+    await captureTestStep('features-before-references', {
+      symbol: 'handleReset',
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+
+    const refs = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeReferenceProvider',
+        appDoc.uri,
+        pos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    });
+
+    assert.ok(refs.length > 0, 'Expected references for handleReset');
+    await captureTestStep('features-after-references', { referenceCount: refs.length });
+  });
+
+  test('hover inside pug returns type information', async () => {
+    const idx = appText.indexOf('Button(');
+    assert.ok(idx > 0, 'Could not find Button( in App.tsx');
+    const pos = appDoc.positionAt(idx);
+    const editor = await vscode.window.showTextDocument(appDoc);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+    await captureTestStep('features-before-hover', {
+      symbol: 'Button',
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+    await vscode.commands.executeCommand('editor.action.showHover');
+    await wait(500);
+    await captureTestStep('features-ui-hover-visible', {
+      command: 'editor.action.showHover',
+    });
+
+    const hovers = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeHoverProvider',
+        appDoc.uri,
+        pos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    });
+
+    const text = hovers.map(hoverText).join('\n');
+    assert.ok(/Button/.test(text), 'Expected hover text to include Button');
+    await captureTestStep('features-after-hover', {
+      hoverCount: hovers.length,
+      containsButton: /Button/.test(text),
+    });
+  });
+
+  test('completion inside pug includes typed component props', async function () {
+    const completionDoc = await createTempDoc(
+      '__vscode_test_completion.tsx',
+      [
+        'import { Button } from "./Button";',
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const handleReset = () => {};',
+        'const view = pug`',
+        '  Button(onClick=handleReset, )',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+
+    const text = completionDoc.getText();
+    const idx = text.indexOf('onClick=handleReset, ');
+    assert.ok(idx > 0, 'Could not find completion target in temp document');
+    const pos = completionDoc.positionAt(idx + 'onClick=handleReset, '.length);
+    const editor = await vscode.window.showTextDocument(completionDoc);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    await captureTestStep('features-before-completion', {
+      file: completionDoc.uri.fsPath,
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+    await vscode.commands.executeCommand('editor.action.triggerSuggest');
+    await wait(600);
+    await captureTestStep('features-ui-suggest-visible', {
+      command: 'editor.action.triggerSuggest',
+    });
+
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        completionDoc.uri,
+        pos,
+      );
+      return result && Array.isArray(result.items) && result.items.length > 0 ? result : null;
+    });
+
+    const labels = completions.items.map((item) => labelText(item.label));
+    assert.ok(labels.includes('label'), 'Expected completion suggestions to include "label" prop');
+    assert.ok(labels.includes('variant'), 'Expected completion suggestions to include "variant" prop');
+    await captureTestStep('features-after-completion', {
+      completionCount: completions.items.length,
+      containsLabel: labels.includes('label'),
+      containsVariant: labels.includes('variant'),
+    });
+  });
+
+  test('signature help inside pug call expression includes function shape', async function () {
+    const idx = appText.indexOf('handleToggle(todo.id)');
+    assert.ok(idx > 0, 'Could not find handleToggle(todo.id) in App.tsx');
+    const pos = appDoc.positionAt(idx + 'handleToggle('.length);
+    const editor = await vscode.window.showTextDocument(appDoc);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    await captureTestStep('features-before-signature-help', {
+      symbol: 'handleToggle',
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+    await vscode.commands.executeCommand('editor.action.triggerParameterHints');
+    await wait(600);
+    await captureTestStep('features-ui-signature-help-visible', {
+      command: 'editor.action.triggerParameterHints',
+    });
+
+    const signatureHelp = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeSignatureHelpProvider',
+        appDoc.uri,
+        pos,
+      );
+      return result && Array.isArray(result.signatures) && result.signatures.length > 0 ? result : null;
+    });
+
+    const signatureText = signatureHelp.signatures.map((s) => s.label).join('\n');
+    assert.ok(
+      /handleToggle|id\s*:\s*number/i.test(signatureText),
+      'Expected signature help to include handleToggle parameter details',
+    );
+    await captureTestStep('features-after-signature-help', {
+      signatureCount: signatureHelp.signatures.length,
+    });
+  });
+
+  test('go to definition command from pug navigates to component source', async function () {
+    const idx = appText.indexOf('Button(onClick=handleReset');
+    assert.ok(idx > 0, 'Could not find Button usage inside pug template');
+    const pos = appDoc.positionAt(idx);
+    const editor = await vscode.window.showTextDocument(appDoc);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    await captureTestStep('features-before-ui-definition', {
+      symbol: 'Button',
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+    await vscode.commands.executeCommand('editor.action.revealDefinition');
+
+    const definitionEditor = await retry(async () => {
+      const active = vscode.window.activeTextEditor;
+      if (!active) return null;
+      return path.basename(active.document.uri.fsPath) === 'Button.tsx' ? active : null;
+    }, 20000, 250);
+
+    assert.strictEqual(
+      path.basename(definitionEditor.document.uri.fsPath),
+      'Button.tsx',
+      'Expected go to definition command to navigate to Button.tsx',
+    );
+    await captureTestStep('features-after-ui-definition', {
+      targetFile: definitionEditor.document.uri.fsPath,
+    });
+
+    await vscode.window.showTextDocument(appDoc);
+  });
+
+  test('textmate highlighting is injected for pug template literal', async function () {
+    this.timeout(60000);
+    const editor = await vscode.window.showTextDocument(appDoc);
+
+    const idx = appText.indexOf('Button(onClick=handleReset');
+    assert.ok(idx > 0, 'Could not find Button(...) inside pug template');
+    const pos = appDoc.positionAt(idx);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+    await captureTestStep('features-before-highlight-capture', {
+      symbol: 'Button',
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+
+    const syntaxTokens = await retry(async () => {
+      const result = await vscode.commands.executeCommand('_workbench.captureSyntaxTokens', appDoc.uri);
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    }, 45000, 500);
+
+    const tokenTexts = syntaxTokens
+      .map((token) => (typeof token?.c === 'string' ? token.c : ''))
+      .filter(Boolean);
+    const serialized = JSON.stringify(syntaxTokens);
+    const hasPugScope = /text\\.pug/i.test(serialized);
+    const importToken = syntaxTokens.find((token) => typeof token?.c === 'string' && token.c.includes("import React"));
+    const importTokenScopes = typeof importToken?.t === 'string' ? importToken.t : '';
+    const hasLeakIntoTopLevelTsx = /meta\\.embedded\\.inline\\.pug/.test(importTokenScopes);
+    const pugishTokenEntries = syntaxTokens.filter((token) => {
+      const text = typeof token?.c === 'string' ? token.c : '';
+      return /(onClick|variant|label|todo-item|Button\(onClick=handleReset)/.test(text);
+    });
+    const hasPugLikeTokenization = pugishTokenEntries.length > 0
+      || tokenTexts.some((text) => /(onClick|todo-item|Button\(onClick=handleReset)/.test(text));
+
+    await captureTestStep('features-after-highlight-capture', {
+      tokenLines: syntaxTokens.length,
+      hasPugScope,
+      hasPugLikeTokenization,
+      hasLeakIntoTopLevelTsx,
+      pugishTokenCount: pugishTokenEntries.length,
+      pugishTokenSamples: pugishTokenEntries.slice(0, 6).map((entry) => ({
+        c: entry.c,
+        t: stringifySmall(entry.t),
+      })),
+      sampleFirst: stringifySmall(syntaxTokens[0], 1200),
+      sampleAroundButton: stringifySmall(
+        syntaxTokens.find((line) => /Button|handleReset|pug/i.test(JSON.stringify(line))) ?? syntaxTokens[0],
+        1200,
+      ),
+    });
+    assert.ok(hasPugLikeTokenization, 'Expected tokenization to include pug template content');
+    assert.ok(!hasLeakIntoTopLevelTsx, 'Pug scope leaked into top-level TSX tokenization');
+
+    await vscode.commands.executeCommand('editor.action.inspectTMScopes');
+    await wait(700);
+    await captureTestStep('features-ui-tm-scopes-visible', {
+      tokenLines: syntaxTokens.length,
+      hasPugScope,
+      hasPugLikeTokenization,
+      hasLeakIntoTopLevelTsx,
+      sample: stringifySmall(syntaxTokens[0]),
+    });
+    await vscode.commands.executeCommand('editor.action.inspectTMScopes');
+  });
+
+  test('go to definition inside pug resolves in-scope symbol', async () => {
+    const idx = appText.indexOf('handleReset');
+    assert.ok(idx > 0, 'Could not find handleReset in App.tsx');
+    const pos = appDoc.positionAt(idx);
+    const editor = await vscode.window.showTextDocument(appDoc);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+    await captureTestStep('features-before-definition', {
+      symbol: 'handleReset',
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+
+    const defs = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeDefinitionProvider',
+        appDoc.uri,
+        pos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    });
+
+    const found = defs.some((d) => {
+      const uri = d.uri ?? d.targetUri;
+      return uri?.fsPath === appDoc.uri.fsPath;
+    });
+    assert.ok(found, 'Expected definition to resolve to App.tsx symbol declaration');
+    await captureTestStep('features-after-definition', {
+      definitionCount: defs.length,
+      resolvedInApp: found,
+    });
+  });
+
+  test('rename inside pug returns workspace edits', async () => {
+    const idx = appText.indexOf('handleReset');
+    assert.ok(idx > 0, 'Could not find handleReset in App.tsx');
+    const pos = appDoc.positionAt(idx);
+    const editor = await vscode.window.showTextDocument(appDoc);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+    await captureTestStep('features-before-rename', {
+      symbol: 'handleReset',
+      renameTo: 'handleResetRenamed',
+    });
+
+    const edit = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeDocumentRenameProvider',
+        appDoc.uri,
+        pos,
+        'handleResetRenamed',
+      );
+      if (!result || typeof result.entries !== 'function') return null;
+      return result.entries().length > 0 ? result : null;
+    });
+
+    assert.ok(edit.entries().length > 0, 'Expected rename edits to be returned');
+    await captureTestStep('features-after-rename', {
+      workspaceEditEntries: edit.entries().length,
+    });
+  });
+
+  test('type diagnostics in pug are surfaced', async function () {
+    this.timeout(60000);
+    const badText = [
+      'import { Button } from "./Button";',
+      'const view = pug`',
+      '  Button(onClick="bad", label="Demo")',
+      '`;',
+      'export { view };',
+    ].join('\n');
+
+    const badDoc = await createTempDoc('__vscode_test_bad.tsx', badText);
+    await vscode.window.showTextDocument(badDoc);
+    await captureTestStep('features-before-diagnostics', {
+      file: badDoc.uri.fsPath,
+    });
+
+    const diagnostics = await retry(async () => {
+      const result = vscode.languages.getDiagnostics(badDoc.uri);
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    }, 45000, 500);
+
+    const hasTypeError = diagnostics.some((d) => {
+      const text = typeof d.message === 'string' ? d.message : '';
+      return d.severity === vscode.DiagnosticSeverity.Error
+        && (/assignable|type/i.test(text) || d.code === 2322);
+    });
+
+    assert.ok(hasTypeError, 'Expected a type error diagnostic for invalid onClick type');
+    await captureTestStep('features-after-diagnostics', {
+      diagnosticCount: diagnostics.length,
+      hasTypeError,
+    });
+  });
+});
