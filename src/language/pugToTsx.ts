@@ -157,6 +157,84 @@ type PugNode =
 
 // ── Helpers ─────────────────────────────────────────────────────
 
+/** Create a parse-recovery variant of pug text for typing-in-progress scenarios. */
+function buildTypingRecoveryText(text: string): string {
+  const lines = text.split('\n');
+  let changed = false;
+
+  const recovered = lines.map((line) => {
+    let next = line;
+
+    // Keep unbuffered code lines parseable while user is still typing.
+    if (/^\s*-\s*$/.test(next)) {
+      next += ' undefined';
+      changed = true;
+    }
+
+    // Keep `tag=` lines parseable while value is still empty.
+    if (/^\s*[A-Za-z][\w:-]*(?:[.#][A-Za-z_][\w-]*)*\s*=\s*$/.test(next)) {
+      next += ' undefined';
+      changed = true;
+    }
+
+    let inSingle = false;
+    let inDouble = false;
+    let escaped = false;
+    let openParen = 0;
+    let closeParen = 0;
+    let openInterp = 0;
+    let closeBrace = 0;
+
+    for (let i = 0; i < next.length; i++) {
+      const ch = next[i];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (!inDouble && ch === '\'') {
+        inSingle = !inSingle;
+        continue;
+      }
+      if (!inSingle && ch === '"') {
+        inDouble = !inDouble;
+        continue;
+      }
+      if (inSingle || inDouble) continue;
+
+      if (ch === '(') openParen++;
+      else if (ch === ')') closeParen++;
+
+      if ((ch === '#' || ch === '!') && next[i + 1] === '{') {
+        openInterp++;
+      } else if (ch === '}') {
+        closeBrace++;
+      }
+    }
+
+    const missingParens = Math.max(0, openParen - closeParen);
+    if (missingParens > 0) {
+      next += ')'.repeat(missingParens);
+      changed = true;
+    }
+
+    const missingInterpBraces = Math.max(0, openInterp - closeBrace);
+    if (missingInterpBraces > 0) {
+      next += '}'.repeat(missingInterpBraces);
+      changed = true;
+    }
+
+    return next;
+  });
+
+  return changed ? recovered.join('\n') : text;
+}
+
 /** Convert pug line/column (1-based) to offset in the pug text */
 function lineColToOffset(text: string, line: number, column: number): number {
   const lines = text.split('\n');
@@ -874,20 +952,37 @@ export function compilePugToTsx(pugText: string): CompileResult {
   const stripComments = require('pug-strip-comments');
 
   let tokens: any[];
+  let parseError: PugParseError | null = null;
   try {
     tokens = lex(pugText, { filename: 'template.pug' });
   } catch (err: any) {
-    return {
-      tsx: '(null as any as JSX.Element)',
-      mappings: [],
-      lexerTokens: [],
-      parseError: {
-        message: err.message ?? 'Pug lexer error',
-        line: err.line ?? 1,
-        column: err.column ?? 1,
-        offset: 0,
-      },
+    parseError = {
+      message: err.message ?? 'Pug lexer error',
+      line: err.line ?? 1,
+      column: err.column ?? 1,
+      offset: 0,
     };
+
+    const recoveredText = buildTypingRecoveryText(pugText);
+    if (recoveredText !== pugText) {
+      try {
+        tokens = lex(recoveredText, { filename: 'template.pug' });
+      } catch {
+        return {
+          tsx: '(null as any as JSX.Element)',
+          mappings: [],
+          lexerTokens: [],
+          parseError,
+        };
+      }
+    } else {
+      return {
+        tsx: '(null as any as JSX.Element)',
+        mappings: [],
+        lexerTokens: [],
+        parseError,
+      };
+    }
   }
 
   const lexerTokens: PugToken[] = tokens
@@ -903,17 +998,35 @@ export function compilePugToTsx(pugText: string): CompileResult {
     const stripped = stripComments(tokens, { filename: 'template.pug' });
     ast = parse(stripped, { filename: 'template.pug' });
   } catch (err: any) {
-    return {
-      tsx: '(null as any as JSX.Element)',
-      mappings: [],
-      lexerTokens,
-      parseError: {
+    if (parseError == null) {
+      parseError = {
         message: err.message ?? 'Pug parser error',
         line: err.line ?? 1,
         column: err.column ?? 1,
         offset: 0,
-      },
-    };
+      };
+    }
+
+    // Recovery parse: keep IntelliSense usable while template is temporarily incomplete.
+    const recoveredText = buildTypingRecoveryText(pugText);
+    if (recoveredText !== pugText) {
+      try {
+        const recoveredTokens = lex(recoveredText, { filename: 'template.pug' });
+        const recoveredStripped = stripComments(recoveredTokens, { filename: 'template.pug' });
+        ast = parse(recoveredStripped, { filename: 'template.pug' });
+      } catch {
+        // Fall through to placeholder.
+      }
+    }
+
+    if (!ast) {
+      return {
+        tsx: '(null as any as JSX.Element)',
+        mappings: [],
+        lexerTokens,
+        parseError,
+      };
+    }
   }
 
   const emitter = new TsxEmitter();
@@ -931,6 +1044,6 @@ export function compilePugToTsx(pugText: string): CompileResult {
     tsx: result.tsx,
     mappings: result.mappings,
     lexerTokens,
-    parseError: null,
+    parseError,
   };
 }

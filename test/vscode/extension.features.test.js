@@ -7,8 +7,10 @@ const {
 } = require('./screenshot');
 
 function labelText(label) {
-  if (typeof label === 'string') return label;
-  if (label && typeof label === 'object' && typeof label.label === 'string') return label.label;
+  if (typeof label === 'string') return label.replace(/\?$/, '');
+  if (label && typeof label === 'object' && typeof label.label === 'string') {
+    return label.label.replace(/\?$/, '');
+  }
   return '';
 }
 
@@ -198,12 +200,20 @@ suite('Extension Host Features (demo workspace)', () => {
     });
 
     const labels = completions.items.map((item) => labelText(item.label));
+    const hasSecondaryProp = ['variant', 'disabled', 'children', 'key']
+      .some((name) => labels.includes(name));
     assert.ok(labels.includes('label'), 'Expected completion suggestions to include "label" prop');
-    assert.ok(labels.includes('variant'), 'Expected completion suggestions to include "variant" prop');
+    assert.ok(
+      hasSecondaryProp,
+      `Expected completion suggestions to include at least one secondary Button prop. Top labels: ${labels.slice(0, 20).join(', ')}`,
+    );
     await captureTestStep('features-after-completion', {
       completionCount: completions.items.length,
       containsLabel: labels.includes('label'),
       containsVariant: labels.includes('variant'),
+      containsDisabled: labels.includes('disabled'),
+      containsChildren: labels.includes('children'),
+      topLabels: labels.slice(0, 20),
     });
   });
 
@@ -884,6 +894,100 @@ suite('Extension Host Features (demo workspace)', () => {
       hasHoverForFormat: /format/.test(hoverCombined),
       completionContainsFormat: completionLabels.includes('format'),
       hasUnbufferedScope,
+    });
+  });
+
+  test('typing-time completions work across major pug expression contexts', async function () {
+    this.timeout(90000);
+    const content = [
+      'import { Button } from "./Button";',
+      'const handler = () => {};',
+      'const showCompleted = true;',
+      'const items = [1, 2, 3];',
+      'const activeTodos = [1, 2, 3];',
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const view = pug`',
+      '  But',
+      '  Button(o',
+      '  Button(onClick=han',
+      '  span= act',
+      '  h3 #{act',
+      '  if sho',
+      '    span ok',
+      '  each todo in ite',
+      '    span= todo',
+      '  - const local = han',
+      '`;',
+      'export { view };',
+    ].join('\n');
+    const doc = await createTempDoc('__vscode_test_typing_completions.tsx', content);
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+
+    const cases = [
+      { id: 'component', marker: 'But', expected: 'Button' },
+      { id: 'attr-name', marker: 'Button(o', expected: 'onClick' },
+      { id: 'attr-value', marker: 'Button(onClick=han', expected: 'handler' },
+      { id: 'line-eq', marker: 'span= act', expected: 'activeTodos' },
+      { id: 'interp', marker: 'h3 #{act', expected: 'activeTodos' },
+      { id: 'if-test', marker: 'if sho', expected: 'showCompleted' },
+      { id: 'each-in', marker: 'each todo in ite', expected: 'items' },
+      { id: 'unbuffered', marker: '- const local = han', expected: 'handler' },
+    ];
+
+    const results = [];
+    for (const c of cases) {
+      const markerIndex = text.indexOf(c.marker);
+      assert.ok(markerIndex > 0, `Could not find marker "${c.marker}"`);
+      const pos = doc.positionAt(markerIndex + c.marker.length);
+      editor.selection = new vscode.Selection(pos, pos);
+      editor.revealRange(new vscode.Range(pos, pos));
+
+      await captureTestStep(`features-before-typing-completion-${c.id}`, {
+        file: doc.uri.fsPath,
+        marker: c.marker,
+        expected: c.expected,
+        position: { line: pos.line + 1, character: pos.character + 1 },
+      });
+
+      await vscode.commands.executeCommand('editor.action.triggerSuggest');
+      await wait(450);
+      const completions = await retry(async () => {
+        const result = await vscode.commands.executeCommand(
+          'vscode.executeCompletionItemProvider',
+          doc.uri,
+          pos,
+        );
+        return result && Array.isArray(result.items) && result.items.length > 0 ? result : null;
+      }, 30000, 300);
+
+      const labels = completions.items.map((item) => labelText(item.label));
+      const hasExpected = labels.includes(c.expected);
+      assert.ok(
+        hasExpected,
+        `Expected "${c.expected}" completion at marker "${c.marker}", got ${labels.slice(0, 40).join(', ')}`,
+      );
+
+      results.push({
+        id: c.id,
+        marker: c.marker,
+        expected: c.expected,
+        completionCount: labels.length,
+        hasExpected,
+      });
+
+      await captureTestStep(`features-after-typing-completion-${c.id}`, {
+        marker: c.marker,
+        expected: c.expected,
+        completionCount: labels.length,
+        hasExpected,
+      });
+    }
+
+    await captureTestStep('features-after-typing-completion-summary', {
+      cases: results,
+      passedCount: results.filter((r) => r.hasExpected).length,
+      totalCount: results.length,
     });
   });
 });

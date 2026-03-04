@@ -335,6 +335,22 @@ describe('error handling', () => {
       expect(result.tsx).toContain('JSX.Element');
     }
   });
+
+  it('keeps generated TSX/mappings for typing-time incomplete attrs while preserving parseError', () => {
+    const result = compilePugToTsx('Button(o');
+    expect(result.parseError).not.toBeNull();
+    expect(result.tsx).toContain('<Button');
+    expect(result.tsx).not.toContain('(null as any as JSX.Element)');
+    expect(result.mappings.length).toBeGreaterThan(0);
+  });
+
+  it('keeps generated TSX/mappings for unclosed interpolation while preserving parseError', () => {
+    const result = compilePugToTsx('h3 #{activeTodo');
+    expect(result.parseError).not.toBeNull();
+    expect(result.tsx).toContain('{activeTodo');
+    expect(result.tsx).not.toContain('(null as any as JSX.Element)');
+    expect(result.mappings.length).toBeGreaterThan(0);
+  });
 });
 
 // ── Lexer tokens ─────────────────────────────────────────────────

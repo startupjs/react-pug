@@ -17,6 +17,7 @@ function createLanguageServiceWithPlugin(
   init: Function,
   rootFiles: string[],
   fixturesDir: string,
+  virtualFiles?: Map<string, string>,
 ) {
   const configPath = path.join(fixturesDir, 'tsconfig.json');
   const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
@@ -30,14 +31,17 @@ function createLanguageServiceWithPlugin(
     getScriptFileNames: () => rootFiles,
     getScriptVersion: () => '0',
     getScriptSnapshot: (fileName) => {
+      if (virtualFiles?.has(fileName)) {
+        return ts.ScriptSnapshot.fromString(virtualFiles.get(fileName)!);
+      }
       if (!fs.existsSync(fileName)) return undefined;
       return ts.ScriptSnapshot.fromString(fs.readFileSync(fileName, 'utf-8'));
     },
     getCurrentDirectory: () => fixturesDir,
     getCompilationSettings: () => parsedConfig.options,
     getDefaultLibFileName: ts.getDefaultLibFilePath,
-    fileExists: ts.sys.fileExists,
-    readFile: ts.sys.readFile,
+    fileExists: (f) => virtualFiles?.has(f) || ts.sys.fileExists(f),
+    readFile: (f) => virtualFiles?.has(f) ? virtualFiles.get(f) : ts.sys.readFile(f),
     readDirectory: ts.sys.readDirectory,
     directoryExists: ts.sys.directoryExists,
     getDirectories: ts.sys.getDirectories,
@@ -347,4 +351,69 @@ describe('completions edge cases', () => {
     const names = completions!.entries.map(e => e.name);
     expect(names).toContain('number');
   });
+});
+
+describe('typing-time completions inside pug across contexts', () => {
+  let ls: ts.LanguageService;
+  let file: string;
+  let text: string;
+
+  beforeAll(async () => {
+    const init = await loadPlugin();
+    file = path.join(FIXTURES_DIR, 'completions-typing.tsx');
+    text = [
+      'import { Button } from "./Button";',
+      'const handler = () => {};',
+      'const showCompleted = true;',
+      'const items = [1, 2, 3];',
+      'const activeTodos = [1, 2, 3];',
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const view = pug`',
+      '  But',
+      '  Button(o',
+      '  Button(onClick=han',
+      '  Button(onClick=handler )',
+      '  span= act',
+      '  h3 #{act',
+      '  if sho',
+      '    span ok',
+      '  each todo in ite',
+      '    span= todo',
+      '  - const local = han',
+      '`;',
+      'export { view };',
+    ].join('\n');
+
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(file, text);
+    const rootFiles = [file, BUTTON_FILE];
+    const result = createLanguageServiceWithPlugin(
+      init, rootFiles, FIXTURES_DIR, virtualFiles,
+    );
+    ls = result.ls;
+  });
+
+  const cases = [
+    { marker: 'But', expected: 'Button' },
+    { marker: 'Button(o', expected: 'onClick' },
+    { marker: 'Button(onClick=han', expected: 'handler' },
+    { marker: 'span= act', expected: 'activeTodos' },
+    { marker: 'h3 #{act', expected: 'activeTodos' },
+    { marker: 'if sho', expected: 'showCompleted' },
+    { marker: 'each todo in ite', expected: 'items' },
+    { marker: '- const local = han', expected: 'handler' },
+  ];
+
+  for (const entry of cases) {
+    it(`suggests "${entry.expected}" while typing at "${entry.marker}"`, () => {
+      const pos = text.indexOf(entry.marker) + entry.marker.length;
+      expect(pos).toBeGreaterThan(entry.marker.length);
+
+      const completions = ls.getCompletionsAtPosition(file, pos, undefined);
+      expect(completions, `No completions at marker: ${entry.marker}`).toBeDefined();
+      const names = completions!.entries.map((e) => e.name);
+      expect(names).toContain(entry.expected);
+    });
+  }
+
 });

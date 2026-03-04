@@ -1,7 +1,7 @@
 import type ts from 'typescript';
 import type { PugDocument } from '../language/mapping';
 import { buildShadowDocument } from '../language/shadowDocument';
-import { originalToShadow, shadowToOriginal } from '../language/positionMapping';
+import { findRegionAtOriginalOffset, originalToShadow, shadowToOriginal } from '../language/positionMapping';
 
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;
@@ -105,24 +105,113 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         return originalToShadow(doc, position);
       }
 
+      // Lenient mapping for typing-time completions: if exact position is unmapped,
+      // try nearby mapped offsets on the same line and preserve relative cursor delta.
+      function mapToShadowForTyping(fileName: string, position: number): number | null | undefined {
+        const mapped = mapToShadow(fileName, position);
+        if (mapped !== null) return mapped;
+
+        ensureCached(fileName);
+        const doc = docCache.get(fileName);
+        if (!doc) return undefined;
+
+        const region = findRegionAtOriginalOffset(doc, position);
+        if (!region) return null;
+        if (position < region.pugTextStart || position > region.pugTextEnd) return null;
+
+        const lineStart = doc.originalText.lastIndexOf('\n', position - 1) + 1;
+        const lineEndIdx = doc.originalText.indexOf('\n', position);
+        const lineEnd = lineEndIdx >= 0 ? lineEndIdx : doc.originalText.length;
+        const maxRadius = 3;
+
+        for (let radius = 1; radius <= maxRadius; radius++) {
+          const left = position - radius;
+          if (left >= lineStart) {
+            const leftMapped = originalToShadow(doc, left);
+            if (leftMapped != null) {
+              if (left === position - 1) {
+                const ch = doc.originalText[position] ?? '';
+                if (/\s|[),]/.test(ch)) {
+                  return Math.min(leftMapped + 1, doc.shadowText.length);
+                }
+              }
+              return leftMapped;
+            }
+          }
+
+          const right = position + radius;
+          if (right <= lineEnd) {
+            const rightMapped = originalToShadow(doc, right);
+            if (rightMapped != null) {
+              return rightMapped;
+            }
+          }
+        }
+
+        return null;
+      }
+
+      // Helper: map completion result spans back from shadow -> original.
+      function mapCompletionInfoBack(
+        fileName: string,
+        infoResult: ts.WithMetadata<ts.CompletionInfo> | undefined,
+      ): ts.WithMetadata<ts.CompletionInfo> | undefined {
+        if (!infoResult) return infoResult;
+        return {
+          ...infoResult,
+          optionalReplacementSpan: infoResult.optionalReplacementSpan
+            ? mapTextSpanBack(fileName, infoResult.optionalReplacementSpan)
+            : undefined,
+          entries: infoResult.entries.map(entry => (
+            entry.replacementSpan
+              ? { ...entry, replacementSpan: mapTextSpanBack(fileName, entry.replacementSpan) }
+              : entry
+          )),
+        };
+      }
+
+      // Helper: map completion detail code-action edits back from shadow -> original.
+      function mapCompletionEntryDetailsBack(
+        details: ts.CompletionEntryDetails | undefined,
+      ): ts.CompletionEntryDetails | undefined {
+        if (!details?.codeActions || details.codeActions.length === 0) return details;
+        return {
+          ...details,
+          codeActions: details.codeActions.map(action => ({
+            ...action,
+            changes: mapFileTextChanges(action.changes),
+          })),
+        };
+      }
+
       // Override: getCompletionsAtPosition
       safeOverride('getCompletionsAtPosition', (fileName, position, ...rest) => {
-        const mapped = mapToShadow(fileName, position);
+        const mapped = mapToShadowForTyping(fileName, position);
         if (mapped === undefined) {
-          return ls.getCompletionsAtPosition(fileName, position, ...rest);
+          return mapCompletionInfoBack(
+            fileName,
+            ls.getCompletionsAtPosition(fileName, position, ...rest),
+          );
         }
         if (mapped === null) return undefined; // unmapped/synthetic position
-        return ls.getCompletionsAtPosition(fileName, mapped, ...rest);
+        return mapCompletionInfoBack(
+          fileName,
+          ls.getCompletionsAtPosition(fileName, mapped, ...rest),
+        );
       });
 
       // Override: getCompletionEntryDetails
       safeOverride('getCompletionEntryDetails', (fileName, position, ...rest) => {
-        const mapped = mapToShadow(fileName, position);
+        const mapped = mapToShadowForTyping(fileName, position);
         if (mapped === undefined) {
-          return ls.getCompletionEntryDetails(fileName, position, ...rest);
+          return mapCompletionEntryDetailsBack(
+            ls.getCompletionEntryDetails(fileName, position, ...rest),
+          );
         }
         if (mapped === null) return undefined;
-        return ls.getCompletionEntryDetails(fileName, mapped, ...rest);
+        return mapCompletionEntryDetailsBack(
+          ls.getCompletionEntryDetails(fileName, mapped, ...rest),
+        );
       });
 
       // Helper: map a textSpan back from shadow -> original for a given file

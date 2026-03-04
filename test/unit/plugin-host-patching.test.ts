@@ -78,6 +78,7 @@ function createMockPluginInfo(initialFiles: Record<string, string> = {}) {
   const languageService: Record<string, Function> = {};
   const methodNames = [
     'getCompletionsAtPosition',
+    'getCompletionEntryDetails',
     'getQuickInfoAtPosition',
     'getSemanticDiagnostics',
     'getSyntacticDiagnostics',
@@ -537,6 +538,89 @@ describe('proxy LanguageService', () => {
 
     const proxy = pluginModule.create(mock.info as any);
     const result = (proxy as any).getCompletionsAtPosition('file.ts', 0, {});
-    expect(result).toBe(expectedResult);
+    expect(result).toEqual(expectedResult);
+  });
+
+  it('maps completion replacement spans back to original offsets', async () => {
+    const init = await loadPlugin();
+    const tsModule = createMockTsModule();
+    const pluginModule = init({ typescript: tsModule });
+    const fileName = 'app.tsx';
+    const source = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const view = pug`',
+      '  Button(o)',
+      '`;',
+    ].join('\n');
+    const mock = createMockPluginInfo({ [fileName]: source });
+
+    mock.info.languageService.getCompletionsAtPosition = (_f: string, pos: number) => ({
+      entries: [
+        {
+          name: 'onClick',
+          kind: 'property',
+          sortText: '0',
+          replacementSpan: { start: pos, length: 1 },
+        },
+      ],
+      optionalReplacementSpan: { start: pos, length: 1 },
+    });
+
+    const proxy = pluginModule.create(mock.info as any);
+    const cursor = source.indexOf('Button(o') + 'Button(o'.length;
+    const result = (proxy as any).getCompletionsAtPosition(fileName, cursor, {});
+
+    expect(result).toBeDefined();
+    expect(result.entries[0].replacementSpan.start).toBe(cursor);
+    expect(result.optionalReplacementSpan.start).toBe(cursor);
+  });
+
+  it('maps completion detail code-action edit spans back to original offsets', async () => {
+    const init = await loadPlugin();
+    const tsModule = createMockTsModule();
+    const pluginModule = init({ typescript: tsModule });
+    const fileName = 'app.tsx';
+    const source = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const view = pug`',
+      '  Button(o)',
+      '`;',
+    ].join('\n');
+    const mock = createMockPluginInfo({ [fileName]: source });
+
+    mock.info.languageService.getCompletionEntryDetails = (_f: string, pos: number) => ({
+      name: 'onClick',
+      kind: 'property',
+      kindModifiers: '',
+      displayParts: [],
+      documentation: [],
+      tags: [],
+      codeActions: [
+        {
+          description: 'mock action',
+          changes: [
+            {
+              fileName,
+              textChanges: [{ span: { start: pos, length: 1 }, newText: 'x' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const proxy = pluginModule.create(mock.info as any);
+    const cursor = source.indexOf('Button(o') + 'Button(o'.length;
+    const result = (proxy as any).getCompletionEntryDetails(
+      fileName,
+      cursor,
+      'onClick',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    expect(result).toBeDefined();
+    expect(result.codeActions[0].changes[0].textChanges[0].span.start).toBe(cursor);
   });
 });

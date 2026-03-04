@@ -169,8 +169,10 @@ describe('compilePugToTsx - error handling', () => {
     // (may or may not fail depending on pug-parser tolerance)
     expect(Array.isArray(result.lexerTokens)).toBe(true);
     if (result.parseError) {
-      // On parse error, tsx should be null placeholder
-      expect(result.tsx).toContain('null');
+      // During typing-time recovery we may still produce TSX/mappings while
+      // preserving parseError for diagnostics.
+      expect(typeof result.tsx).toBe('string');
+      expect(result.tsx.length).toBeGreaterThan(0);
     } else {
       // If no parse error, we should have valid output with tokens
       expect(result.lexerTokens.length).toBeGreaterThan(0);
