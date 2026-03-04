@@ -1,4 +1,4 @@
-# Architecture: `vscode-pug-react`
+# Architecture: `react-pug`
 
 ## 1. Purpose and Scope
 
@@ -636,10 +636,4 @@ For visual/manual validation:
 
 - `npm run test:vscode:demo:screenshots`
 - `npm run vscode:fresh:demo`
-
----
-
-## 23. Historical Planning Docs
-
-This `architecture.md` replaces prior planning/tracking artifacts (`plan.md`, `tasks.md`, `teamlead.md`) as the current architecture source of truth.
 
