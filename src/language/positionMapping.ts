@@ -21,7 +21,7 @@ function getSourceMap(region: PugRegion): SourceMap<CodeInformation> {
  * stripped (common-indent-removed) text.
  *
  * Each non-empty line has `commonIndent` characters removed from its start.
- * Empty lines are unchanged (they become '' in both spaces).
+ * Whitespace-only lines are normalized to '' in stripped space.
  * Returns null if the raw offset points inside removed indentation.
  */
 function rawToStrippedOffset(rawText: string, rawOffset: number, commonIndent: number): number | null {
@@ -35,7 +35,7 @@ function rawToStrippedOffset(rawText: string, rawOffset: number, commonIndent: n
     if (rawOffset <= lineEnd) {
       // Offset is on this line
       const colInRaw = rawOffset - raw;
-      const indentToRemove = line.trim().length === 0 ? 0 : commonIndent;
+      const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
       // If the cursor is inside removed indentation, treat as unmapped.
       if (indentToRemove > 0 && colInRaw < indentToRemove) {
         return null;
@@ -44,7 +44,7 @@ function rawToStrippedOffset(rawText: string, rawOffset: number, commonIndent: n
       return stripped + colInStripped;
     }
     // Account for the stripped content of this line
-    const indentToRemove = line.trim().length === 0 ? 0 : commonIndent;
+    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
     stripped += Math.max(0, line.length - indentToRemove);
     raw = lineEnd + 1; // +1 for \n
     stripped += 1; // \n
@@ -63,7 +63,7 @@ function strippedToRawOffset(rawText: string, strippedOffset: number, commonInde
   const lines = rawText.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const indentToRemove = line.trim().length === 0 ? 0 : commonIndent;
+    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
     const strippedLineLen = Math.max(0, line.length - indentToRemove);
     if (strippedOffset <= stripped + strippedLineLen) {
       // Offset is on this line in stripped space

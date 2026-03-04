@@ -130,6 +130,28 @@ describe('originalToShadow', () => {
     expect(shadowPos).not.toBeNull();
     expect(doc.shadowText.slice(shadowPos!, shadowPos! + 9)).toBe('const mid');
   });
+
+  it('maps expressions after whitespace-only indented pug lines without shifting', () => {
+    const text = [
+      'const view = pug`',
+      '  h3 Title',
+      '    ',
+      '  if cond',
+      '    span= value',
+      '`;',
+    ].join('\n');
+    const doc = makeDoc(text);
+
+    const condOrig = text.indexOf('cond');
+    const condShadow = originalToShadow(doc, condOrig);
+    expect(condShadow).not.toBeNull();
+    expect(doc.shadowText.slice(condShadow!, condShadow! + 4)).toBe('cond');
+
+    const valueOrig = text.indexOf('value');
+    const valueShadow = originalToShadow(doc, valueOrig);
+    expect(valueShadow).not.toBeNull();
+    expect(doc.shadowText.slice(valueShadow!, valueShadow! + 5)).toBe('value');
+  });
 });
 
 // ── shadowToOriginal ───────────────────────────────────────────

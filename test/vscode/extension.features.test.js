@@ -279,6 +279,80 @@ suite('Extension Host Features (demo workspace)', () => {
     });
   });
 
+  test('indented whitespace-only lines inside pug do not break IntelliSense mapping', async function () {
+    const mappingDoc = await createTempDoc(
+      '__vscode_test_blank_whitespace_line.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const activeTodos = [{ id: 1, text: "One" }];',
+        'const view = pug`',
+        '  h3 Active (#{activeTodos.length})',
+        '    ',
+        '  if act',
+        '    span None',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+
+    const text = mappingDoc.getText();
+    const idx = text.indexOf('if act');
+    assert.ok(idx > 0, 'Could not find "if act" completion target');
+    const pos = mappingDoc.positionAt(idx + 'if act'.length);
+    const hoverIdx = text.indexOf('activeTodos.length');
+    assert.ok(hoverIdx > 0, 'Could not find hover target after blank line');
+    const hoverPos = mappingDoc.positionAt(hoverIdx + 1);
+
+    const editor = await vscode.window.showTextDocument(mappingDoc);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    await captureTestStep('features-before-blank-whitespace-line-check', {
+      file: mappingDoc.uri.fsPath,
+      completionPosition: { line: pos.line + 1, character: pos.character + 1 },
+      hoverPosition: { line: hoverPos.line + 1, character: hoverPos.character + 1 },
+    });
+
+    await vscode.commands.executeCommand('editor.action.triggerSuggest');
+    await wait(700);
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        mappingDoc.uri,
+        pos,
+      );
+      return result && Array.isArray(result.items) && result.items.length > 0 ? result : null;
+    });
+    const labels = completions.items.map((item) => labelText(item.label));
+    assert.ok(labels.includes('activeTodos'), 'Expected completion to include "activeTodos" after blank whitespace-only line');
+
+    const hovers = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeHoverProvider',
+        mappingDoc.uri,
+        hoverPos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    });
+    const hover = hovers.map(hoverText).join('\n');
+    assert.ok(/activeTodos/.test(hover), 'Expected hover to resolve "activeTodos" after blank whitespace-only line');
+
+    // Give diagnostics pipeline a moment to settle and ensure no parse-error regression.
+    await wait(500);
+    const diagnostics = vscode.languages.getDiagnostics(mappingDoc.uri);
+    const pugParseDiagnostics = diagnostics.filter((d) => /Pug parse error/i.test(d.message));
+    assert.strictEqual(pugParseDiagnostics.length, 0, 'Expected no pug parse error due to indented whitespace-only line');
+
+    await captureTestStep('features-after-blank-whitespace-line-check', {
+      completionCount: completions.items.length,
+      containsActiveTodos: labels.includes('activeTodos'),
+      hoverContainsActiveTodos: /activeTodos/.test(hover),
+      diagnosticCount: diagnostics.length,
+      pugParseDiagnosticCount: pugParseDiagnostics.length,
+      topLabels: labels.slice(0, 20),
+    });
+  });
+
   test('signature help inside pug call expression includes function shape', async function () {
     const idx = appText.indexOf('handleToggle(todo.id)');
     assert.ok(idx > 0, 'Could not find handleToggle(todo.id) in App.tsx');

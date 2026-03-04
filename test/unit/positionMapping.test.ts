@@ -273,6 +273,46 @@ describe('originalToShadow inside region (synthetic/unmapped)', () => {
     // Result is either null (unmapped) or a valid offset -- just verify it doesn't crash
     expect(result === null || typeof result === 'number').toBe(true);
   });
+
+  it('keeps mapping stable after indented whitespace-only lines inside pug', () => {
+    const text = [
+      'const view = pug`',
+      '  h3 Title',
+      '    ',
+      '  if cond',
+      '    span= value',
+      '`;',
+    ].join('\n');
+    const doc = makeDoc(text);
+
+    const condOrig = text.indexOf('cond');
+    const condShadow = originalToShadow(doc, condOrig);
+    expect(condShadow).not.toBeNull();
+    expect(doc.shadowText.slice(condShadow!, condShadow! + 4)).toBe('cond');
+    expect(shadowToOriginal(doc, condShadow!)).toBe(condOrig);
+
+    const valueOrig = text.indexOf('value');
+    const valueShadow = originalToShadow(doc, valueOrig);
+    expect(valueShadow).not.toBeNull();
+    expect(doc.shadowText.slice(valueShadow!, valueShadow! + 5)).toBe('value');
+    expect(shadowToOriginal(doc, valueShadow!)).toBe(valueOrig);
+  });
+
+  it('treats offsets inside whitespace-only indentation as unmapped', () => {
+    const text = [
+      'const view = pug`',
+      '  h3 Title',
+      '    ',
+      '  if cond',
+      '`;',
+    ].join('\n');
+    const doc = makeDoc(text);
+    const blankLineStart = text.indexOf('\n    \n') + 1;
+    expect(blankLineStart).toBeGreaterThan(0);
+
+    // Inside removed whitespace on a blank line should be unmapped.
+    expect(originalToShadow(doc, blankLineStart + 1)).toBeNull();
+  });
 });
 
 // ── shadowToOriginal: outside regions ───────────────────────────
