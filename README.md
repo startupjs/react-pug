@@ -194,7 +194,10 @@ npm install
 # Build
 npm run build
 
-# Run tests
+# Run unit/integration tests (Vitest)
+npm run test:unit
+
+# Run all tests (unit + VS Code extension-host)
 npm test
 
 # Run extension-host tests in fresh VS Code
