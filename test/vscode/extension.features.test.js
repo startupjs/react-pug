@@ -217,6 +217,68 @@ suite('Extension Host Features (demo workspace)', () => {
     });
   });
 
+  test('emmet suggestions are not shown inside pug template regions', async function () {
+    const completionDoc = await createTempDoc(
+      '__vscode_test_no_emmet.tsx',
+      [
+        'import { Button } from "./Button";',
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const view = pug`',
+        '  B',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+
+    const text = completionDoc.getText();
+    const idx = text.indexOf('\n  B\n');
+    assert.ok(idx > 0, 'Could not find pug completion target for no-emmet test');
+    const pos = completionDoc.positionAt(idx + '\n  B'.length);
+    const editor = await vscode.window.showTextDocument(completionDoc);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    await captureTestStep('features-before-no-emmet-completion', {
+      file: completionDoc.uri.fsPath,
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+    await vscode.commands.executeCommand('editor.action.triggerSuggest');
+    await wait(800);
+    await captureTestStep('features-ui-no-emmet-suggest-visible', {
+      command: 'editor.action.triggerSuggest',
+    });
+
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        completionDoc.uri,
+        pos,
+      );
+      return result && Array.isArray(result.items) && result.items.length > 0 ? result : null;
+    });
+
+    const labels = completions.items.map((item) => labelText(item.label));
+    const emmetLikeItems = completions.items.filter((item) => {
+      const detail = typeof item.detail === 'string' ? item.detail : '';
+      return /Emmet Abbreviation/i.test(detail);
+    });
+    const emmetLikePreview = emmetLikeItems
+      .slice(0, 12)
+      .map((item) => `${labelText(item.label)} :: ${typeof item.detail === 'string' ? item.detail : ''}`);
+
+    assert.strictEqual(
+      emmetLikeItems.length,
+      0,
+      `Expected no Emmet completion items inside pug. Top labels: ${labels.slice(0, 20).join(', ')}. Emmet-like: ${emmetLikePreview.join(' | ')}`,
+    );
+    await captureTestStep('features-after-no-emmet-completion', {
+      completionCount: completions.items.length,
+      emmetLikeCount: emmetLikeItems.length,
+      topLabels: labels.slice(0, 20),
+      topDetails: completions.items.slice(0, 20).map((item) => (typeof item.detail === 'string' ? item.detail : '')),
+    });
+  });
+
   test('signature help inside pug call expression includes function shape', async function () {
     const idx = appText.indexOf('handleToggle(todo.id)');
     assert.ok(idx > 0, 'Could not find handleToggle(todo.id) in App.tsx');

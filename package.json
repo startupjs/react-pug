@@ -45,6 +45,13 @@
         }
       }
     },
+    "configurationDefaults": {
+      "emmet.excludeLanguages": [
+        "markdown",
+        "pug"
+      ],
+      "emmet.showExpandedAbbreviation": "inMarkupAndStylesheetFilesOnly"
+    },
     "commands": [
       {
         "command": "pugReact.showShadowTsx",
