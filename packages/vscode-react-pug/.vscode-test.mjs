@@ -27,12 +27,4 @@ export default defineConfig([
       TEST_WORKSPACE_NAME: 'demo',
     },
   },
-  {
-    ...common,
-    label: 'sample-project',
-    workspaceFolder: path.join(repoRoot, 'examples', 'sample-project'),
-    env: {
-      TEST_WORKSPACE_NAME: 'sample-project',
-    },
-  },
 ]);

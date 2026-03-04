@@ -202,11 +202,9 @@ npm run test:vscode
 
 # Run extension-host tests for a specific workspace
 npm run test:vscode:demo
-npm run test:vscode:sample-project
 
 # Run extension-host tests with desktop screenshots captured at each step
 npm run test:vscode:demo:screenshots
-npm run test:vscode:sample-project:screenshots
 
 # Type check
 npm run typecheck
