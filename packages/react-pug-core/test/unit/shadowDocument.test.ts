@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildShadowDocument } from '../../packages/react-pug-core/src/language/shadowDocument';
+import { buildShadowDocument } from '../../src/language/shadowDocument';
 
 // ── No pug regions (passthrough) ────────────────────────────────
 

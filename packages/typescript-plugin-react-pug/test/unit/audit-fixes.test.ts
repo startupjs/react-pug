@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildShadowDocument } from '../../packages/react-pug-core/src/language/shadowDocument';
+import { buildShadowDocument } from '../../../react-pug-core/src/language/shadowDocument';
 import {
   originalToShadow,
   shadowToOriginal,
-} from '../../packages/react-pug-core/src/language/positionMapping';
+} from '../../../react-pug-core/src/language/positionMapping';
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -233,7 +233,7 @@ describe('version incorporates host version (Finding 2)', () => {
   }
 
   async function loadPlugin() {
-    const mod = await import('../../packages/typescript-plugin-react-pug/src/index.ts');
+    const mod = await import('../../src/index.ts');
     return mod.default ?? mod;
   }
 
@@ -369,7 +369,7 @@ describe('version incorporates host version (Finding 2)', () => {
 // ── Finding 3: Plugin module resolvability ───────────────────────
 
 describe('plugin module resolvability (Finding 3)', () => {
-  const root = resolve(__dirname, '../..');
+  const root = resolve(__dirname, '../../../..');
   const extensionPkgPath = resolve(root, 'packages/vscode-react-pug/package.json');
   const depPkgPath = resolve(root, 'node_modules/@startupjs/typescript-plugin-react-pug/package.json');
   const distPluginPath = resolve(root, 'packages/typescript-plugin-react-pug/dist/plugin.js');
@@ -414,7 +414,7 @@ describe('plugin module resolvability (Finding 3)', () => {
 // ── Finding 4: Grammar word boundary ─────────────────────────────
 
 describe('grammar regex word boundary (Finding 4)', () => {
-  const grammarPath = resolve(__dirname, '../../packages/vscode-react-pug/syntaxes/pug-template-literal.json');
+  const grammarPath = resolve(__dirname, '../../../vscode-react-pug/syntaxes/pug-template-literal.json');
   let beginPattern: string;
 
   function getBeginRegex(): RegExp {

@@ -28,7 +28,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 // [x] Proxy LS delegates all methods to original
 
 async function loadPlugin() {
-  const mod = await import('../../packages/typescript-plugin-react-pug/src/index.ts');
+  const mod = await import('../../src/index.ts');
   return mod.default ?? mod;
 }
 

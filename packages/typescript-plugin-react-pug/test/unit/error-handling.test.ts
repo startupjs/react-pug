@@ -10,7 +10,7 @@ const APP_FILE = path.join(FIXTURES_DIR, 'app.tsx');
 const BUTTON_FILE = path.join(FIXTURES_DIR, 'Button.tsx');
 
 async function loadPlugin() {
-  const mod = await import('../../packages/typescript-plugin-react-pug/src/index.ts');
+  const mod = await import('../../src/index.ts');
   return mod.default ?? mod;
 }
 
@@ -414,7 +414,7 @@ vi.mock('vscode', () => ({
 
 async function activateExtension() {
   vi.resetModules();
-  const ext = await import('../../packages/vscode-react-pug/src/index.ts');
+  const ext = await import('../../../vscode-react-pug/src/index.ts');
   const mockContext = {
     subscriptions: mockSubscriptions,
     extensionPath: '/mock/path',

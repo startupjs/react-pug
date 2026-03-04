@@ -8,7 +8,7 @@ const JSX_FILE = path.join(FIXTURES_DIR, 'app-jsx.jsx');
 const BUTTON_FILE = path.join(FIXTURES_DIR, 'Button.tsx');
 
 async function loadPlugin() {
-  const mod = await import('../../packages/typescript-plugin-react-pug/src/index.ts');
+  const mod = await import('../../src/index.ts');
   return mod.default ?? mod;
 }
 

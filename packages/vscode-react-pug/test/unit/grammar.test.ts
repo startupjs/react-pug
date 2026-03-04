@@ -21,8 +21,7 @@ import { resolve } from 'path';
 // [x] Begin pattern uses lookbehind for "pug" identifier
 // [x] Build still passes with grammar file
 
-const root = resolve(__dirname, '../..');
-const extensionRoot = resolve(root, 'packages/vscode-react-pug');
+const extensionRoot = resolve(__dirname, '../..');
 const grammarPath = resolve(extensionRoot, 'syntaxes/pug-template-literal.json');
 const packageJsonPath = resolve(extensionRoot, 'package.json');
 

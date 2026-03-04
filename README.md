@@ -228,16 +228,17 @@ packages/
       shadowDocument.ts  Build shadow document (replace pug with JSX)
       positionMapping.ts Bidirectional offset mapping
       mapping.ts         Core types (PugRegion, PugDocument, CodeMapping)
+    test/               Core unit/integration tests
   typescript-plugin-react-pug/
     src/index.ts         TypeScript plugin (host patching, LS method proxying)
+    test/               Plugin unit/integration tests + fixtures
   vscode-react-pug/
     src/index.ts         VS Code extension (activation, commands)
     syntaxes/
       pug-template-literal.json
-test/
-  unit/                  331 unit tests
-  integration/           229 integration tests
-  fixtures/spike/        Test fixtures (tsconfig, components)
+    test/
+      unit/             Extension + grammar + build tests
+      vscode/           Real VS Code extension-host tests + screenshot helper
 examples/
   demo/                  Example React project
 ```

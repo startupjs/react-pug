@@ -13,14 +13,14 @@ import { resolve } from 'path';
 // [x] plugin.js contains plugin logic (buildShadowDocument)
 // [x] Build succeeds with zero exit code
 
-const root = resolve(__dirname, '../..');
-const extensionDistDir = resolve(root, 'packages/vscode-react-pug/dist');
-const pluginDistDir = resolve(root, 'packages/typescript-plugin-react-pug/dist');
+const repoRoot = resolve(__dirname, '../../../..');
+const extensionDistDir = resolve(repoRoot, 'packages/vscode-react-pug/dist');
+const pluginDistDir = resolve(repoRoot, 'packages/typescript-plugin-react-pug/dist');
 
 describe('build pipeline', () => {
   beforeAll(() => {
     // Run build to ensure dist is fresh
-    execSync('npm run build', { cwd: root, stdio: 'pipe' });
+    execSync('npm run build', { cwd: repoRoot, stdio: 'pipe' });
   });
 
   it('produces packages/vscode-react-pug/dist/client.js', () => {
@@ -66,7 +66,7 @@ describe('build pipeline', () => {
 
   it('typecheck passes', { timeout: 30000 }, () => {
     expect(() => {
-      execSync('npx tsc --noEmit', { cwd: root, stdio: 'pipe' });
+      execSync('npx tsc --noEmit', { cwd: repoRoot, stdio: 'pipe' });
     }).not.toThrow();
   });
 });

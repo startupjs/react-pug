@@ -49,28 +49,28 @@ vi.mock('vscode', () => ({
 
 describe('extension module', () => {
   it('exports activate function', async () => {
-    const ext = await import('../../packages/vscode-react-pug/src/index.ts');
+    const ext = await import('../../src/index.ts');
     expect(typeof ext.activate).toBe('function');
   });
 
   it('exports deactivate function', async () => {
-    const ext = await import('../../packages/vscode-react-pug/src/index.ts');
+    const ext = await import('../../src/index.ts');
     expect(typeof ext.deactivate).toBe('function');
   });
 
   it('activate accepts a context argument', async () => {
-    const ext = await import('../../packages/vscode-react-pug/src/index.ts');
+    const ext = await import('../../src/index.ts');
     // activate should accept one argument (ExtensionContext)
     expect(ext.activate.length).toBeLessThanOrEqual(1);
   });
 
   it('deactivate has no required arguments', async () => {
-    const ext = await import('../../packages/vscode-react-pug/src/index.ts');
+    const ext = await import('../../src/index.ts');
     expect(ext.deactivate.length).toBe(0);
   });
 
   it('activate does not throw with a mock context', async () => {
-    const ext = await import('../../packages/vscode-react-pug/src/index.ts');
+    const ext = await import('../../src/index.ts');
     const mockContext = {
       subscriptions: [],
       extensionPath: '/mock/path',
@@ -84,7 +84,7 @@ describe('extension module', () => {
   });
 
   it('deactivate does not throw', async () => {
-    const ext = await import('../../packages/vscode-react-pug/src/index.ts');
+    const ext = await import('../../src/index.ts');
     expect(() => {
       ext.deactivate();
     }).not.toThrow();

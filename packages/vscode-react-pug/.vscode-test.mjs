@@ -3,10 +3,11 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@vscode/test-cli';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(root, '..', '..');
 
 const common = {
   files: 'test/vscode/**/*.test.js',
-  extensionDevelopmentPath: path.join(root, 'packages', 'vscode-react-pug'),
+  extensionDevelopmentPath: root,
   mocha: {
     timeout: 30000,
   },
@@ -21,7 +22,7 @@ export default defineConfig([
   {
     ...common,
     label: 'demo',
-    workspaceFolder: path.join(root, 'examples', 'demo'),
+    workspaceFolder: path.join(repoRoot, 'examples', 'demo'),
     env: {
       TEST_WORKSPACE_NAME: 'demo',
     },
@@ -29,7 +30,7 @@ export default defineConfig([
   {
     ...common,
     label: 'sample-project',
-    workspaceFolder: path.join(root, 'examples', 'sample-project'),
+    workspaceFolder: path.join(repoRoot, 'examples', 'sample-project'),
     env: {
       TEST_WORKSPACE_NAME: 'sample-project',
     },

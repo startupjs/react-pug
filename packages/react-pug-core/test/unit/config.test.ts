@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { extractPugRegions } from '../../packages/react-pug-core/src/language/extractRegions';
-import { buildShadowDocument } from '../../packages/react-pug-core/src/language/shadowDocument';
+import { extractPugRegions } from '../../src/language/extractRegions';
+import { buildShadowDocument } from '../../src/language/shadowDocument';
 
 // ── extractPugRegions with tagName ──────────────────────────────
 
@@ -163,7 +163,7 @@ describe('buildShadowDocument with tagName parameter', () => {
 // ── package.json configuration schema ───────────────────────────
 
 describe('package.json configuration schema', () => {
-  const pkgPath = path.resolve(__dirname, '../../packages/vscode-react-pug/package.json');
+  const pkgPath = path.resolve(__dirname, '../../../vscode-react-pug/package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   const config = pkg.contributes?.configuration;
 
