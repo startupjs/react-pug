@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildShadowDocument } from '../../src/language/shadowDocument';
+import { buildShadowDocument } from '../../packages/react-pug-core/src/language/shadowDocument';
 import {
   originalToShadow,
   shadowToOriginal,
   findRegionAtOriginalOffset,
   findRegionAtShadowOffset,
-} from '../../src/language/positionMapping';
+} from '../../packages/react-pug-core/src/language/positionMapping';
 
 // ── Helper ─────────────────────────────────────────────────────
 

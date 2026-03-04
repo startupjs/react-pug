@@ -1,82 +1,13 @@
 {
-  "name": "vscode-pug-react",
-  "displayName": "Pug React IntelliSense",
-  "description": "JSX-grade IntelliSense for pug`` tagged template literals in React projects",
-  "version": "0.0.1",
-  "publisher": "startupjs",
-  "license": "MIT",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": [
-    "Programming Languages"
+  "name": "vscode-pug-react-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*"
   ],
-  "activationEvents": [
-    "onLanguage:typescript",
-    "onLanguage:typescriptreact",
-    "onLanguage:javascript",
-    "onLanguage:javascriptreact"
-  ],
-  "main": "./dist/client.js",
-  "contributes": {
-    "typescriptServerPlugins": [
-      {
-        "name": "vscode-pug-react-ts-plugin",
-        "enableForWorkspaceTypeScriptVersions": true
-      }
-    ],
-    "configuration": {
-      "title": "Pug React IntelliSense",
-      "properties": {
-        "pugReact.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable the Pug React IntelliSense extension"
-        },
-        "pugReact.diagnostics.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable pug-specific diagnostics (parse errors)"
-        },
-        "pugReact.tagFunction": {
-          "type": "string",
-          "default": "pug",
-          "description": "The tag function name to recognize (for users who alias the import)"
-        }
-      }
-    },
-    "configurationDefaults": {
-      "emmet.excludeLanguages": [
-        "markdown",
-        "pug"
-      ],
-      "emmet.showExpandedAbbreviation": "inMarkupAndStylesheetFilesOnly"
-    },
-    "commands": [
-      {
-        "command": "pugReact.showShadowTsx",
-        "title": "Pug React: Show Shadow TSX"
-      }
-    ],
-    "grammars": [
-      {
-        "scopeName": "inline.pug-template-literal",
-        "path": "./syntaxes/pug-template-literal.json",
-        "injectTo": [
-          "source.ts",
-          "source.tsx",
-          "source.js",
-          "source.jsx"
-        ],
-        "embeddedLanguages": {
-          "source.pug": "jade",
-          "text.pug": "jade"
-        }
-      }
-    ]
-  },
   "scripts": {
     "build": "node esbuild.config.mjs",
+    "build:extension": "node esbuild.config.mjs extension",
+    "build:plugin": "node esbuild.config.mjs plugin",
     "watch": "node esbuild.config.mjs --watch",
     "test": "vitest run",
     "deps:demo": "node scripts/ensure-workspace-deps.mjs examples/demo",
@@ -93,14 +24,6 @@
     "typecheck": "tsc --noEmit",
     "vscode:fresh:demo": "node scripts/open-vscode-fresh.mjs examples/demo",
     "vscode:fresh:sample-project": "node scripts/open-vscode-fresh.mjs examples/sample-project"
-  },
-  "dependencies": {
-    "@babel/parser": "^7.29.0",
-    "@startupjs/pug-lexer": "^4.1.0-1",
-    "@volar/source-map": "^2.4.28",
-    "pug-parser": "^6.0.0",
-    "pug-strip-comments": "^2.0.0",
-    "vscode-pug-react-ts-plugin": "file:./ts-plugin"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",

@@ -1,0 +1,14 @@
+{
+  "name": "@startupjs/react-pug-core",
+  "private": true,
+  "main": "./src/index.ts",
+  "version": "0.0.1",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@babel/parser": "^7.29.0",
+    "@startupjs/pug-lexer": "^4.1.0-1",
+    "@volar/source-map": "^2.4.28",
+    "pug-parser": "^6.0.0",
+    "pug-strip-comments": "^2.0.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@startupjs/typescript-plugin-react-pug",
+  "private": true,
+  "main": "./dist/plugin.js",
+  "version": "0.0.1",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@startupjs/react-pug-core": "file:../react-pug-core"
+  }
+}

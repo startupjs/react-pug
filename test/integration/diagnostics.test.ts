@@ -7,7 +7,7 @@ const FIXTURES_DIR = path.resolve(__dirname, '../fixtures/spike');
 const BUTTON_FILE = path.join(FIXTURES_DIR, 'Button.tsx');
 
 async function loadPlugin() {
-  const mod = await import('../../src/plugin/index.ts');
+  const mod = await import('../../packages/typescript-plugin-react-pug/src/index.ts');
   return mod.default ?? mod;
 }
 

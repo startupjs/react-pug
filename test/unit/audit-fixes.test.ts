@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildShadowDocument } from '../../src/language/shadowDocument';
+import { buildShadowDocument } from '../../packages/react-pug-core/src/language/shadowDocument';
 import {
   originalToShadow,
   shadowToOriginal,
-} from '../../src/language/positionMapping';
+} from '../../packages/react-pug-core/src/language/positionMapping';
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -233,7 +233,7 @@ describe('version incorporates host version (Finding 2)', () => {
   }
 
   async function loadPlugin() {
-    const mod = await import('../../src/plugin/index.ts');
+    const mod = await import('../../packages/typescript-plugin-react-pug/src/index.ts');
     return mod.default ?? mod;
   }
 
@@ -370,49 +370,51 @@ describe('version incorporates host version (Finding 2)', () => {
 
 describe('plugin module resolvability (Finding 3)', () => {
   const root = resolve(__dirname, '../..');
-  const depPkgPath = resolve(root, 'node_modules/vscode-pug-react-ts-plugin/package.json');
-  const rootPkgPath = resolve(root, 'package.json');
-  const distPluginPath = resolve(root, 'dist/plugin.js');
+  const extensionPkgPath = resolve(root, 'packages/vscode-react-pug/package.json');
+  const depPkgPath = resolve(root, 'node_modules/@startupjs/typescript-plugin-react-pug/package.json');
+  const distPluginPath = resolve(root, 'packages/typescript-plugin-react-pug/dist/plugin.js');
 
-  it('package.json declares vscode-pug-react-ts-plugin dependency', () => {
-    const pkg = JSON.parse(readFileSync(rootPkgPath, 'utf-8'));
-    expect(pkg.dependencies?.['vscode-pug-react-ts-plugin']).toBe('file:./ts-plugin');
+  it('extension package declares @startupjs/typescript-plugin-react-pug dependency', () => {
+    const pkg = JSON.parse(readFileSync(extensionPkgPath, 'utf-8'));
+    expect(pkg.dependencies?.['@startupjs/typescript-plugin-react-pug'])
+      .toBe('file:../typescript-plugin-react-pug');
   });
 
-  it('node_modules/vscode-pug-react-ts-plugin/package.json exists', () => {
+  it('node_modules/@startupjs/typescript-plugin-react-pug/package.json exists', () => {
     expect(existsSync(depPkgPath)).toBe(true);
   });
 
-  it('dependency package.json points to dist/plugin.js', () => {
+  it('dependency package.json points to package-local dist/plugin.js', () => {
     const content = JSON.parse(readFileSync(depPkgPath, 'utf-8'));
-    expect(content.main).toBe('../../dist/plugin.js');
+    expect(content.main).toBe('./dist/plugin.js');
   });
 
   it('the resolved dist/plugin.js file actually exists', () => {
-    const depDir = resolve(root, 'node_modules/vscode-pug-react-ts-plugin');
+    const depDir = resolve(root, 'node_modules/@startupjs/typescript-plugin-react-pug');
     const depPkg = JSON.parse(readFileSync(depPkgPath, 'utf-8'));
     const resolvedPath = resolve(depDir, depPkg.main);
     expect(existsSync(resolvedPath)).toBe(true);
   });
 
-  it('resolved path matches dist/plugin.js', () => {
-    const depDir = resolve(root, 'node_modules/vscode-pug-react-ts-plugin');
+  it('resolved path matches packages/typescript-plugin-react-pug/dist/plugin.js', () => {
+    const depDir = resolve(root, 'node_modules/@startupjs/typescript-plugin-react-pug');
     const depPkg = JSON.parse(readFileSync(depPkgPath, 'utf-8'));
     const resolvedPath = resolve(depDir, depPkg.main);
-    expect(resolvedPath).toBe(distPluginPath);
+    const fs = require('fs') as typeof import('fs');
+    expect(fs.realpathSync(resolvedPath)).toBe(fs.realpathSync(distPluginPath));
   });
 
-  it('typescriptServerPlugins contribution uses vscode-pug-react-ts-plugin', () => {
-    const pkg = JSON.parse(readFileSync(rootPkgPath, 'utf-8'));
+  it('typescriptServerPlugins contribution uses @startupjs/typescript-plugin-react-pug', () => {
+    const pkg = JSON.parse(readFileSync(extensionPkgPath, 'utf-8'));
     const tsPlugins = pkg.contributes?.typescriptServerPlugins ?? [];
-    expect(tsPlugins[0]?.name).toBe('vscode-pug-react-ts-plugin');
+    expect(tsPlugins[0]?.name).toBe('@startupjs/typescript-plugin-react-pug');
   });
 });
 
 // ── Finding 4: Grammar word boundary ─────────────────────────────
 
 describe('grammar regex word boundary (Finding 4)', () => {
-  const grammarPath = resolve(__dirname, '../../syntaxes/pug-template-literal.json');
+  const grammarPath = resolve(__dirname, '../../packages/vscode-react-pug/syntaxes/pug-template-literal.json');
   let beginPattern: string;
 
   function getBeginRegex(): RegExp {

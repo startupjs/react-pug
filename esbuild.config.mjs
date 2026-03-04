@@ -1,6 +1,7 @@
 import * as esbuild from 'esbuild';
 
 const watch = process.argv.includes('--watch');
+const targetArg = process.argv.find((arg) => arg === 'extension' || arg === 'plugin');
 
 /** @type {esbuild.BuildOptions} */
 const shared = {
@@ -12,18 +13,22 @@ const shared = {
   logLevel: 'info',
 };
 
-const configs = [
-  {
+const allConfigs = {
+  extension: {
     ...shared,
-    entryPoints: ['src/extension/index.ts'],
-    outfile: 'dist/client.js',
+    entryPoints: ['packages/vscode-react-pug/src/index.ts'],
+    outfile: 'packages/vscode-react-pug/dist/client.js',
   },
-  {
+  plugin: {
     ...shared,
-    entryPoints: ['src/plugin/index.ts'],
-    outfile: 'dist/plugin.js',
+    entryPoints: ['packages/typescript-plugin-react-pug/src/index.ts'],
+    outfile: 'packages/typescript-plugin-react-pug/dist/plugin.js',
   },
-];
+};
+
+const configs = targetArg
+  ? [allConfigs[targetArg]]
+  : [allConfigs.extension, allConfigs.plugin];
 
 async function main() {
   if (watch) {

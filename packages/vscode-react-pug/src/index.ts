@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { buildShadowDocument } from '../language/shadowDocument';
+import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDocument';
 
 const SCHEME = 'pug-react-shadow';
 

@@ -22,6 +22,7 @@ async function main() {
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = path.resolve(scriptDir, '..');
   const workspacePath = path.resolve(repoRoot, workspaceArg);
+  const extensionDevelopmentPath = path.join(repoRoot, 'packages', 'vscode-react-pug');
 
   if (!fs.existsSync(workspacePath) || !fs.statSync(workspacePath).isDirectory()) {
     console.error(`Workspace directory does not exist: ${workspacePath}`);
@@ -46,7 +47,7 @@ async function main() {
     extensionsDir,
     '--disable-extensions',
     '--extensionDevelopmentPath',
-    repoRoot,
+    extensionDevelopmentPath,
     workspacePath,
   ];
 

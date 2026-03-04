@@ -89,7 +89,7 @@ npm run build
 npx @vscode/vsce package
 
 # Install
-code --install-extension vscode-pug-react-0.0.1.vsix
+code --install-extension vscode-react-pug-0.0.1.vsix
 ```
 
 ## Setup
@@ -102,7 +102,7 @@ For the best experience, add the TypeScript plugin to your `tsconfig.json`:
 {
   "compilerOptions": {
     "plugins": [
-      { "name": "vscode-pug-react-ts-plugin" }
+      { "name": "@startupjs/typescript-plugin-react-pug" }
     ]
   }
 }
@@ -220,23 +220,24 @@ When screenshot capture is enabled, artifacts are written to `artifacts/vscode-s
 ### Project Structure
 
 ```
-src/
-  language/              Core logic (framework-agnostic)
-    extractRegions.ts    Find pug tagged template literals via @babel/parser
-    pugToTsx.ts          Pug-to-TSX compiler with source mappings
-    shadowDocument.ts    Build shadow document (replace pug with JSX)
-    positionMapping.ts   Bidirectional offset mapping
-    mapping.ts           Core types (PugRegion, PugDocument, CodeMapping)
-  plugin/
-    index.ts             TypeScript plugin (host patching, LS method proxying)
-  extension/
-    index.ts             VS Code extension (activation, commands)
+packages/
+  react-pug-core/
+    src/language/        Core logic (framework-agnostic)
+      extractRegions.ts  Find pug tagged template literals via @babel/parser
+      pugToTsx.ts        Pug-to-TSX compiler with source mappings
+      shadowDocument.ts  Build shadow document (replace pug with JSX)
+      positionMapping.ts Bidirectional offset mapping
+      mapping.ts         Core types (PugRegion, PugDocument, CodeMapping)
+  typescript-plugin-react-pug/
+    src/index.ts         TypeScript plugin (host patching, LS method proxying)
+  vscode-react-pug/
+    src/index.ts         VS Code extension (activation, commands)
+    syntaxes/
+      pug-template-literal.json
 test/
   unit/                  331 unit tests
   integration/           229 integration tests
   fixtures/spike/        Test fixtures (tsconfig, components)
-syntaxes/
-  pug-template-literal.json   TextMate grammar injection
 examples/
   demo/                  Example React project
 ```

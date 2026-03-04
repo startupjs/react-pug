@@ -12,8 +12,8 @@ import {
   type PugDocument,
   type PugParseError,
   type PugToken,
-} from '../../src/language/mapping';
-import * as mappingExports from '../../src/language/mapping';
+} from '../../packages/react-pug-core/src/language/mapping';
+import * as mappingExports from '../../packages/react-pug-core/src/language/mapping';
 
 // Test checklist:
 // [x] FULL_FEATURES has all four flags true

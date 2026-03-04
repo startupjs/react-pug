@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { compilePugToTsx, TsxEmitter } from '../../src/language/pugToTsx';
-import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from '../../src/language/mapping';
+import { compilePugToTsx, TsxEmitter } from '../../packages/react-pug-core/src/language/pugToTsx';
+import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from '../../packages/react-pug-core/src/language/mapping';
 
 describe('TsxEmitter', () => {
   it('emitMapped tracks offset and creates mapping', () => {

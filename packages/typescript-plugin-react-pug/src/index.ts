@@ -1,7 +1,7 @@
 import type ts from 'typescript';
-import type { PugDocument } from '../language/mapping';
-import { buildShadowDocument } from '../language/shadowDocument';
-import { findRegionAtOriginalOffset, originalToShadow, shadowToOriginal } from '../language/positionMapping';
+import type { PugDocument } from '../../react-pug-core/src/language/mapping';
+import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDocument';
+import { findRegionAtOriginalOffset, originalToShadow, shadowToOriginal } from '../../react-pug-core/src/language/positionMapping';
 
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;

@@ -14,7 +14,7 @@ import { describe, it, expect } from 'vitest';
 
 async function loadPlugin() {
   // vitest handles TS transpilation; use dynamic import for `export =` module
-  const mod = await import('../../src/plugin/index.ts');
+  const mod = await import('../../packages/typescript-plugin-react-pug/src/index.ts');
   return mod.default ?? mod;
 }
 

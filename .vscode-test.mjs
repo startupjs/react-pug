@@ -6,7 +6,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 
 const common = {
   files: 'test/vscode/**/*.test.js',
-  extensionDevelopmentPath: root,
+  extensionDevelopmentPath: path.join(root, 'packages', 'vscode-react-pug'),
   mocha: {
     timeout: 30000,
   },

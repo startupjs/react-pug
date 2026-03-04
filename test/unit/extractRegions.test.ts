@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractPugRegions } from '../../src/language/extractRegions';
+import { extractPugRegions } from '../../packages/react-pug-core/src/language/extractRegions';
 
 // Test checklist:
 // [x] Single pug template -- correct originalStart/End, pugTextStart/End, pugText

@@ -22,8 +22,9 @@ import { resolve } from 'path';
 // [x] Build still passes with grammar file
 
 const root = resolve(__dirname, '../..');
-const grammarPath = resolve(root, 'syntaxes/pug-template-literal.json');
-const packageJsonPath = resolve(root, 'package.json');
+const extensionRoot = resolve(root, 'packages/vscode-react-pug');
+const grammarPath = resolve(extensionRoot, 'syntaxes/pug-template-literal.json');
+const packageJsonPath = resolve(extensionRoot, 'package.json');
 
 let grammar: any;
 let packageJson: any;
@@ -252,7 +253,7 @@ describe('package.json grammar configuration', () => {
     const entry = pkg.contributes.grammars[0];
     expect(entry.path).toBe('./syntaxes/pug-template-literal.json');
     // Verify the path actually resolves to an existing file
-    const resolvedPath = resolve(root, entry.path);
+    const resolvedPath = resolve(extensionRoot, entry.path);
     expect(existsSync(resolvedPath)).toBe(true);
   });
 

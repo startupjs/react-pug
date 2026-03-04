@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "outDir": "out",
     "plugins": [
-      { "name": "vscode-pug-react-ts-plugin" }
+      { "name": "@startupjs/typescript-plugin-react-pug" }
     ]
   },
   "include": ["*.tsx", "*.ts"]
