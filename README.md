@@ -87,6 +87,13 @@ Useful extras:
 ```bash
 npm run test:vscode:example:screenshots
 npm run vscode:fresh:example
+npm run check:pug:example
+```
+
+Pug-aware CI type check command (without launching VS Code):
+
+```bash
+node scripts/check-pug-types.mjs <project-dir>
 ```
 
 ## Architecture
