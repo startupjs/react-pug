@@ -24,11 +24,15 @@ vi.mock('vscode', () => ({
     }),
   },
   workspace: {
+    onDidChangeConfiguration: () => ({ dispose: () => {} }),
     onDidChangeTextDocument: () => ({ dispose: () => {} }),
     onDidOpenTextDocument: () => ({ dispose: () => {} }),
     registerTextDocumentContentProvider: () => ({ dispose: () => {} }),
     openTextDocument: async () => ({}),
     getConfiguration: () => ({ get: (_key: string, def: any) => def }),
+  },
+  extensions: {
+    getExtension: () => undefined,
   },
   window: {
     showInformationMessage: () => {},

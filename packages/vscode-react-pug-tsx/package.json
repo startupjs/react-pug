@@ -42,6 +42,21 @@
           "type": "string",
           "default": "pug",
           "description": "The tag function name to recognize (for users who alias the import)"
+        },
+        "pugReact.injectCssxjsTypes": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "none",
+            "auto",
+            "force"
+          ],
+          "enumDescriptions": [
+            "Never inject cssxjs React attribute types.",
+            "Inject cssxjs React attribute types only when startupjs or cssxjs is present in dependencies/peerDependencies.",
+            "Always inject cssxjs React attribute types for files with pug templates."
+          ],
+          "description": "Controls automatic injection of cssxjs React attribute types (part/styleName)."
         }
       }
     },

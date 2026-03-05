@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 // Test checklist:
 // [x] getScriptSnapshot returns shadow TSX for files with pug templates
@@ -49,6 +52,21 @@ function createMockTsModule() {
         return mockScriptSnapshot(text);
       },
     },
+    sys: {
+      fileExists(fileName: string) {
+        return fs.existsSync(fileName);
+      },
+      readFile(fileName: string) {
+        return fs.existsSync(fileName)
+          ? fs.readFileSync(fileName, 'utf8')
+          : undefined;
+      },
+      getModifiedTime(fileName: string) {
+        return fs.existsSync(fileName)
+          ? fs.statSync(fileName).mtime
+          : undefined;
+      },
+    },
   };
 }
 
@@ -56,7 +74,10 @@ function createMockTsModule() {
  * Create a mock PluginCreateInfo with mutable file contents.
  * Returns the info object plus a helper to update file contents.
  */
-function createMockPluginInfo(initialFiles: Record<string, string> = {}) {
+function createMockPluginInfo(
+  initialFiles: Record<string, string> = {},
+  pluginConfig: Record<string, any> = {},
+) {
   const files = { ...initialFiles };
   const versions: Record<string, number> = {};
   for (const key of Object.keys(files)) {
@@ -98,7 +119,7 @@ function createMockPluginInfo(initialFiles: Record<string, string> = {}) {
     languageServiceHost,
     languageService,
     project: {},
-    config: {},
+    config: pluginConfig,
   };
 
   return {
@@ -113,11 +134,14 @@ function createMockPluginInfo(initialFiles: Record<string, string> = {}) {
 }
 
 /** Helper: initialize plugin and return the patched host + proxy LS */
-async function setupPlugin(files: Record<string, string> = {}) {
+async function setupPlugin(
+  files: Record<string, string> = {},
+  pluginConfig: Record<string, any> = {},
+) {
   const init = await loadPlugin();
   const tsModule = createMockTsModule();
   const pluginModule = init({ typescript: tsModule });
-  const mock = createMockPluginInfo(files);
+  const mock = createMockPluginInfo(files, pluginConfig);
   const proxy = pluginModule.create(mock.info as any);
 
   // After create(), the host methods are patched in-place
@@ -173,6 +197,116 @@ describe('getScriptSnapshot patching', () => {
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
     expect(text).toContain('import React from "react"');
     expect(text).toContain('export default v');
+  });
+
+  it('injects extra React attributes when startupjs dependency exists', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pug-react-extra-types-'));
+    try {
+      const appPath = path.join(tempDir, 'app.tsx');
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({ dependencies: { startupjs: '^1.0.0' } }),
+        'utf8',
+      );
+
+      const { host } = await setupPlugin({
+        [appPath]: 'const view = pug`\\n  Button()\\n`;\n',
+      });
+
+      const text = snapshotText(host.getScriptSnapshot(appPath));
+      expect(text).toContain("declare module 'react'");
+      expect(text).toContain('part?: __PugReactPartProp');
+      expect(text).toContain('styleName?: __PugReactStyleNameProp');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('injects extra React attributes when cssxjs peerDependency exists', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pug-react-extra-types-'));
+    try {
+      const appPath = path.join(tempDir, 'app.tsx');
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({ peerDependencies: { cssxjs: '^1.0.0' } }),
+        'utf8',
+      );
+
+      const { host } = await setupPlugin({
+        [appPath]: 'const view = pug`\\n  Button()\\n`;\n',
+      });
+
+      const text = snapshotText(host.getScriptSnapshot(appPath));
+      expect(text).toContain("declare module 'react'");
+      expect(text).toContain('part?: __PugReactPartProp');
+      expect(text).toContain('styleName?: __PugReactStyleNameProp');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('injects extra React attributes in force mode without package.json deps', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pug-react-extra-types-'));
+    try {
+      const appPath = path.join(tempDir, 'app.tsx');
+      fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({}), 'utf8');
+
+      const { host } = await setupPlugin(
+        { [appPath]: 'const view = pug`\\n  Button()\\n`;\n' },
+        { injectCssxjsTypes: 'force' },
+      );
+
+      const text = snapshotText(host.getScriptSnapshot(appPath));
+      expect(text).toContain("declare module 'react'");
+      expect(text).toContain('styleName?: __PugReactStyleNameProp');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not inject extra React attributes in none mode even when deps exist', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pug-react-extra-types-'));
+    try {
+      const appPath = path.join(tempDir, 'app.tsx');
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({ dependencies: { cssxjs: '^1.0.0' } }),
+        'utf8',
+      );
+
+      const { host } = await setupPlugin(
+        { [appPath]: 'const view = pug`\\n  Button()\\n`;\n' },
+        { injectCssxjsTypes: 'none' },
+      );
+
+      const text = snapshotText(host.getScriptSnapshot(appPath));
+      expect(text).not.toContain("declare module 'react'");
+      expect(text).not.toContain('styleName?: __PugReactStyleNameProp');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not inject extra React attributes when startupjs/cssxjs deps are absent', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pug-react-extra-types-'));
+    try {
+      const appPath = path.join(tempDir, 'app.tsx');
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({ dependencies: { react: '^19.0.0' } }),
+        'utf8',
+      );
+
+      const { host } = await setupPlugin({
+        [appPath]: 'const view = pug`\\n  Button()\\n`;\n',
+      });
+
+      const text = snapshotText(host.getScriptSnapshot(appPath));
+      expect(text).not.toContain("declare module 'react'");
+      expect(text).not.toContain('styleName?: __PugReactStyleNameProp');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
 

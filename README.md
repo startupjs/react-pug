@@ -60,6 +60,7 @@ Main settings:
 - `pugReact.enabled` (default `true`)
 - `pugReact.diagnostics.enabled` (default `true`)
 - `pugReact.tagFunction` (default `"pug"`)
+- `pugReact.injectCssxjsTypes` (`"none" | "auto" | "force"`, default `"auto"`)
 
 ## Requirements
 

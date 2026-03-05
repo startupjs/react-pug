@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDocument';
 
 const SCHEME = 'pug-react-shadow';
+const TS_PLUGIN_NAME = '@startupjs/typescript-plugin-react-pug';
 
 let outputChannel: vscode.OutputChannel;
 
@@ -10,9 +11,50 @@ function logError(msg: string, error: unknown): void {
   outputChannel?.appendLine(text);
 }
 
+function readPluginConfig() {
+  const config = vscode.workspace.getConfiguration('pugReact');
+  const injectRaw = config.get<string>('injectCssxjsTypes', 'auto');
+  const injectCssxjsTypes: 'none' | 'auto' | 'force' = (
+    injectRaw === 'none' || injectRaw === 'auto' || injectRaw === 'force'
+  ) ? injectRaw : 'auto';
+
+  return {
+    enabled: config.get<boolean>('enabled', true),
+    diagnostics: {
+      enabled: config.get<boolean>('diagnostics.enabled', true),
+    },
+    tagFunction: config.get<string>('tagFunction', 'pug'),
+    injectCssxjsTypes,
+  };
+}
+
+async function configureTsPluginFromSettings(): Promise<void> {
+  try {
+    const tsExt = (vscode.extensions as any)?.getExtension?.('vscode.typescript-language-features');
+    if (!tsExt) return;
+
+    const exportsApi = tsExt.isActive ? tsExt.exports : await tsExt.activate();
+    const api = exportsApi?.getAPI?.(0) ?? exportsApi?.getAPI?.(1);
+    if (!api?.configurePlugin) return;
+
+    api.configurePlugin(TS_PLUGIN_NAME, readPluginConfig());
+  } catch (e) {
+    logError('configureTsPluginFromSettings failed', e);
+  }
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   outputChannel = vscode.window.createOutputChannel('Pug React');
   context.subscriptions.push(outputChannel);
+
+  void configureTsPluginFromSettings();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('pugReact')) {
+        void configureTsPluginFromSettings();
+      }
+    }),
+  );
 
   // Content provider for virtual shadow TSX documents
   const shadowDocs = new Map<string, string>();
@@ -38,8 +80,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const doc = editor.document;
         const text = doc.getText();
-        const config = vscode.workspace.getConfiguration('pugReact');
-        const tagFunction = config.get<string>('tagFunction', 'pug');
+        const tagFunction = readPluginConfig().tagFunction;
 
         const shadow = buildShadowDocument(text, doc.fileName, 1, tagFunction);
 

@@ -378,6 +378,7 @@ vi.mock('vscode', () => ({
     registerTextDocumentContentProvider: (scheme: string, provider: any) => {
       return { dispose: () => {} };
     },
+    onDidChangeConfiguration: () => ({ dispose: () => {} }),
     openTextDocument: (...args: any[]) => openTextDocument(...args),
     getConfiguration: (...args: any[]) => getConfiguration(...args),
     onDidChangeTextDocument: () => ({ dispose: () => {} }),
@@ -398,6 +399,9 @@ vi.mock('vscode', () => ({
       registeredCommands.set(name, callback);
       return { dispose: () => {} };
     },
+  },
+  extensions: {
+    getExtension: () => undefined,
   },
   Uri: {
     parse: (s: string) => ({ toString: () => s }),

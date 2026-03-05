@@ -1,7 +1,41 @@
 import type ts from 'typescript';
+import path from 'node:path';
 import type { PugDocument } from '../../react-pug-core/src/language/mapping';
 import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDocument';
 import { findRegionAtOriginalOffset, originalToShadow, shadowToOriginal } from '../../react-pug-core/src/language/positionMapping';
+
+const EXTRA_REACT_ATTRIBUTES_MARKER = '/* [pug-react] startupjs/cssxjs extra react attributes */';
+
+const EXTRA_REACT_ATTRIBUTES_TEXT = `
+${EXTRA_REACT_ATTRIBUTES_MARKER}
+// extra props for cssxjs \`:part\` and \`styleName\` features
+import 'react'
+
+type __PugReactSimpleValue = string | number | boolean | null | undefined | bigint | symbol
+type __PugReactFlagObject = Record<string, __PugReactSimpleValue>
+
+// part: string OR array of (string | flag-object)
+type __PugReactPartProp = string | Array<string | __PugReactFlagObject>
+
+// styleName: string OR flag-object OR array of (string | flag-object)
+type __PugReactStyleNameProp = string | __PugReactFlagObject | Array<string | __PugReactFlagObject>
+
+declare module 'react' {
+  // For ANY React component (<MyComp ... />)
+  // JSX.IntrinsicAttributes extends React.Attributes
+  interface Attributes {
+    /** [cssxjs] Name this element to be styleable from outside with \`:part(name)\` */
+    part?: __PugReactPartProp
+    /** [cssxjs] Class name(s) for styling the component. Supports classnames-like syntax */
+    styleName?: __PugReactStyleNameProp
+  }
+}
+`;
+
+function withExtraReactAttributes(shadowText: string): string {
+  if (shadowText.includes(EXTRA_REACT_ATTRIBUTES_MARKER)) return shadowText;
+  return `${shadowText}\n${EXTRA_REACT_ATTRIBUTES_TEXT}`;
+}
 
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;
@@ -17,6 +51,11 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       const enabled = config.enabled !== false;
       const diagnosticsEnabled = config.diagnostics?.enabled !== false;
       const tagFunction: string = config.tagFunction ?? 'pug';
+      const injectCssxjsTypesMode: 'none' | 'auto' | 'force' = (
+        config.injectCssxjsTypes === 'none'
+        || config.injectCssxjsTypes === 'force'
+        || config.injectCssxjsTypes === 'auto'
+      ) ? config.injectCssxjsTypes : 'auto';
 
       const host = info.languageServiceHost;
       const originalGetSnapshot = host.getScriptSnapshot.bind(host);
@@ -24,6 +63,89 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
       // Per-instance cache: stores PugDocument per file
       const docCache = new Map<string, PugDocument>();
+      const fileExtraTypesState = new Map<string, boolean>();
+      const packageDepsCache = new Map<string, { enabled: boolean; mtimeMs?: number }>();
+      const nearestPackageJsonCache = new Map<string, string | null>();
+
+      function resolveFileDir(fileName: string): string | undefined {
+        if (!fileName) return undefined;
+        if (path.isAbsolute(fileName)) return path.dirname(fileName);
+
+        const hostCwd = typeof host.getCurrentDirectory === 'function'
+          ? host.getCurrentDirectory()
+          : undefined;
+        if (hostCwd) return path.resolve(hostCwd, path.dirname(fileName));
+
+        const projectCwd = typeof info.project?.getCurrentDirectory === 'function'
+          ? info.project.getCurrentDirectory()
+          : undefined;
+        if (projectCwd) return path.resolve(projectCwd, path.dirname(fileName));
+
+        return undefined;
+      }
+
+      function findNearestPackageJson(fileName: string): string | undefined {
+        let dir = resolveFileDir(fileName);
+        if (!dir) return undefined;
+
+        const cached = nearestPackageJsonCache.get(dir);
+        if (cached !== undefined) return cached ?? undefined;
+
+        const visited: string[] = [];
+        while (true) {
+          visited.push(dir);
+          const candidate = path.join(dir, 'package.json');
+          if (tsModule.sys.fileExists?.(candidate)) {
+            for (const v of visited) nearestPackageJsonCache.set(v, candidate);
+            return candidate;
+          }
+          const parent = path.dirname(dir);
+          if (parent === dir) {
+            for (const v of visited) nearestPackageJsonCache.set(v, null);
+            return undefined;
+          }
+          dir = parent;
+        }
+      }
+
+      function hasStartupJsOrCssxJsDeps(packageJsonPath: string): boolean {
+        const mtimeMs = tsModule.sys.getModifiedTime?.(packageJsonPath)?.valueOf();
+        const cached = packageDepsCache.get(packageJsonPath);
+        if (cached && cached.mtimeMs === mtimeMs) {
+          return cached.enabled;
+        }
+
+        const text = tsModule.sys.readFile?.(packageJsonPath);
+        if (!text) {
+          packageDepsCache.set(packageJsonPath, { enabled: false, mtimeMs });
+          return false;
+        }
+
+        try {
+          const pkg = JSON.parse(text);
+          const deps = pkg?.dependencies ?? {};
+          const peerDeps = pkg?.peerDependencies ?? {};
+          const enabled = (
+            Object.prototype.hasOwnProperty.call(deps, 'startupjs')
+            || Object.prototype.hasOwnProperty.call(deps, 'cssxjs')
+            || Object.prototype.hasOwnProperty.call(peerDeps, 'startupjs')
+            || Object.prototype.hasOwnProperty.call(peerDeps, 'cssxjs')
+          );
+          packageDepsCache.set(packageJsonPath, { enabled, mtimeMs });
+          return enabled;
+        } catch {
+          packageDepsCache.set(packageJsonPath, { enabled: false, mtimeMs });
+          return false;
+        }
+      }
+
+      function shouldInjectExtraReactAttributes(fileName: string): boolean {
+        if (injectCssxjsTypesMode === 'none') return false;
+        if (injectCssxjsTypesMode === 'force') return true;
+        const packageJsonPath = findNearestPackageJson(fileName);
+        if (!packageJsonPath) return false;
+        return hasStartupJsOrCssxJsDeps(packageJsonPath);
+      }
 
       host.getScriptSnapshot = (fileName: string) => {
         const original = originalGetSnapshot(fileName);
@@ -35,21 +157,33 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         try {
           const text = original.getText(0, original.getLength());
           const cached = docCache.get(fileName);
+          const extraTypesEnabled = shouldInjectExtraReactAttributes(fileName);
 
           // Return cached shadow if original text hasn't changed
-          if (cached && cached.originalText === text) {
+          if (
+            cached
+            && cached.originalText === text
+            && fileExtraTypesState.get(fileName) === extraTypesEnabled
+          ) {
             return tsModule.ScriptSnapshot.fromString(cached.shadowText);
           }
 
           const doc = buildShadowDocument(text, fileName, (cached?.version ?? 0) + 1, tagFunction);
 
           if (doc.regions.length > 0) {
+            if (extraTypesEnabled) {
+              doc.shadowText = withExtraReactAttributes(doc.shadowText);
+            }
             docCache.set(fileName, doc);
+            fileExtraTypesState.set(fileName, extraTypesEnabled);
             return tsModule.ScriptSnapshot.fromString(doc.shadowText);
           }
 
           // File has no pug templates -- clean up cache
-          if (cached) docCache.delete(fileName);
+          if (cached) {
+            docCache.delete(fileName);
+            fileExtraTypesState.delete(fileName);
+          }
           return original;
         } catch (e) {
           log(info, `getScriptSnapshot error for ${fileName}: ${e}`);
