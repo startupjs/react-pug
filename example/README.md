@@ -1,6 +1,6 @@
-# Pug React Demo
+# Pug React Example
 
-A minimal React + TypeScript project demonstrating the `vscode-pug-react` extension.
+A minimal React + TypeScript project demonstrating the `vscode-react-pug-tsx` extension.
 
 ## Features demonstrated
 
@@ -14,7 +14,7 @@ A minimal React + TypeScript project demonstrating the `vscode-pug-react` extens
 ## Testing the extension
 
 1. Open this folder in VS Code
-2. Install the `vscode-pug-react` extension
+2. Install the `startupjs.vscode-react-pug-tsx` extension
 3. Open `src/App.tsx`
 4. Try:
    - **Hover** over `Button` or `Card` to see type info

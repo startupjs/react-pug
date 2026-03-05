@@ -48,7 +48,7 @@ function stringifySmall(value, maxLen = 300) {
   return `${text.slice(0, maxLen)}...`;
 }
 
-suite('Extension Host Features (demo workspace)', () => {
+suite('Extension Host Features (example workspace)', () => {
   let appDoc;
   let appText;
   let workspaceRoot;
@@ -63,7 +63,7 @@ suite('Extension Host Features (demo workspace)', () => {
   }
 
   suiteSetup(async function () {
-    if (process.env.TEST_WORKSPACE_NAME !== 'demo') {
+    if (process.env.TEST_WORKSPACE_NAME !== 'example') {
       this.skip();
       return;
     }

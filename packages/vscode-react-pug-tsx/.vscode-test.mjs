@@ -21,10 +21,10 @@ const common = {
 export default defineConfig([
   {
     ...common,
-    label: 'demo',
-    workspaceFolder: path.join(repoRoot, 'examples', 'demo'),
+    label: 'example',
+    workspaceFolder: path.join(repoRoot, 'example'),
     env: {
-      TEST_WORKSPACE_NAME: 'demo',
+      TEST_WORKSPACE_NAME: 'example',
     },
   },
 ]);

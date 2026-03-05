@@ -7,7 +7,7 @@ import { downloadAndUnzipVSCode } from '@vscode/test-electron';
 
 function printUsage() {
   console.log('Usage: node scripts/open-vscode-fresh.mjs <workspace-path> [--dry-run]');
-  console.log('Example: node scripts/open-vscode-fresh.mjs examples/demo');
+  console.log('Example: node scripts/open-vscode-fresh.mjs example');
 }
 
 async function main() {
@@ -31,7 +31,7 @@ async function main() {
 
   const vscodeExecutablePath = await downloadAndUnzipVSCode('stable');
   const sessionRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), `vscode-pug-react-${path.basename(workspacePath)}-`),
+    path.join(os.tmpdir(), `react-pug-${path.basename(workspacePath)}-`),
   );
   const userDataDir = path.join(sessionRoot, 'user-data');
   const extensionsDir = path.join(sessionRoot, 'extensions');

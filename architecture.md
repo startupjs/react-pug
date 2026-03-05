@@ -65,7 +65,7 @@ Top-level files own repo orchestration:
 - `tsconfig.json` typecheck for package sources
 - `.github/workflows/ci.yml` quality gates
 - `scripts/open-vscode-fresh.mjs` manual clean VS Code launcher
-- `scripts/ensure-workspace-deps.mjs` ensures demo workspace deps before VS Code tests
+- `scripts/ensure-workspace-deps.mjs` ensures example workspace deps before VS Code tests
 
 ---
 
@@ -479,8 +479,8 @@ Root scripts:
   - `npm run test:unit`
 - VS Code extension-host tests:
   - `npm run test:vscode`
-  - `npm run test:vscode:demo`
-  - screenshot mode: `npm run test:vscode:demo:screenshots`
+  - `npm run test:vscode:example`
+  - screenshot mode: `npm run test:vscode:example:screenshots`
 - full suite:
   - `npm test` (runs `test:unit` then `test:vscode`)
 
@@ -500,8 +500,8 @@ Root scripts:
 ### 14.3 VS Code Host Test Config
 
 - config file: `packages/vscode-react-pug-tsx/.vscode-test.mjs`
-- active label: `demo`
-- workspace target: `examples/demo`
+- active label: `example`
+- workspace target: `example`
 
 ### 14.4 Screenshot Capture in VS Code Tests
 
@@ -551,7 +551,7 @@ Launches a fresh VS Code session with:
 
 ### 16.2 `scripts/ensure-workspace-deps.mjs`
 
-Before VS Code tests, ensures demo workspace dependencies exist (notably `react` and `react/jsx-runtime`) and runs `npm install` in demo if missing.
+Before VS Code tests, ensures example workspace dependencies exist (notably `react` and `react/jsx-runtime`) and runs `npm install` in example if missing.
 
 ---
 
@@ -634,5 +634,5 @@ For maintainers and agents:
 
 For visual/manual validation:
 
-- `npm run test:vscode:demo:screenshots`
-- `npm run vscode:fresh:demo`
+- `npm run test:vscode:example:screenshots`
+- `npm run vscode:fresh:example`

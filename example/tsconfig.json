@@ -7,10 +7,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "plugins": [
-      { "name": "@startupjs/typescript-plugin-react-pug" }
-    ]
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src"]
 }

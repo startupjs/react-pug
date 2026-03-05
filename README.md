@@ -84,8 +84,8 @@ npm test
 Useful extras:
 
 ```bash
-npm run test:vscode:demo:screenshots
-npm run vscode:fresh:demo
+npm run test:vscode:example:screenshots
+npm run vscode:fresh:example
 ```
 
 ## Architecture

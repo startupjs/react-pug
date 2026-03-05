@@ -22,7 +22,7 @@ function runNpmInstall(workspacePath) {
 function main() {
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = path.resolve(scriptDir, '..');
-  const workspaceArg = process.argv[2] || 'examples/demo';
+  const workspaceArg = process.argv[2] || 'example';
   const workspacePath = path.resolve(repoRoot, workspaceArg);
   const packageJsonPath = path.join(workspacePath, 'package.json');
 
@@ -36,7 +36,7 @@ function main() {
   }
 
   if (hasRequiredReactDeps(workspacePath)) {
-    console.log(`[deps] Existing demo dependencies detected in ${workspacePath}; skipping install.`);
+    console.log(`[deps] Existing example dependencies detected in ${workspacePath}; skipping install.`);
     return;
   }
 
