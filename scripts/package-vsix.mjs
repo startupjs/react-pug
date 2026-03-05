@@ -41,6 +41,10 @@ copyFileSync(
   resolve(tempExtDir, 'package.json'),
 );
 copyFileSync(
+  resolve(extensionSrcDir, 'LICENSE.md'),
+  resolve(tempExtDir, 'LICENSE.md'),
+);
+copyFileSync(
   resolve(extensionSrcDir, '.vscodeignore'),
   resolve(tempExtDir, '.vscodeignore'),
 );
