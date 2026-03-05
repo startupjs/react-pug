@@ -17,8 +17,7 @@ You get JSX-like editor features inside Pug regions:
 
 ```bash
 npm ci
-npm run package
-(cd packages/vscode-react-pug && npx @vscode/vsce package)
+npm run package:vsix
 code --install-extension packages/vscode-react-pug/*.vsix
 ```
 
@@ -37,17 +36,7 @@ Extension activates automatically for:
 - TypeScript / TSX
 - JavaScript / JSX
 
-Recommended `tsconfig.json` plugin config:
-
-```json
-{
-  "compilerOptions": {
-    "plugins": [
-      { "name": "@startupjs/typescript-plugin-react-pug" }
-    ]
-  }
-}
-```
+No `tsconfig.json` plugin setup or extra npm install is required when using this VS Code extension.
 
 ## Usage
 

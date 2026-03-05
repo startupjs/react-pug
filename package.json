@@ -10,6 +10,7 @@
     "build:extension": "node esbuild.config.mjs extension",
     "build:plugin": "node esbuild.config.mjs plugin",
     "package": "npm run check-types && npm run clean:dist && node esbuild.config.mjs --production",
+    "package:vsix": "npm run package && node scripts/package-vsix.mjs",
     "watch": "node esbuild.config.mjs --watch",
     "test:unit": "vitest run",
     "test": "npm run test:unit && npm run test:vscode",

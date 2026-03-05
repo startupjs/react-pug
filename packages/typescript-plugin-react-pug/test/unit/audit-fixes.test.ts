@@ -377,7 +377,7 @@ describe('plugin module resolvability (Finding 3)', () => {
   it('extension package declares @startupjs/typescript-plugin-react-pug dependency', () => {
     const pkg = JSON.parse(readFileSync(extensionPkgPath, 'utf-8'));
     expect(pkg.dependencies?.['@startupjs/typescript-plugin-react-pug'])
-      .toBe('file:../typescript-plugin-react-pug');
+      .toBe('^0.0.1');
   });
 
   it('node_modules/@startupjs/typescript-plugin-react-pug/package.json exists', () => {

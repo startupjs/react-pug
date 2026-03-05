@@ -76,7 +76,7 @@
     ]
   },
   "dependencies": {
-    "@startupjs/typescript-plugin-react-pug": "file:../typescript-plugin-react-pug"
+    "@startupjs/typescript-plugin-react-pug": "^0.0.1"
   },
   "private": true
 }
