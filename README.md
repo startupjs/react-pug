@@ -17,9 +17,9 @@ You get JSX-like editor features inside Pug regions:
 
 ```bash
 npm ci
-npm run build
-npx @vscode/vsce package
-code --install-extension vscode-react-pug-0.0.1.vsix
+npm run package
+(cd packages/vscode-react-pug && npx @vscode/vsce package)
+code --install-extension packages/vscode-react-pug/*.vsix
 ```
 
 ### Option 2: Install from Marketplace

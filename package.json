@@ -5,9 +5,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "node esbuild.config.mjs",
+    "clean:dist": "rm -rf packages/vscode-react-pug/dist packages/typescript-plugin-react-pug/dist",
+    "build": "npm run clean:dist && node esbuild.config.mjs",
     "build:extension": "node esbuild.config.mjs extension",
     "build:plugin": "node esbuild.config.mjs plugin",
+    "package": "npm run check-types && npm run clean:dist && node esbuild.config.mjs --production",
     "watch": "node esbuild.config.mjs --watch",
     "test:unit": "vitest run",
     "test": "npm run test:unit && npm run test:vscode",
@@ -18,7 +20,9 @@
     "test:vscode": "vscode-test --config packages/vscode-react-pug/.vscode-test.mjs",
     "test:vscode:demo": "vscode-test --config packages/vscode-react-pug/.vscode-test.mjs --label demo",
     "test:vscode:demo:screenshots": "VSCODE_CAPTURE_SCREENSHOTS=1 vscode-test --config packages/vscode-react-pug/.vscode-test.mjs --label demo",
-    "typecheck": "tsc --noEmit",
+    "check-types": "tsc --noEmit",
+    "typecheck": "npm run check-types",
+    "vscode:prepublish": "npm run package",
     "vscode:fresh:demo": "node scripts/open-vscode-fresh.mjs examples/demo"
   },
   "devDependencies": {
