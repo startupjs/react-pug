@@ -370,7 +370,7 @@ describe('version incorporates host version (Finding 2)', () => {
 
 describe('plugin module resolvability (Finding 3)', () => {
   const root = resolve(__dirname, '../../../..');
-  const extensionPkgPath = resolve(root, 'packages/vscode-react-pug/package.json');
+  const extensionPkgPath = resolve(root, 'packages/vscode-react-pug-tsx/package.json');
   const depPkgPath = resolve(root, 'node_modules/@startupjs/typescript-plugin-react-pug/package.json');
   const distPluginPath = resolve(root, 'packages/typescript-plugin-react-pug/dist/plugin.js');
 
@@ -414,7 +414,7 @@ describe('plugin module resolvability (Finding 3)', () => {
 // ── Finding 4: Grammar word boundary ─────────────────────────────
 
 describe('grammar regex word boundary (Finding 4)', () => {
-  const grammarPath = resolve(__dirname, '../../../vscode-react-pug/syntaxes/pug-template-literal.json');
+  const grammarPath = resolve(__dirname, '../../../vscode-react-pug-tsx/syntaxes/pug-template-literal.json');
   let beginPattern: string;
 
   function getBeginRegex(): RegExp {

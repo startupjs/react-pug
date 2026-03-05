@@ -47,7 +47,7 @@ packages/
       unit/
       integration/
 
-  vscode-react-pug/
+  vscode-react-pug-tsx/
     src/index.ts
     syntaxes/pug-template-literal.json
     dist/client.js
@@ -91,7 +91,7 @@ TypeScript server plugin:
 - maps diagnostics and adds custom Pug parse diagnostics
 - handles classification remapping and refactor/code-fix edit remapping
 
-### 3.3 `vscode-react-pug`
+### 3.3 `vscode-react-pug-tsx` (`packages/vscode-react-pug-tsx`)
 
 VS Code extension package:
 
@@ -381,7 +381,7 @@ Every override uses safe wrapper:
 
 ---
 
-## 11. VS Code Extension Architecture (`vscode-react-pug/src/index.ts`)
+## 11. VS Code Extension Architecture (`vscode-react-pug-tsx/src/index.ts`)
 
 ### 11.1 Activation
 
@@ -401,7 +401,7 @@ Behavior:
 4. if no Pug templates: info message
 5. else open virtual shadow TSX document in side editor
 
-### 11.3 Manifest Contributions (`packages/vscode-react-pug/package.json`)
+### 11.3 Manifest Contributions (`packages/vscode-react-pug-tsx/package.json`)
 
 - activation on TS/TSX/JS/JSX
 - plugin contribution:
@@ -418,7 +418,7 @@ Behavior:
 
 ## 12. Syntax Highlighting Architecture
 
-Grammar file: `packages/vscode-react-pug/syntaxes/pug-template-literal.json`
+Grammar file: `packages/vscode-react-pug-tsx/syntaxes/pug-template-literal.json`
 
 ### 12.1 Injection Entry
 
@@ -452,8 +452,8 @@ Build config: `esbuild.config.mjs`
 Outputs:
 
 - extension bundle:
-  - entry `packages/vscode-react-pug/src/index.ts`
-  - out `packages/vscode-react-pug/dist/client.js`
+  - entry `packages/vscode-react-pug-tsx/src/index.ts`
+  - out `packages/vscode-react-pug-tsx/dist/client.js`
 - plugin bundle:
   - entry `packages/typescript-plugin-react-pug/src/index.ts`
   - out `packages/typescript-plugin-react-pug/dist/plugin.js`
@@ -494,18 +494,18 @@ Root scripts:
   - `packages/typescript-plugin-react-pug/test/integration`
   - fixtures under `packages/typescript-plugin-react-pug/test/fixtures`
 - extension tests:
-  - `packages/vscode-react-pug/test/unit`
-  - `packages/vscode-react-pug/test/vscode`
+  - `packages/vscode-react-pug-tsx/test/unit`
+  - `packages/vscode-react-pug-tsx/test/vscode`
 
 ### 14.3 VS Code Host Test Config
 
-- config file: `packages/vscode-react-pug/.vscode-test.mjs`
+- config file: `packages/vscode-react-pug-tsx/.vscode-test.mjs`
 - active label: `demo`
 - workspace target: `examples/demo`
 
 ### 14.4 Screenshot Capture in VS Code Tests
 
-`packages/vscode-react-pug/test/vscode/screenshot.js` supports:
+`packages/vscode-react-pug-tsx/test/vscode/screenshot.js` supports:
 
 - optional capture (`VSCODE_CAPTURE_SCREENSHOTS=1`)
 - settle delay tuning (`VSCODE_SCREENSHOT_SETTLE_MS`)
@@ -547,7 +547,7 @@ Launches a fresh VS Code session with:
 
 - temporary user-data and extensions dirs
 - all external extensions disabled
-- this extension loaded via `--extensionDevelopmentPath packages/vscode-react-pug`
+- this extension loaded via `--extensionDevelopmentPath packages/vscode-react-pug-tsx`
 
 ### 16.2 `scripts/ensure-workspace-deps.mjs`
 
@@ -636,4 +636,3 @@ For visual/manual validation:
 
 - `npm run test:vscode:demo:screenshots`
 - `npm run vscode:fresh:demo`
-

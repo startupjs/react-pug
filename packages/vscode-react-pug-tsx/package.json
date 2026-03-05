@@ -1,5 +1,5 @@
 {
-  "name": "vscode-react-pug",
+  "name": "vscode-react-pug-tsx",
   "displayName": "Pug React IntelliSense",
   "description": "JSX-grade IntelliSense for pug`` tagged template literals in React projects",
   "version": "0.0.1",

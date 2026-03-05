@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
 
-const extensionSrcDir = resolve(repoRoot, 'packages/vscode-react-pug');
+const extensionSrcDir = resolve(repoRoot, 'packages/vscode-react-pug-tsx');
 const pluginSrcDir = resolve(repoRoot, 'packages/typescript-plugin-react-pug');
 
 const extensionDistFile = resolve(extensionSrcDir, 'dist/client.js');
@@ -25,7 +25,7 @@ const vsixOut = resolve(
 );
 
 const tempRoot = resolve(repoRoot, '.tmp/vsix');
-const tempExtDir = resolve(tempRoot, 'vscode-react-pug');
+const tempExtDir = resolve(tempRoot, 'vscode-react-pug-tsx');
 const tempPluginDir = resolve(
   tempExtDir,
   'node_modules/@startupjs/typescript-plugin-react-pug',

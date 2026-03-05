@@ -28,10 +28,10 @@ suite('Extension Host Smoke', () => {
 
   test('extension can be discovered and activated', async () => {
     const ext = vscode.extensions.all.find(
-      e => e.packageJSON?.name === 'vscode-react-pug',
+      e => e.packageJSON?.name === 'vscode-react-pug-tsx',
     );
 
-    assert.ok(ext, 'Extension "startupjs.vscode-react-pug" not found');
+    assert.ok(ext, 'Extension "startupjs.vscode-react-pug-tsx" not found');
     await ext.activate();
     assert.ok(ext.isActive, 'Extension failed to activate');
 

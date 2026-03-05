@@ -163,7 +163,7 @@ describe('buildShadowDocument with tagName parameter', () => {
 // ── package.json configuration schema ───────────────────────────
 
 describe('package.json configuration schema', () => {
-  const pkgPath = path.resolve(__dirname, '../../../vscode-react-pug/package.json');
+  const pkgPath = path.resolve(__dirname, '../../../vscode-react-pug-tsx/package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   const config = pkg.contributes?.configuration;
 

@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "scripts": {
-    "clean:dist": "rm -rf packages/vscode-react-pug/dist packages/typescript-plugin-react-pug/dist",
+    "clean:dist": "rm -rf packages/vscode-react-pug-tsx/dist packages/typescript-plugin-react-pug/dist",
     "build": "npm run clean:dist && node esbuild.config.mjs",
     "build:extension": "node esbuild.config.mjs extension",
     "build:plugin": "node esbuild.config.mjs plugin",
@@ -18,9 +18,9 @@
     "pretest:vscode": "npm run deps:demo",
     "pretest:vscode:demo": "npm run deps:demo",
     "pretest:vscode:demo:screenshots": "npm run deps:demo",
-    "test:vscode": "vscode-test --config packages/vscode-react-pug/.vscode-test.mjs",
-    "test:vscode:demo": "vscode-test --config packages/vscode-react-pug/.vscode-test.mjs --label demo",
-    "test:vscode:demo:screenshots": "VSCODE_CAPTURE_SCREENSHOTS=1 vscode-test --config packages/vscode-react-pug/.vscode-test.mjs --label demo",
+    "test:vscode": "vscode-test --config packages/vscode-react-pug-tsx/.vscode-test.mjs",
+    "test:vscode:demo": "vscode-test --config packages/vscode-react-pug-tsx/.vscode-test.mjs --label demo",
+    "test:vscode:demo:screenshots": "VSCODE_CAPTURE_SCREENSHOTS=1 vscode-test --config packages/vscode-react-pug-tsx/.vscode-test.mjs --label demo",
     "check-types": "tsc --noEmit",
     "typecheck": "npm run check-types",
     "vscode:prepublish": "npm run package",

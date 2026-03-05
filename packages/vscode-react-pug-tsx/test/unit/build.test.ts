@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import { resolve } from 'path';
 
 // Test checklist:
-// [x] Build produces packages/vscode-react-pug/dist/client.js
+// [x] Build produces packages/vscode-react-pug-tsx/dist/client.js
 // [x] Build produces packages/typescript-plugin-react-pug/dist/plugin.js
 // [x] Build produces source maps for both outputs
 // [x] client.js is valid CommonJS (has "use strict" and exports)
@@ -14,7 +14,7 @@ import { resolve } from 'path';
 // [x] Build succeeds with zero exit code
 
 const repoRoot = resolve(__dirname, '../../../..');
-const extensionDistDir = resolve(repoRoot, 'packages/vscode-react-pug/dist');
+const extensionDistDir = resolve(repoRoot, 'packages/vscode-react-pug-tsx/dist');
 const pluginDistDir = resolve(repoRoot, 'packages/typescript-plugin-react-pug/dist');
 
 describe('build pipeline', () => {
@@ -23,7 +23,7 @@ describe('build pipeline', () => {
     execSync('npm run build', { cwd: repoRoot, stdio: 'pipe' });
   });
 
-  it('produces packages/vscode-react-pug/dist/client.js', () => {
+  it('produces packages/vscode-react-pug-tsx/dist/client.js', () => {
     expect(existsSync(resolve(extensionDistDir, 'client.js'))).toBe(true);
   });
 

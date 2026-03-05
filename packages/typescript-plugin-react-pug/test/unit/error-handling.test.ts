@@ -414,7 +414,7 @@ vi.mock('vscode', () => ({
 
 async function activateExtension() {
   vi.resetModules();
-  const ext = await import('../../../vscode-react-pug/src/index.ts');
+  const ext = await import('../../../vscode-react-pug-tsx/src/index.ts');
   const mockContext = {
     subscriptions: mockSubscriptions,
     extensionPath: '/mock/path',

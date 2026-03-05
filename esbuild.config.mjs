@@ -42,8 +42,8 @@ const shared = {
 const allConfigs = {
   extension: {
     ...shared,
-    entryPoints: ['packages/vscode-react-pug/src/index.ts'],
-    outfile: 'packages/vscode-react-pug/dist/client.js',
+    entryPoints: ['packages/vscode-react-pug-tsx/src/index.ts'],
+    outfile: 'packages/vscode-react-pug-tsx/dist/client.js',
   },
   plugin: {
     ...shared,
