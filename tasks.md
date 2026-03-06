@@ -20,8 +20,8 @@ All integrations must reuse `react-pug-core` and ship with strong automated test
 
 ## Task 0: Planning Baseline
 
-- [ ] Create this `tasks.md` with phased execution plan and quality gates.
-- [ ] Confirm current baseline test suite is green before feature work.
+- [x] Create this `tasks.md` with phased execution plan and quality gates.
+- [x] Confirm current baseline test suite is green before feature work.
 
 Commit: `chore: add compiler expansion task plan`
 
@@ -31,42 +31,42 @@ Commit: `chore: add compiler expansion task plan`
 
 ### Task 1.1: Add a tool-agnostic source transform API
 
-- [ ] Add a new core API that transforms an entire source file by replacing `pug\`...\`` regions.
-- [ ] Keep existing `buildShadowDocument` behavior unchanged for language service usage.
+- [x] Add a new core API that transforms an entire source file by replacing `pug\`...\`` regions.
+- [x] Keep existing `buildShadowDocument` behavior unchanged for language service usage.
 - [ ] New API should return:
   - transformed code
   - region metadata
   - mapping helpers that enable reverse mapping of diagnostics to original offsets
-- [ ] Add config surface for tag function name and future options.
+- [x] Add config surface for tag function name and future options.
 
 Tests:
-- [ ] Core unit tests for source-level transform with single and multiple regions.
-- [ ] Tests for files with no regions.
-- [ ] Tests for nested `pug` inside `${}` interpolation.
+- [x] Core unit tests for source-level transform with single and multiple regions.
+- [x] Tests for files with no regions.
+- [x] Tests for nested `pug` inside `${}` interpolation.
 
 Commit: `feat(core): add shared source transform API for compiler integrations`
 
 ### Task 1.2: Add output mode support (language-service vs runtime)
 
-- [ ] Introduce compile mode options in `compilePugToTsx`:
+- [x] Introduce compile mode options in `compilePugToTsx`:
   - `languageService` (current behavior; TS-oriented placeholders/type annotations allowed)
   - `runtime` (pure JS/JSX output, no TS-only syntax)
-- [ ] Ensure control-flow emitters (`while`, recovery placeholders, etc.) are runtime-safe.
+- [x] Ensure control-flow emitters (`while`, recovery placeholders, etc.) are runtime-safe.
 
 Tests:
-- [ ] Unit tests validating runtime output contains no TS-only syntax.
-- [ ] Snapshot-like assertions for `while`, parse recovery, and mixed code blocks.
+- [x] Unit tests validating runtime output contains no TS-only syntax.
+- [x] Snapshot-like assertions for `while`, parse recovery, and mixed code blocks.
 
 Commit: `feat(core): support runtime-safe compile output mode`
 
 ### Task 1.3: Map composition utilities
 
-- [ ] Add core utility helpers to map diagnostics from transformed/shadow offsets to original offsets.
-- [ ] Expose line/column conversion helpers for downstream plugins.
+- [x] Add core utility helpers to map diagnostics from transformed/shadow offsets to original offsets.
+- [x] Expose line/column conversion helpers for downstream plugins.
 
 Tests:
-- [ ] Unit tests for offset mapping across multiple regions and indented blank lines.
-- [ ] Tests for edge positions around `${}` interpolation and `-` code blocks.
+- [x] Unit tests for offset mapping across multiple regions and indented blank lines.
+- [x] Tests for edge positions around `${}` interpolation and `-` code blocks.
 
 Commit: `feat(core): expose reusable diagnostic mapping utilities`
 
@@ -76,25 +76,25 @@ Commit: `feat(core): expose reusable diagnostic mapping utilities`
 
 ### Task 2.1: Scaffold package
 
-- [ ] Create package `packages/babel-plugin-react-pug`.
-- [ ] Export Babel plugin factory with options:
+- [x] Create package `packages/babel-plugin-react-pug`.
+- [x] Export Babel plugin factory with options:
   - `tagFunction` (default `pug`)
   - `mode` (`runtime` default)
-- [ ] Wire package metadata and tests into workspace.
+- [x] Wire package metadata and tests into workspace.
 
 Tests:
-- [ ] Package smoke test for plugin registration.
+- [x] Package smoke test for plugin registration.
 
 Commit: `feat(babel): scaffold babel-plugin-react-pug package`
 
 ### Task 2.2: Implement tagged-template transform
 
-- [ ] Transform `pug\`...\`` into equivalent JSX/JS expression via core runtime compiler.
-- [ ] Support nested interpolations and nested inner `pug` templates in `${}`.
-- [ ] Ensure transformed code parses under Babel TypeScript+JSX pipeline.
+- [x] Transform `pug\`...\`` into equivalent JSX/JS expression via core runtime compiler.
+- [x] Support nested interpolations and nested inner `pug` templates in `${}`.
+- [x] Ensure transformed code parses under Babel TypeScript+JSX pipeline.
 
 Tests:
-- [ ] Unit tests for representative syntax surface:
+- [x] Unit tests for representative syntax surface:
   - tags/components
   - attributes
   - conditionals
@@ -103,18 +103,18 @@ Tests:
   - unbuffered code (`-`)
   - text nodes (`|`)
   - nested `pug` in `${}`
-- [ ] Regression tests for previously fixed mapping edge cases.
+- [x] Regression tests for previously fixed mapping edge cases.
 
 Commit: `feat(babel): compile pug templates via core runtime transform`
 
 ### Task 2.3: Source map behavior
 
-- [ ] Preserve useful source map locations in Babel output.
-- [ ] Map Babel diagnostics back to original pug locations (best-effort + tested guarantees).
+- [x] Preserve useful source map locations in Babel output.
+- [x] Map Babel diagnostics back to original pug locations (best-effort + tested guarantees).
 
 Tests:
-- [ ] Source-map-focused tests asserting key generated spans resolve to original file locations.
-- [ ] Diagnostic location mapping tests.
+- [x] Source-map-focused tests asserting key generated spans resolve to original file locations.
+- [x] Diagnostic location mapping tests.
 
 Commit: `feat(babel): add sourcemap-aware location mapping`
 
@@ -124,32 +124,32 @@ Commit: `feat(babel): add sourcemap-aware location mapping`
 
 ### Task 3.1: Scaffold package
 
-- [ ] Create package `packages/swc-plugin-react-pug`.
-- [ ] Define SWC integration entry points and options (`tagFunction`, mode).
+- [x] Create package `packages/swc-plugin-react-pug`.
+- [x] Define SWC integration entry points and options (`tagFunction`, mode).
 
 Tests:
-- [ ] Package smoke test.
+- [x] Package smoke test.
 
 Commit: `feat(swc): scaffold swc-plugin-react-pug package`
 
 ### Task 3.2: Implement SWC transform pipeline
 
-- [ ] Integrate core source transform in SWC workflow.
-- [ ] Ensure TS/TSX + JSX parser configurations are handled.
-- [ ] Keep runtime output compatible with SWC transforms.
+- [x] Integrate core source transform in SWC workflow.
+- [x] Ensure TS/TSX + JSX parser configurations are handled.
+- [x] Keep runtime output compatible with SWC transforms.
 
 Tests:
-- [ ] End-to-end tests through `@swc/core` transform.
-- [ ] Cases parity with Babel coverage set.
+- [x] End-to-end tests through `@swc/core` transform.
+- [x] Cases parity with Babel coverage set.
 
 Commit: `feat(swc): transform pug templates in swc pipeline`
 
 ### Task 3.3: Diagnostic position mapping support
 
-- [ ] Add helper API for mapping SWC parse/type/lint style diagnostics back to original.
+- [x] Add helper API for mapping SWC parse/type/lint style diagnostics back to original.
 
 Tests:
-- [ ] Mapping tests on files with multiple pug regions and nested interpolation.
+- [x] Mapping tests on files with multiple pug regions and nested interpolation.
 
 Commit: `feat(swc): add diagnostic mapping helpers`
 
@@ -159,24 +159,24 @@ Commit: `feat(swc): add diagnostic mapping helpers`
 
 ### Task 4.1: Scaffold package
 
-- [ ] Create package `packages/eslint-plugin-react-pug`.
-- [ ] Implement processor-based approach for `*.ts,*.tsx,*.js,*.jsx`.
+- [x] Create package `packages/eslint-plugin-react-pug`.
+- [x] Implement processor-based approach for `*.ts,*.tsx,*.js,*.jsx`.
 
 Tests:
-- [ ] Smoke tests for processor registration and invocation.
+- [x] Smoke tests for processor registration and invocation.
 
 Commit: `feat(eslint): scaffold eslint plugin with processor`
 
 ### Task 4.2: Implement preprocess/postprocess mapping
 
-- [ ] Preprocess: replace pug regions using core runtime-safe transform for linting.
-- [ ] Postprocess: remap lint message locations back to original source.
-- [ ] Preserve filenames and virtual file naming expected by ESLint.
+- [x] Preprocess: replace pug regions using core runtime-safe transform for linting.
+- [x] Postprocess: remap lint message locations back to original source.
+- [x] Preserve filenames and virtual file naming expected by ESLint.
 
 Tests:
-- [ ] Real ESLint runs with common rules (e.g. `no-undef`, `no-unused-vars`) on pug content.
-- [ ] Verify reported line/column points to original pug ranges.
-- [ ] Verify no false remapping for non-pug sections.
+- [x] Real ESLint runs with common rules (e.g. `no-undef`, `no-unused-vars`) on pug content.
+- [x] Verify reported line/column points to original pug ranges.
+- [x] Verify no false remapping for non-pug sections.
 
 Commit: `feat(eslint): remap lint diagnostics from transformed pug back to source`
 
@@ -186,32 +186,32 @@ Commit: `feat(eslint): remap lint diagnostics from transformed pug back to sourc
 
 ### Task 5.1: Scaffold package
 
-- [ ] Create package `packages/esbuild-plugin-react-pug`.
-- [ ] Export `reactPugPlugin(options)`.
+- [x] Create package `packages/esbuild-plugin-react-pug`.
+- [x] Export `reactPugPlugin(options)`.
 
 Tests:
-- [ ] Plugin registration smoke test.
+- [x] Plugin registration smoke test.
 
 Commit: `feat(esbuild): scaffold esbuild plugin package`
 
 ### Task 5.2: Implement onLoad transform
 
-- [ ] Intercept TS/TSX/JS/JSX sources and apply core runtime transform.
-- [ ] Return loader and sourcemap-friendly output.
-- [ ] Ensure plugin composes with existing esbuild pipelines.
+- [x] Intercept TS/TSX/JS/JSX sources and apply core runtime transform.
+- [x] Return loader and sourcemap-friendly output.
+- [x] Ensure plugin composes with existing esbuild pipelines.
 
 Tests:
-- [ ] esbuild build tests with entry files using pug templates.
-- [ ] Verify emitted JS is valid and behaviorally equivalent.
+- [x] esbuild build tests with entry files using pug templates.
+- [x] Verify emitted JS is valid and behaviorally equivalent.
 
 Commit: `feat(esbuild): compile pug templates in esbuild onLoad pipeline`
 
 ### Task 5.3: Source map and diagnostic mapping helpers
 
-- [ ] Expose map utilities for external tooling / custom error reporting.
+- [x] Expose map utilities for external tooling / custom error reporting.
 
 Tests:
-- [ ] Map consistency tests vs core expected offsets.
+- [x] Map consistency tests vs core expected offsets.
 
 Commit: `feat(esbuild): add sourcemap and diagnostic mapping utilities`
 

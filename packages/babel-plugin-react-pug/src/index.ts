@@ -1,5 +1,6 @@
-import type { PluginObj } from '@babel/core';
+import type { NodePath, PluginObj, PluginPass } from '@babel/core';
 import { parse } from '@babel/parser';
+import type { Program } from '@babel/types';
 import {
   mapGeneratedDiagnosticToOriginal,
   transformSourceFile,
@@ -71,7 +72,7 @@ export default function babelPluginReactPug(
   return {
     name: 'react-pug',
     visitor: {
-      Program(path, state: any) {
+      Program(path: NodePath<Program>, state: PluginPass) {
         const sourceText = state?.file?.code as string | undefined;
         if (!sourceText) return;
 
@@ -89,7 +90,7 @@ export default function babelPluginReactPug(
         const nextProgram = parseProgram(transformed.code);
         path.node.body = nextProgram.body;
         path.node.directives = nextProgram.directives;
-        state.file.metadata.reactPug = transformed.metadata;
+        (state.file.metadata as Record<string, unknown>).reactPug = transformed.metadata;
         path.scope.crawl();
       },
     },
