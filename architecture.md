@@ -1,71 +1,39 @@
 # Architecture: `react-pug`
 
-## 1. Purpose and Scope
+## 1. Scope
 
-This repository provides first-class TypeScript/JavaScript editor tooling for `pug\`...\`` tagged template literals used with React.
+`react-pug` is a workspace monorepo that provides:
 
-The system gives a Pug-in-template authoring experience that behaves like JSX for:
+- editor IntelliSense for `pug\`...\`` in VS Code
+- source transforms for build/lint pipelines (Babel, SWC, esbuild, ESLint)
+- shared source mapping utilities so diagnostics map back to original Pug text
 
-- completions
-- hover
-- go-to-definition
-- type definition
-- signature help
-- rename
-- references/highlights/implementation
-- diagnostics and quick fixes/refactors
-- semantic/syntactic classifications (highlighting metadata)
-- TextMate grammar highlighting for Pug sections
+Supported source file kinds:
 
-The implementation target is VS Code + tsserver plugin integration, not a separate full LSP for `.ts/.tsx/.js/.jsx`.
+- `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs`, `.cjs`
 
 ---
 
-## 2. Current Monorepo Structure
-
-The project is an npm workspace monorepo with three packages.
+## 2. Workspace Layout
 
 ```
 packages/
   react-pug-core/
-    src/
-      language/
-        mapping.ts
-        extractRegions.ts
-        pugToTsx.ts
-        shadowDocument.ts
-        positionMapping.ts
-    test/
-      unit/
-      integration/
-
   typescript-plugin-react-pug/
-    src/index.ts
-    dist/plugin.js
-    test/
-      fixtures/
-      unit/
-      integration/
-
   vscode-react-pug-tsx/
-    src/index.ts
-    syntaxes/pug-template-literal.json
-    dist/client.js
-    .vscode-test.mjs
-    test/
-      unit/
-      vscode/
+  babel-plugin-react-pug/
+  swc-plugin-react-pug/
+  esbuild-plugin-react-pug/
+  eslint-plugin-react-pug/
 ```
 
-Top-level files own repo orchestration:
+Top-level orchestration files:
 
+- `esbuild.config.mjs` build pipeline (extension + ts plugin bundles)
 - `package.json` workspace scripts
-- `esbuild.config.mjs` build pipeline for extension+plugin bundles
-- `vitest.config.ts` test discovery across package tests
-- `tsconfig.json` typecheck for package sources
-- `.github/workflows/ci.yml` quality gates
-- `scripts/open-vscode-fresh.mjs` manual clean VS Code launcher
-- `scripts/ensure-workspace-deps.mjs` ensures example workspace deps before VS Code tests
+- `vitest.config.ts` test discovery
+- `.github/workflows/ci.yml` CI jobs
+- `scripts/check-pug-types.mjs` project-level pug-aware checker
 
 ---
 
@@ -73,566 +41,257 @@ Top-level files own repo orchestration:
 
 ### 3.1 `@startupjs/react-pug-core`
 
-Framework-agnostic language core:
+Shared language/compiler core:
 
-- finds Pug tagged templates in source text
-- compiles Pug to IntelliSense-oriented TSX
-- emits source mappings with feature flags
-- constructs a "shadow document" (original file with Pug regions replaced by TSX)
-- performs precise bidirectional offset mapping (original <-> shadow)
+- extract tagged template regions
+- compile Pug AST into JSX/TSX fragments
+- assemble transformed file output
+- produce mapping metadata for offset/range remapping
+- expose helpers for line/column conversions
+
+Core entry points used across packages:
+
+- `extractPugRegions(...)`
+- `compilePugToTsx(...)`
+- `buildShadowDocument(...)`
+- `transformSourceFile(...)`
+- `mapGeneratedRangeToOriginal(...)`
+- `mapGeneratedDiagnosticToOriginal(...)`
 
 ### 3.2 `@startupjs/typescript-plugin-react-pug`
 
-TypeScript server plugin:
+TypeScript language-service plugin:
 
-- patches `LanguageServiceHost` snapshot/version behavior
-- injects shadow text into tsserver pipeline
-- intercepts language service APIs and maps positions/spans between user file and shadow file
-- maps diagnostics and adds custom Pug parse diagnostics
-- handles classification remapping and refactor/code-fix edit remapping
+- patches `LanguageServiceHost` snapshots/versions
+- serves shadow documents to tsserver
+- remaps all returned positions/spans/edits to original Pug source
+- injects optional cssxjs/startupjs React attribute types in TS/TSX mode
 
-### 3.3 `vscode-react-pug-tsx` (`packages/vscode-react-pug-tsx`)
+### 3.3 `vscode-react-pug-tsx`
 
-VS Code extension package:
+VS Code extension host package:
 
-- contributes tsserver plugin registration (`contributes.typescriptServerPlugins`)
-- contributes settings (`pugReact.*`)
-- contributes grammar injection for `pug\`...\`` sections
-- registers `pugReact.showShadowTsx` debug command
-- hosts a virtual document provider for shadow TSX viewing
+- contributes tsserver plugin registration
+- contributes grammar injection for Pug template literals
+- contributes `pugReact.*` settings
+- provides `Pug React: Show Shadow TSX` command for debugging
 
----
+### 3.4 `@startupjs/babel-plugin-react-pug`
 
-## 4. High-Level Runtime Architecture
+Babel transform adapter:
 
-### 4.1 Core Pattern
+- rewrites `pug\`...\`` via `react-pug-core` runtime mode
+- reparses transformed source into Babel AST
+- stores transform metadata on Babel file for downstream remapping
 
-The architecture follows a Volar-like hybrid model:
+### 3.5 `@startupjs/swc-plugin-react-pug`
 
-1. Keep VS Code/tsserver as the primary language engine.
-2. Convert Pug template fragments to TSX "shadow" regions.
-3. Let TypeScript reason about shadow content.
-4. Map all user-facing positions/spans back to original file offsets.
+SWC adapter utilities:
 
-### 4.2 Execution Flow (Editing)
+- pretransform with `react-pug-core`
+- optional convenience wrapper around `@swc/core.transformSync`
+- generated->original mapping helpers
 
-1. User edits `.ts/.tsx/.js/.jsx` file containing `pug\`...\``.
-2. tsserver requests script snapshot via host.
-3. Plugin patches `getScriptSnapshot`:
-- extracts Pug regions
-- compiles each to TSX
-- replaces regions in a shadow copy
-- returns shadow snapshot to tsserver
-4. tsserver computes diagnostics/completions/etc against shadow content.
-5. Plugin intercepts LS API calls/results and remaps positions/spans back to original file.
-6. Editor presents results at correct positions in original source.
+### 3.6 `@startupjs/esbuild-plugin-react-pug`
 
----
+esbuild plugin:
 
-## 5. Core Data Model
+- `onLoad` interception for JS/TS sources
+- runtime-safe source transform
+- loader inference by extension
+- diagnostic/range remapping helpers using esbuild-style line/column inputs
 
-Defined in `packages/react-pug-core/src/language/mapping.ts`.
+### 3.7 `@startupjs/eslint-plugin-react-pug`
 
-### 5.1 `CodeInformation`
+ESLint processor:
 
-Per-mapping feature toggles:
-
-- `completion`
-- `navigation`
-- `verification`
-- `semantic`
-
-Preset profiles:
-
-- `FULL_FEATURES` for identifiers/expressions that should fully participate in IntelliSense
-- `VERIFY_ONLY` for expression coverage where diagnostics/navigation matter but completion can be suppressed
-- `CSS_CLASS` and `SYNTHETIC` for non-TS identifiers / structural text
-
-### 5.2 `PugRegion`
-
-Represents one tagged template region.
-
-Key fields:
-
-- original offsets (`originalStart`, `originalEnd`)
-- raw content offsets inside backticks (`pugTextStart`, `pugTextEnd`)
-- stripped Pug text (`pugText`) + `commonIndent`
-- generated shadow range (`shadowStart`, `shadowEnd`)
-- generated TSX text (`tsxText`)
-- Volar-compatible mappings (`mappings`)
-- retained lexer token metadata (`lexerTokens`)
-- parse error metadata (`parseError`)
-
-### 5.3 `PugDocument`
-
-Per-file model in plugin cache:
-
-- `originalText`
-- `shadowText`
-- `regions[]`
-- mapping accelerators (`regionDeltas`)
-- `version`
+- preprocess transform before linting
+- postprocess location remap back to original files
+- supports autofix message flow
 
 ---
 
-## 6. Region Extraction (`extractRegions.ts`)
+## 4. Core Compilation Pipeline
 
-Primary mechanism: `@babel/parser` AST traversal.
+### 4.1 Region Extraction
 
-### 6.1 Extraction Logic
+`extractRegions.ts` parses source with Babel parser and finds `TaggedTemplateExpression` nodes whose tag matches configured `tagFunction` (default: `pug`).
 
-- parse source with language-aware plugins (TS/JSX support)
-- collect `TaggedTemplateExpression` where tag identifier equals configured `tagFunction` (default `pug`)
-- convert each to `PugRegion` boundaries
+Fallback regex extraction is used when AST parse fails.
 
-### 6.2 Indent Normalization
+### 4.2 Pug Parsing and Emission
 
-`stripCommonIndent()` removes shared indentation across non-empty lines in template content, storing:
+`pugToTsx.ts` pipeline:
 
-- stripped content for parser/compiler stability
-- `commonIndent` for accurate offset restoration
+1. lex (`@startupjs/pug-lexer`)
+2. strip comments
+3. parse Pug AST
+4. emit JSX/TSX text and mapping segments
 
-### 6.3 Fallback
+Supported constructs include:
 
-If Babel parse fails, regex fallback extracts `tagName\`...\`` conservatively.
-
-### 6.4 Unsupported Interpolation
-
-If template contains JavaScript `${}` expressions, region is marked with parseError indicating unsupported interpolation (use `#{}` in Pug instead).
-
----
-
-## 7. Pug -> TSX Generation (`pugToTsx.ts`)
-
-### 7.1 Pipeline
-
-1. Lex with `@startupjs/pug-lexer`
-2. Strip comments with `pug-strip-comments`
-3. Parse with `pug-parser`
-4. Emit TSX + mappings via `TsxEmitter`
-
-### 7.2 Emitter Strategy
-
-`TsxEmitter` supports:
-
-- `emitMapped`: 1:1 mapped segments
-- `emitDerived`: mapped segments with differing generated length
-- `emitSynthetic`: unmapped structural code
-
-### 7.3 Supported Constructs
-
-- tags/components (`div`, `Button`)
-- attrs, boolean attrs, spread attrs
+- tags/components
+- attributes/spreads
 - class/id shorthand
-- text nodes + piped text forms
-- interpolation `#{}` / `!{}`
-- line expressions `tag= expr`
-- buffered/unbuffered code (`=` and `-`)
-- conditionals (`if / else if / else`)
-- loops (`each`, `while`)
-- case/when/default
-- multi-root fragment wrapping
+- `#{}`, `!{}`, and `${}` interpolation
+- nested `pug` inside `${...}`
+- `if/else`, `each`, `while`, `case/when`
+- `-` code lines and `tag= expr`
+- text nodes and `|` lines
 
-### 7.4 TSX Shape Principles
+### 4.3 Compile Modes
 
-Generator output is IntelliSense-oriented rather than a strict runtime Babel-equivalent printer. It prefers TSX constructs that maximize tsserver understanding and mapping fidelity.
+- `languageService`: TS-oriented output for editor tooling
+- `runtime`: JS/JSX-safe output for compilers/linters
 
-### 7.5 Typing-Time Recovery
+Runtime mode is required for Babel/SWC/esbuild/ESLint adapters and must not emit TS-only syntax.
 
-`buildTypingRecoveryText()` relaxes temporary incomplete syntax during live edits:
+### 4.4 Source Transform API
 
-- handles dangling `-` lines
-- handles empty `tag=` expressions
-- auto-balances unclosed `()` and interpolation braces
+`transformSourceFile(...)` replaces all Pug regions in a source file and returns:
 
-If parse still fails, compiler returns safe placeholder TSX:
+- transformed `code`
+- `document` (original/shadow model)
+- `regions`
+- generated->original offset mapping helpers
 
-- `(null as any as JSX.Element)`
-
----
-
-## 8. Shadow Document Assembly (`shadowDocument.ts`)
-
-`buildShadowDocument(originalText, uri, version, tagName)`:
-
-1. extract regions
-2. compile each region
-3. replace each `pug\`...\`` span with generated TSX in a shadow copy
-4. compute cumulative deltas (`regionDeltas`) for fast mapping outside regions
-
-Important behavior:
-
-- files with no regions return identity model (`shadowText === originalText`)
-- regions with prior parseError still receive placeholder TSX to keep tsserver operational
+All compiler adapters are thin wrappers around this API.
 
 ---
 
-## 9. Position Mapping (`positionMapping.ts`)
+## 5. Mapping Model
 
-Uses `@volar/source-map` per-region and binary-search helpers for performance.
+Each region stores Volar-compatible mappings and `CodeInformation` feature flags. Mapping utilities support:
 
-### 9.1 Challenges Solved
+- original -> generated offsets
+- generated -> original offsets
+- generated diagnostic range -> original range
 
-- original raw offsets include stripped indentation and backtick context
-- mapping tables operate in stripped region coordinate space
-- synthetic TSX segments must not map to user positions
+This model is shared by:
 
-### 9.2 Key Functions
-
-- `originalToShadow(doc, offset)`
-- `shadowToOriginal(doc, offset)`
-- region lookup helpers:
-  - `findRegionAtOriginalOffset`
-  - `findRegionAtShadowOffset`
-
-### 9.3 Indent-Aware Conversion
-
-- `rawToStrippedOffset()` returns `null` when cursor is inside removed indentation
-- `strippedToRawOffset()` restores raw positions for reverse mapping
-
-### 9.4 Outside-Region Mapping
-
-Uses `regionDeltas` to apply/reverse cumulative offsets in O(log n).
+- tsserver plugin remapping
+- Babel/SWC/esbuild diagnostic remap helpers
+- ESLint processor postprocess remapping
 
 ---
 
-## 10. TS Plugin Architecture (`typescript-plugin-react-pug/src/index.ts`)
+## 6. Class Shorthand Strategy
 
-### 10.1 Initialization
+Core compile options:
 
-`init({ typescript })` returns tsserver `PluginModule`.
+- `classAttribute`: `auto | className | class | styleName`
+- `classMerge`: `auto | concatenate | classnames`
+- `startupjsCssxjs`: `auto | true | false`
 
-### 10.2 Host Patching
+Default behavior:
 
-Patched methods:
+- `auto` => `className + concatenate`
+- if startupjs/cssxjs marker is detected and auto mode is active:
+  - `styleName + classnames`
 
-- `getScriptSnapshot`:
-  - builds/returns shadow snapshots when enabled and regions exist
-  - caches `PugDocument` per file
-  - graceful fallback to original snapshot on failure
-- `getScriptVersion`:
-  - returns `${hostVersion}:${docVersion}` for cached docs
-  - ensures tsserver invalidates correctly when host text changes
+`styleName + classnames` emit supports nested array/object forms.
 
-### 10.3 Caching
+VS Code settings pass these options to the TS plugin:
 
-`docCache: Map<string, PugDocument>` keyed by fileName.
-
-- cache hit shortcut when original text unchanged
-- cache cleared when file no longer contains Pug regions
-
-### 10.4 Method Interception
-
-The plugin proxies LS and overrides targeted APIs with safe fallback wrappers.
-
-Intercepted methods:
-
-- completions
-  - `getCompletionsAtPosition`
-  - `getCompletionEntryDetails`
-- navigation/hover/signature
-  - `getDefinitionAtPosition`
-  - `getDefinitionAndBoundSpan`
-  - `getTypeDefinitionAtPosition`
-  - `getQuickInfoAtPosition`
-  - `getSignatureHelpItems`
-- rename/references
-  - `getRenameInfo`
-  - `findRenameLocations`
-  - `findReferences`
-  - `getReferencesAtPosition`
-  - `getDocumentHighlights`
-  - `getImplementationAtPosition`
-- refactors/code fixes
-  - `getApplicableRefactors`
-  - `getEditsForRefactor`
-  - `getCodeFixesAtPosition`
-  - `getCombinedCodeFix`
-- classifications
-  - `getEncodedSyntacticClassifications`
-  - `getEncodedSemanticClassifications`
-- diagnostics
-  - `getSemanticDiagnostics`
-  - `getSyntacticDiagnostics`
-  - `getSuggestionDiagnostics`
-
-### 10.5 Typing-Time Completion Heuristic
-
-`mapToShadowForTyping()` tries nearby mapped positions when current cursor falls in a transient unmapped area, improving live suggestion stability while typing incomplete expressions.
-
-### 10.6 Diagnostic Strategy
-
-- map TS diagnostics from shadow to original offsets/lengths
-- drop unmapped/synthetic-only diagnostics
-- suppress specific false positives in Pug regions:
-  - `2503` (Cannot find namespace 'JSX')
-  - `1109` (Expression expected)
-- optionally inject custom Pug parser diagnostics (`code: 99001`) when enabled
-
-### 10.7 Classification Remapping
-
-For encoded classifications, remap triples (`start,length,class`) shadow->original and clip to requested original span.
-
-### 10.8 Error Isolation
-
-Every override uses safe wrapper:
-
-- log and fall back to original language service behavior on exceptions
+- `pugReact.classShorthandProperty`
+- `pugReact.classShorthandMerge`
+- `pugReact.injectCssxjsTypes`
 
 ---
 
-## 11. VS Code Extension Architecture (`vscode-react-pug-tsx/src/index.ts`)
+## 7. TypeScript Plugin Flow
 
-### 11.1 Activation
+High-level request path:
 
-On activation:
+1. tsserver requests snapshot/version
+2. plugin returns shadow snapshot if Pug regions exist
+3. TS language service computes diagnostics/completions/etc on shadow text
+4. plugin remaps outputs back to original source ranges
 
-- create output channel `Pug React`
-- register text document content provider for scheme `pug-react-shadow`
-- register command `pugReact.showShadowTsx`
+Intercepted API families include completions, quick-info/navigation, references/rename, diagnostics, classifications, and code-fix/refactor edits.
 
-### 11.2 `showShadowTsx` Command
-
-Behavior:
-
-1. read active editor
-2. resolve `pugReact.tagFunction`
-3. build shadow document via core
-4. if no Pug templates: info message
-5. else open virtual shadow TSX document in side editor
-
-### 11.3 Manifest Contributions (`packages/vscode-react-pug-tsx/package.json`)
-
-- activation on TS/TSX/JS/JSX
-- plugin contribution:
-  - `@startupjs/typescript-plugin-react-pug`
-- settings:
-  - `pugReact.enabled`
-  - `pugReact.diagnostics.enabled`
-  - `pugReact.tagFunction`
-- command contribution: `pugReact.showShadowTsx`
-- grammar injection contribution
-- Emmet defaults to avoid noisy abbreviation behavior in Pug contexts
+Plugin behavior is fail-soft: on internal errors it falls back to base TS behavior.
 
 ---
 
-## 12. Syntax Highlighting Architecture
+## 8. VS Code Extension Flow
 
-Grammar file: `packages/vscode-react-pug-tsx/syntaxes/pug-template-literal.json`
+Extension contributes:
 
-### 12.1 Injection Entry
+- tsserver plugin activation for TS/JS files
+- Pug template literal grammar injection
+- configuration schema
+- shadow document debug command
 
-- scope: `inline.pug-template-literal`
-- inject selector: TS/TSX/JS/JSX
-- begin pattern anchored to standalone `pug` identifier before backtick
-
-### 12.2 Coverage Areas
-
-Grammar rules include:
-
-- comments
-- control flow (`if`, `else`, `each`, etc.)
-- unbuffered `-` code lines
-- line output expressions (`tag= expr`)
-- interpolation `#{}` / `!{}`
-- pipe text lines (`| text`)
-- class/id shorthand
-- attributes and embedded expressions
-
-### 12.3 Embedded Languages
-
-Rules embed `source.ts`/`source.tsx` in expression subregions to retain rich color differentiation and token semantics.
+Grammar is focused on rich highlighting while semantic correctness remains TS-plugin-driven.
 
 ---
 
-## 13. Build and Packaging
+## 9. Compiler Adapter Flows
 
-Build config: `esbuild.config.mjs`
+### Babel
 
-Outputs:
+- transform source text with core runtime mode
+- parse transformed result with Babel parser
+- replace program body in current AST
 
-- extension bundle:
-  - entry `packages/vscode-react-pug-tsx/src/index.ts`
-  - out `packages/vscode-react-pug-tsx/dist/client.js`
-- plugin bundle:
-  - entry `packages/typescript-plugin-react-pug/src/index.ts`
-  - out `packages/typescript-plugin-react-pug/dist/plugin.js`
+### SWC
 
-Shared esbuild settings:
+- pretransform text via core
+- run `@swc/core` on transformed text (optional helper)
 
-- `platform: node`
-- `format: cjs`
-- sourcemaps on
-- `vscode` externalized
+### esbuild
 
-Root scripts:
+- plugin `onLoad` reads source and transforms before parse stage
+- returns transformed contents with original loader type
 
-- `build`, `build:extension`, `build:plugin`, `watch`
+### ESLint
 
----
-
-## 14. Test Architecture
-
-### 14.1 Test Commands
-
-- unit+integration (Vitest):
-  - `npm run test:unit`
-- VS Code extension-host tests:
-  - `npm run test:vscode`
-  - `npm run test:vscode:example`
-  - screenshot mode: `npm run test:vscode:example:screenshots`
-- full suite:
-  - `npm test` (runs `test:unit` then `test:vscode`)
-
-### 14.2 Test Locations
-
-- core tests:
-  - `packages/react-pug-core/test/unit`
-  - `packages/react-pug-core/test/integration`
-- plugin tests:
-  - `packages/typescript-plugin-react-pug/test/unit`
-  - `packages/typescript-plugin-react-pug/test/integration`
-  - fixtures under `packages/typescript-plugin-react-pug/test/fixtures`
-- extension tests:
-  - `packages/vscode-react-pug-tsx/test/unit`
-  - `packages/vscode-react-pug-tsx/test/vscode`
-
-### 14.3 VS Code Host Test Config
-
-- config file: `packages/vscode-react-pug-tsx/.vscode-test.mjs`
-- active label: `example`
-- workspace target: `example`
-
-### 14.4 Screenshot Capture in VS Code Tests
-
-`packages/vscode-react-pug-tsx/test/vscode/screenshot.js` supports:
-
-- optional capture (`VSCODE_CAPTURE_SCREENSHOTS=1`)
-- settle delay tuning (`VSCODE_SCREENSHOT_SETTLE_MS`)
-- artifacts in `artifacts/vscode-screenshots/<workspace>/`
-- platform-specific capture strategies (VS Code API / OS screenshot command)
-
-### 14.5 Current Test Volume
-
-As of latest local run:
-
-- 26 test files
-- 629 passing tests
+- processor preprocess transforms source before lint
+- postprocess remaps lint message coordinates back to originals
 
 ---
 
-## 15. CI Architecture
+## 10. Testing Strategy
 
-Workflow: `.github/workflows/ci.yml`
+Test layers:
 
-Quality gate steps:
+- core unit/integration tests
+- TS plugin unit/integration tests
+- VS Code extension unit + extension-host tests
+- compiler adapter unit tests for Babel/SWC/esbuild/ESLint
+- shared compiler fixture matrix for parity/stress coverage
 
-1. `npm ci`
-2. `npm run typecheck`
-3. `npm run build`
-4. `xvfb-run -a npm test`
+Important coverage themes:
 
-Notes:
-
-- `npm test` includes both Vitest and VS Code extension-host tests.
-- xvfb is required for headless VS Code test execution on Linux runners.
-
----
-
-## 16. Developer Utility Scripts
-
-### 16.1 `scripts/open-vscode-fresh.mjs`
-
-Launches a fresh VS Code session with:
-
-- temporary user-data and extensions dirs
-- all external extensions disabled
-- this extension loaded via `--extensionDevelopmentPath packages/vscode-react-pug-tsx`
-
-### 16.2 `scripts/ensure-workspace-deps.mjs`
-
-Before VS Code tests, ensures example workspace dependencies exist (notably `react` and `react/jsx-runtime`) and runs `npm install` in example if missing.
+- nested `${pug\`...\`}` transforms
+- multi-region files
+- runtime TS-syntax safety for JS/JSX
+- source map generation in compiler flows
+- generated->original diagnostic mapping fidelity
 
 ---
 
-## 17. Configuration Surface
+## 11. Scripts and CI
 
-End-user settings:
+Key scripts:
 
-- `pugReact.enabled`: global plugin behavior toggle
-- `pugReact.diagnostics.enabled`: custom Pug parse diagnostics toggle
-- `pugReact.tagFunction`: custom tag identifier support (default `pug`)
+- `npm run test:core`
+- `npm run test:ts-plugin`
+- `npm run test:vscode:unit`
+- `npm run test:compilers`
+- `npm run test:vscode`
+- `npm test` (unit + VS Code)
 
-Behavior implications:
+CI jobs:
 
-- disabling plugin returns original snapshots (pass-through mode)
-- changing tag function affects extraction in both plugin and debug command
-
----
-
-## 18. Performance Characteristics
-
-Current design decisions for responsiveness:
-
-- fast text precheck before parsing (`tagName` presence)
-- per-file cached `PugDocument`
-- binary-search region lookups
-- `regionDeltas` for O(log n) outside-region mapping
-- limited-radius typing-time completion fallback
-
-No long-lived external process is introduced; operations stay in tsserver plugin path.
+- `compiler-integrations`: dedicated compiler adapter tests
+- `quality-gates`: typecheck, build, and full test flow (with xvfb for VS Code tests)
 
 ---
 
-## 19. Error Handling and Resilience
+## 12. Current Boundaries
 
-Core and plugin are designed to fail soft:
-
-- parse failures generate placeholder TSX instead of breaking LS calls
-- unsupported constructs produce targeted diagnostics, not crashes
-- method-level override wrapper falls back to underlying LS on exception
-- extension command catches failures, logs to output channel, and surfaces user-friendly errors
-
----
-
-## 20. Known Limits and Semantics
-
-Important boundaries:
-
-- JavaScript `${}` inside `pug\`...\`` is not supported (use Pug `#{}`)
-- Generated TSX is IntelliSense-oriented and may not be byte-for-byte runtime Babel output
-- Some mapping for highly malformed intermediate typing states is heuristic-based
-
----
-
-## 21. Why This Architecture
-
-This approach intentionally avoids a standalone LSP replacement and instead composes with TypeScript's native language service.
-
-Benefits:
-
-- keeps TS ecosystem features and project resolution behavior intact
-- minimizes integration risk with VS Code TS extension behavior
-- enables high-feature parity using source transforms + precise mapping
-
-Tradeoff:
-
-- mapping logic is non-trivial and requires robust regression coverage (which the current test architecture provides).
-
----
-
-## 22. Operational Checklist
-
-For maintainers and agents:
-
-1. Install deps: `npm ci`
-2. Typecheck: `npm run typecheck`
-3. Build: `npm run build`
-4. Unit/integration tests: `npm run test:unit`
-5. VS Code host tests: `npm run test:vscode`
-6. Full suite: `npm test`
-
-For visual/manual validation:
-
-- `npm run test:vscode:example:screenshots`
-- `npm run vscode:fresh:example`
+- VS Code extension targets desktop extension host (no web extension host build).
+- Runtime transform equivalence is behavior-oriented, not intended to be byte-identical to legacy Babel plugins.
+- During very incomplete edits, temporary IntelliSense mapping may be approximate until syntax stabilizes.

@@ -236,8 +236,8 @@ Commit: `chore: wire compiler integration tests into scripts and CI`
 
 ### Task 6.3: Documentation
 
-- [ ] Update README with new packages and usage snippets.
-- [ ] Update architecture with compiler integration architecture.
+- [x] Update README with new packages and usage snippets.
+- [x] Update architecture with compiler integration architecture.
 
 Commit: `docs: add compiler integration architecture and usage`
 
@@ -305,8 +305,8 @@ Commit: `test(compilers): harden sourcemap generation and original-location mapp
 
 ## Definition of Done
 
-- [ ] All new packages exist and have tested transform paths.
-- [ ] Existing VS Code + TS plugin tests stay green.
-- [ ] Compiler plugin tests are green across Babel/SWC/ESLint/esbuild.
-- [ ] Mapping behavior is covered by automated tests for key failure-prone cases.
-- [ ] README + architecture updated.
+- [x] All new packages exist and have tested transform paths.
+- [x] Existing VS Code + TS plugin tests stay green.
+- [x] Compiler plugin tests are green across Babel/SWC/ESLint/esbuild.
+- [x] Mapping behavior is covered by automated tests for key failure-prone cases.
+- [x] README + architecture updated.
