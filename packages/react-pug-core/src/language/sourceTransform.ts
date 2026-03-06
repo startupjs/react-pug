@@ -1,7 +1,13 @@
 import type { PugDocument, PugRegion } from './mapping';
 import { buildShadowDocument } from './shadowDocument';
 import { originalToShadow, shadowToOriginal } from './positionMapping';
-import type { CompileMode } from './pugToTsx';
+import type { ClassAttributeName, ClassMergeMode, CompileMode } from './pugToTsx';
+
+const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
+
+export type ClassAttributeOption = 'auto' | ClassAttributeName;
+export type ClassMergeOption = 'auto' | ClassMergeMode;
+export type StartupjsCssxjsOption = boolean | 'auto';
 
 export interface SourceTransformOptions {
   /**
@@ -16,6 +22,25 @@ export interface SourceTransformOptions {
    * - `runtime`: JS/JSX-safe output for build tools.
    */
   compileMode?: CompileMode;
+
+  /**
+   * Which attribute receives shorthand classes.
+   * - `auto`: defaults to `className`, but may switch to `styleName` when startupjs/cssxjs is detected.
+   */
+  classAttribute?: ClassAttributeOption;
+
+  /**
+   * How shorthand classes merge with an existing explicit attribute value.
+   * - `concatenate`: string concatenation
+   * - `classnames`: classnames-compatible array composition
+   * - `auto`: `classnames` when target attr is `styleName`, otherwise `concatenate`
+   */
+  classMerge?: ClassMergeOption;
+
+  /**
+   * startupjs/cssxjs detection mode used by `auto` class strategy.
+   */
+  startupjsCssxjs?: StartupjsCssxjsOption;
 }
 
 export interface SourceTransformResult {
@@ -53,12 +78,28 @@ export function transformSourceFile(
   options: SourceTransformOptions = {},
 ): SourceTransformResult {
   const tagFunction = options.tagFunction ?? 'pug';
+  const startupjsCssxjs = options.startupjsCssxjs === true
+    || (options.startupjsCssxjs !== false && STARTUPJS_OR_CSSXJS_RE.test(sourceText));
+  const classAttribute: ClassAttributeName = (
+    options.classAttribute === 'className'
+    || options.classAttribute === 'class'
+    || options.classAttribute === 'styleName'
+  ) ? options.classAttribute : (startupjsCssxjs ? 'styleName' : 'className');
+  const classMerge: ClassMergeMode = (
+    options.classMerge === 'concatenate'
+    || options.classMerge === 'classnames'
+  ) ? options.classMerge : (classAttribute === 'styleName' ? 'classnames' : 'concatenate');
+
   const document = buildShadowDocument(
     sourceText,
     fileName,
     1,
     tagFunction,
-    { mode: options.compileMode ?? 'languageService' },
+    {
+      mode: options.compileMode ?? 'languageService',
+      classAttribute,
+      classMerge,
+    },
   );
 
   return {

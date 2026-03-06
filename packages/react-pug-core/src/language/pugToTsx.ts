@@ -293,7 +293,12 @@ interface InterpolationContext {
 }
 
 const interpolationContextStack: InterpolationContext[] = [];
-const compileModeStack: CompileMode[] = [];
+interface CompileContext {
+  mode: CompileMode;
+  classAttribute: ClassAttributeName;
+  classMerge: ClassMergeMode;
+}
+const compileContextStack: CompileContext[] = [];
 
 function currentInterpolationContext(): InterpolationContext | null {
   return interpolationContextStack.length > 0
@@ -302,9 +307,21 @@ function currentInterpolationContext(): InterpolationContext | null {
 }
 
 function currentCompileMode(): CompileMode {
-  return compileModeStack.length > 0
-    ? compileModeStack[compileModeStack.length - 1]
+  return compileContextStack.length > 0
+    ? compileContextStack[compileContextStack.length - 1].mode
     : 'languageService';
+}
+
+function currentClassAttribute(): ClassAttributeName {
+  return compileContextStack.length > 0
+    ? compileContextStack[compileContextStack.length - 1].classAttribute
+    : 'className';
+}
+
+function currentClassMerge(): ClassMergeMode {
+  return compileContextStack.length > 0
+    ? compileContextStack[compileContextStack.length - 1].classMerge
+    : 'concatenate';
 }
 
 function createInterpolationMarker(index: number, length: number): string {
@@ -608,7 +625,11 @@ function emitJsExpressionWithNestedPug(
       emitJsExpressionWithNestedPug(plain, expressionOffset + cursor, emitter, info);
     }
 
-    const compiled = compilePugToTsx(region.pugText, { mode: currentCompileMode() });
+    const compiled = compilePugToTsx(region.pugText, {
+      mode: currentCompileMode(),
+      classAttribute: currentClassAttribute(),
+      classMerge: currentClassMerge(),
+    });
     emitCompiledPugRegionInExpression(expression, expressionOffset, region, compiled, emitter);
     cursor = region.originalEnd;
   }
@@ -732,6 +753,94 @@ function emitNode(
   }
 }
 
+interface StaticClassShorthand {
+  name: string;
+  offset: number;
+  sourceLength: number;
+}
+
+function emitAttributeValueAsExpression(
+  attr: PugAttr,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  if (attr.val === true) {
+    emitter.emitSynthetic('true');
+    return;
+  }
+
+  if (typeof attr.val !== 'string') {
+    emitter.emitSynthetic('undefined');
+    return;
+  }
+
+  const attrOffset = lineColToOffset(pugText, attr.line, attr.column);
+  const valOffset = attrOffset + attr.name.length + 1;
+  const val = attr.val;
+
+  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith('\'') && val.endsWith('\''))) {
+    emitter.emitMapped(val, valOffset, FULL_FEATURES);
+    return;
+  }
+
+  emitExpressionWithTemplateInterpolations(val, valOffset, emitter, FULL_FEATURES);
+}
+
+function emitStaticClassLiteral(
+  classNames: StaticClassShorthand[],
+  emitter: TsxEmitter,
+): void {
+  const combinedClass = classNames.map((c) => c.name).join(' ');
+  if (combinedClass.length === 0) return;
+  const first = classNames[0];
+  emitter.emitDerived(combinedClass, first.offset, Math.max(1, first.sourceLength), CSS_CLASS);
+}
+
+function emitMergedClassShorthandAttribute(
+  targetAttr: ClassAttributeName,
+  mergeMode: ClassMergeMode,
+  classNames: StaticClassShorthand[],
+  existingAttr: PugAttr | null,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  if (mergeMode === 'classnames') {
+    emitter.emitSynthetic(` ${targetAttr}={[`);
+    for (let i = 0; i < classNames.length; i += 1) {
+      if (i > 0) emitter.emitSynthetic(', ');
+      emitter.emitSynthetic('"');
+      emitter.emitDerived(
+        classNames[i].name,
+        classNames[i].offset,
+        Math.max(1, classNames[i].sourceLength),
+        CSS_CLASS,
+      );
+      emitter.emitSynthetic('"');
+    }
+
+    if (existingAttr) {
+      if (classNames.length > 0) emitter.emitSynthetic(', ');
+      emitAttributeValueAsExpression(existingAttr, emitter, pugText);
+    }
+    emitter.emitSynthetic(']}');
+    return;
+  }
+
+  if (existingAttr) {
+    emitter.emitSynthetic(` ${targetAttr}={`);
+    emitter.emitSynthetic('"');
+    emitStaticClassLiteral(classNames, emitter);
+    emitter.emitSynthetic('" + " " + (');
+    emitAttributeValueAsExpression(existingAttr, emitter, pugText);
+    emitter.emitSynthetic(')}');
+    return;
+  }
+
+  emitter.emitSynthetic(` ${targetAttr}="`);
+  emitStaticClassLiteral(classNames, emitter);
+  emitter.emitSynthetic('"');
+}
+
 function emitTag(
   node: PugTag,
   emitter: TsxEmitter,
@@ -740,7 +849,7 @@ function emitTag(
   const tagOffset = lineColToOffset(pugText, node.line, node.column);
 
   // Collect class names and id from shorthand attrs
-  const classNames: string[] = [];
+  const classNames: StaticClassShorthand[] = [];
   let idValue: string | null = null;
   const regularAttrs: PugAttr[] = [];
 
@@ -749,9 +858,17 @@ function emitTag(
       // Shorthand class: val is like "'card'" (with quotes)
       const raw = attr.val;
       if (raw.startsWith("'") && raw.endsWith("'")) {
-        classNames.push(raw.slice(1, -1));
+        classNames.push({
+          name: raw.slice(1, -1),
+          offset: lineColToOffset(pugText, attr.line, attr.column),
+          sourceLength: Math.max(1, raw.length),
+        });
       } else if (raw.startsWith('"') && raw.endsWith('"')) {
-        classNames.push(raw.slice(1, -1));
+        classNames.push({
+          name: raw.slice(1, -1),
+          offset: lineColToOffset(pugText, attr.line, attr.column),
+          sourceLength: Math.max(1, raw.length),
+        });
       } else {
         // Dynamic class expression
         regularAttrs.push(attr);
@@ -782,13 +899,20 @@ function emitTag(
     emitter.emitMapped(node.name, tagOffset, FULL_FEATURES);
   }
 
-  // Emit className from shorthands
+  // Emit shorthand classes according to current class strategy.
   if (classNames.length > 0) {
-    const combinedClass = classNames.join(' ');
-    emitter.emitSynthetic(' className="');
-    const classOffset = lineColToOffset(pugText, node.line, node.column);
-    emitter.emitDerived(combinedClass, classOffset, 1, CSS_CLASS);
-    emitter.emitSynthetic('"');
+    const targetAttr = currentClassAttribute();
+    const mergeMode = currentClassMerge();
+    const existingIndex = regularAttrs.findIndex((a) => a.name === targetAttr);
+    const existingAttr = existingIndex >= 0 ? regularAttrs.splice(existingIndex, 1)[0] : null;
+    emitMergedClassShorthandAttribute(
+      targetAttr,
+      mergeMode,
+      classNames,
+      existingAttr,
+      emitter,
+      pugText,
+    );
   }
 
   // Emit id from shorthand
@@ -1350,9 +1474,13 @@ export interface CompileResult {
 }
 
 export type CompileMode = 'languageService' | 'runtime';
+export type ClassAttributeName = 'className' | 'class' | 'styleName';
+export type ClassMergeMode = 'concatenate' | 'classnames';
 
 export interface CompileOptions {
   mode?: CompileMode;
+  classAttribute?: ClassAttributeName;
+  classMerge?: ClassMergeMode;
 }
 
 function fallbackNullExpression(mode: CompileMode): string {
@@ -1365,6 +1493,8 @@ function fallbackNullExpression(mode: CompileMode): string {
  */
 export function compilePugToTsx(pugText: string, options: CompileOptions = {}): CompileResult {
   const mode = options.mode ?? 'languageService';
+  const classAttribute = options.classAttribute ?? 'className';
+  const classMerge = options.classMerge ?? 'concatenate';
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const lex = require('@startupjs/pug-lexer');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1374,7 +1504,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
   const prepared = prepareTemplateInterpolations(pugText);
   const pugTextForParse = prepared.sanitizedText;
   interpolationContextStack.push(prepared.context);
-  compileModeStack.push(mode);
+  compileContextStack.push({ mode, classAttribute, classMerge });
 
   try {
     let tokens: any[];
@@ -1473,7 +1603,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
       parseError,
     };
   } finally {
-    compileModeStack.pop();
+    compileContextStack.pop();
     interpolationContextStack.pop();
   }
 }

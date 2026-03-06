@@ -1108,3 +1108,45 @@ describe('runtime compile mode', () => {
     expect(result.tsx).toContain('tooltipText');
   });
 });
+
+// ── Class shorthand strategy ────────────────────────────────────
+
+describe('class shorthand strategy', () => {
+  it('defaults to className with concatenation semantics', () => {
+    const result = compilePugToTsx('span.title');
+    expect(result.tsx).toContain('className="title"');
+  });
+
+  it('can target plain class attribute', () => {
+    const result = compilePugToTsx('span.title', {
+      classAttribute: 'class',
+      classMerge: 'concatenate',
+    });
+    expect(result.tsx).toContain(' class="title"');
+    expect(result.tsx).not.toContain('className=');
+  });
+
+  it('classnames mode for styleName emits array merge', () => {
+    const result = compilePugToTsx('span.title(styleName=active)', {
+      classAttribute: 'styleName',
+      classMerge: 'classnames',
+    });
+    expect(result.tsx).toContain('styleName={["title", active]}');
+  });
+
+  it('concatenate mode for className merges into string expression', () => {
+    const result = compilePugToTsx('span.title(className=activeClass)', {
+      classAttribute: 'className',
+      classMerge: 'concatenate',
+    });
+    expect(result.tsx).toContain('className={"title" + " " + (activeClass)}');
+  });
+
+  it('classnames mode can be used without explicit attribute', () => {
+    const result = compilePugToTsx('span.title.bold', {
+      classAttribute: 'styleName',
+      classMerge: 'classnames',
+    });
+    expect(result.tsx).toContain('styleName={["title", "bold"]}');
+  });
+});

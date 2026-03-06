@@ -243,6 +243,66 @@ Commit: `docs: add compiler integration architecture and usage`
 
 ---
 
+## Phase 7: Class Shorthand Strategy + Cross-Compiler Map Fidelity
+
+### Task 7.1: Add class shorthand compile strategy in core
+
+- [ ] Add core compile options:
+  - `classAttribute`: `auto | className | class | styleName`
+  - `classMerge`: `auto | concatenate | classnames`
+- [ ] Implement deterministic resolution rules:
+  - default `auto` -> `className` + `concatenate`
+  - startupjs/cssxjs auto-detection can switch to `styleName` + `classnames`
+- [ ] Ensure merge behavior is correct for shorthand + explicit attribute combinations.
+- [ ] Ensure `styleName` + `classnames` emits array-compatible output.
+
+Tests:
+- [ ] Add extensive unit/integration coverage for all combinations:
+  - shorthand only
+  - explicit attr only
+  - shorthand + explicit quoted string
+  - shorthand + explicit JS expression
+  - shorthand + explicit object/array/classnames-style value
+  - target variants: `className`, `class`, `styleName`
+  - merge variants: `concatenate`, `classnames`, `auto`
+
+Commit: `feat(core): add configurable class shorthand compile strategy`
+
+### Task 7.2: TS plugin + VS Code settings wiring
+
+- [ ] Add plugin settings support for class shorthand strategy.
+- [ ] Add VS Code configuration schema entries and pass-through wiring.
+- [ ] Ensure `injectCssxjsTypes=auto` + startupjs/cssxjs detection can switch shorthand defaults to `styleName` + `classnames`.
+- [ ] Update injected cssxjs `styleName` type to support nested classnames-compatible arrays/objects.
+
+Tests:
+- [ ] Unit tests for settings normalization and effective compile-option resolution.
+- [ ] Integration tests for TS plugin behavior under each strategy combination.
+
+Commit: `feat(ts-plugin): support configurable class shorthand strategy and cssxjs nested styleName types`
+
+### Task 7.3: Compiler package propagation
+
+- [ ] Add class strategy options to Babel/SWC/esbuild/ESLint package APIs.
+- [ ] Ensure startupjs/cssxjs auto-detection is supported consistently in all compiler paths.
+- [ ] Ensure JS/JSX compile paths never emit TS-only syntax.
+
+Tests:
+- [ ] Add per-compiler tests for `.js/.jsx` inputs ensuring runtime-safe JSX output.
+- [ ] Add per-compiler tests for class shorthand strategy combinations.
+
+Commit: `feat(compilers): propagate class shorthand strategy across babel swc esbuild eslint`
+
+### Task 7.4: Source map generation + original-location mapping hardening
+
+- [ ] Add/expand tests to verify source maps are emitted for Babel/SWC/esbuild compilation paths.
+- [ ] Add/expand tests that validate mapped locations resolve to original pug source for all compiler adapters.
+- [ ] Add edge-case tests across nested pug interpolation and multi-region files.
+
+Commit: `test(compilers): harden sourcemap generation and original-location mapping coverage`
+
+---
+
 ## Definition of Done
 
 - [ ] All new packages exist and have tested transform paths.

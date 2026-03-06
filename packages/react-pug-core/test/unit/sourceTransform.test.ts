@@ -86,4 +86,33 @@ describe('transformSourceFile', () => {
     expect(result.code).toContain('const __r = []');
     expect(result.code).not.toContain('JSX.Element[]');
   });
+
+  it('auto class strategy defaults to className without startupjs/cssxjs marker', () => {
+    const source = 'const view = pug`span.title`;';
+    const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
+    expect(result.code).toContain('className="title"');
+  });
+
+  it('auto class strategy switches to styleName+classnames with startupjs/cssxjs marker', () => {
+    const source = [
+      "import { pug } from 'startupjs';",
+      'const active = { active: true };',
+      'const view = pug`span.title(styleName=active)`;',
+    ].join('\n');
+    const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
+    expect(result.code).toContain('styleName={["title", active]}');
+    expect(result.code).not.toContain('className=');
+  });
+
+  it('can force class target and merge strategy explicitly', () => {
+    const source = 'const view = pug`span.title(styleName=active)`;';
+    const result = transformSourceFile(source, 'file.tsx', {
+      compileMode: 'runtime',
+      classAttribute: 'class',
+      classMerge: 'concatenate',
+      startupjsCssxjs: true,
+    });
+    expect(result.code).toContain('class="title"');
+    expect(result.code).toContain('styleName={active}');
+  });
 });
