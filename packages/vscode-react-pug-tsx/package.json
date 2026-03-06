@@ -57,6 +57,38 @@
             "Always inject cssxjs React attribute types for TS/TSX files with pug templates."
           ],
           "description": "Controls automatic injection of cssxjs React attribute types (part/styleName)."
+        },
+        "pugReact.classShorthandProperty": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "className",
+            "class",
+            "styleName"
+          ],
+          "enumDescriptions": [
+            "Use className by default; switch to styleName when startupjs/cssxjs is detected.",
+            "Always compile shorthand classes into className.",
+            "Always compile shorthand classes into class.",
+            "Always compile shorthand classes into styleName."
+          ],
+          "description": "Controls which attribute receives shorthand classes such as .title."
+        },
+        "pugReact.classShorthandMerge": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "concatenate",
+            "classnames"
+          ],
+          "enumDescriptions": [
+            "Use classnames-style array merge for styleName, otherwise string concatenation.",
+            "Merge shorthand with explicit value using string concatenation.",
+            "Merge shorthand with explicit value using classnames-compatible arrays."
+          ],
+          "description": "Controls how shorthand classes are merged with an explicit class attribute value."
         }
       }
     },

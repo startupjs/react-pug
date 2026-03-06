@@ -17,6 +17,19 @@ function readPluginConfig() {
   const injectCssxjsTypes: 'never' | 'auto' | 'force' = (
     injectRaw === 'never' || injectRaw === 'auto' || injectRaw === 'force'
   ) ? injectRaw : 'auto';
+  const classShorthandPropertyRaw = config.get<string>('classShorthandProperty', 'auto');
+  const classShorthandProperty: 'auto' | 'className' | 'class' | 'styleName' = (
+    classShorthandPropertyRaw === 'auto'
+    || classShorthandPropertyRaw === 'className'
+    || classShorthandPropertyRaw === 'class'
+    || classShorthandPropertyRaw === 'styleName'
+  ) ? classShorthandPropertyRaw : 'auto';
+  const classShorthandMergeRaw = config.get<string>('classShorthandMerge', 'auto');
+  const classShorthandMerge: 'auto' | 'concatenate' | 'classnames' = (
+    classShorthandMergeRaw === 'auto'
+    || classShorthandMergeRaw === 'concatenate'
+    || classShorthandMergeRaw === 'classnames'
+  ) ? classShorthandMergeRaw : 'auto';
 
   return {
     enabled: config.get<boolean>('enabled', true),
@@ -25,6 +38,8 @@ function readPluginConfig() {
     },
     tagFunction: config.get<string>('tagFunction', 'pug'),
     injectCssxjsTypes,
+    classShorthandProperty,
+    classShorthandMerge,
   };
 }
 
