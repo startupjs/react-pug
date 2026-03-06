@@ -47,14 +47,14 @@
           "type": "string",
           "default": "auto",
           "enum": [
-            "none",
+            "never",
             "auto",
             "force"
           ],
           "enumDescriptions": [
             "Never inject cssxjs React attribute types.",
-            "Inject cssxjs React attribute types only when startupjs or cssxjs is present in dependencies/peerDependencies.",
-            "Always inject cssxjs React attribute types for files with pug templates."
+            "Inject cssxjs React attribute types only when the current file contains \"startupjs\" or \"cssxjs\".",
+            "Always inject cssxjs React attribute types for TS/TSX files with pug templates."
           ],
           "description": "Controls automatic injection of cssxjs React attribute types (part/styleName)."
         }

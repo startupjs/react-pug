@@ -14,8 +14,8 @@ function logError(msg: string, error: unknown): void {
 function readPluginConfig() {
   const config = vscode.workspace.getConfiguration('pugReact');
   const injectRaw = config.get<string>('injectCssxjsTypes', 'auto');
-  const injectCssxjsTypes: 'none' | 'auto' | 'force' = (
-    injectRaw === 'none' || injectRaw === 'auto' || injectRaw === 'force'
+  const injectCssxjsTypes: 'never' | 'auto' | 'force' = (
+    injectRaw === 'never' || injectRaw === 'auto' || injectRaw === 'force'
   ) ? injectRaw : 'auto';
 
   return {

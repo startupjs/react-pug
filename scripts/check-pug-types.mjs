@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 
 function printUsage() {
   console.log('Usage: node scripts/check-pug-types.mjs [project-dir] [--project <tsconfig-path>]');
-  console.log('       [--tagFunction <name>] [--injectCssxjsTypes <none|auto|force>]');
+  console.log('       [--tagFunction <name>] [--injectCssxjsTypes <never|auto|force>]');
   console.log('');
   console.log('Examples:');
   console.log('  node scripts/check-pug-types.mjs example');
@@ -47,7 +47,7 @@ function parseArgs(argv) {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  if (!['none', 'auto', 'force'].includes(injectCssxjsTypes)) {
+  if (!['never', 'auto', 'force'].includes(injectCssxjsTypes)) {
     throw new Error(`Invalid --injectCssxjsTypes value: ${injectCssxjsTypes}`);
   }
 

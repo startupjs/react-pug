@@ -1,10 +1,10 @@
 import type ts from 'typescript';
-import path from 'node:path';
 import type { PugDocument } from '../../react-pug-core/src/language/mapping';
 import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDocument';
 import { findRegionAtOriginalOffset, originalToShadow, shadowToOriginal } from '../../react-pug-core/src/language/positionMapping';
 
 const EXTRA_REACT_ATTRIBUTES_MARKER = '/* [pug-react] startupjs/cssxjs extra react attributes */';
+const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
 
 const EXTRA_REACT_ATTRIBUTES_TEXT = `
 ${EXTRA_REACT_ATTRIBUTES_MARKER}
@@ -51,11 +51,12 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       const enabled = config.enabled !== false;
       const diagnosticsEnabled = config.diagnostics?.enabled !== false;
       const tagFunction: string = config.tagFunction ?? 'pug';
-      const injectCssxjsTypesMode: 'none' | 'auto' | 'force' = (
-        config.injectCssxjsTypes === 'none'
-        || config.injectCssxjsTypes === 'force'
-        || config.injectCssxjsTypes === 'auto'
-      ) ? config.injectCssxjsTypes : 'auto';
+      const injectModeRaw = config.injectCssxjsTypes;
+      const injectCssxjsTypesMode: 'never' | 'auto' | 'force' = (
+        injectModeRaw === 'never'
+        || injectModeRaw === 'force'
+        || injectModeRaw === 'auto'
+      ) ? injectModeRaw : 'auto';
 
       const host = info.languageServiceHost;
       const originalGetSnapshot = host.getScriptSnapshot.bind(host);
@@ -64,87 +65,17 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       // Per-instance cache: stores PugDocument per file
       const docCache = new Map<string, PugDocument>();
       const fileExtraTypesState = new Map<string, boolean>();
-      const packageDepsCache = new Map<string, { enabled: boolean; mtimeMs?: number }>();
-      const nearestPackageJsonCache = new Map<string, string | null>();
 
-      function resolveFileDir(fileName: string): string | undefined {
-        if (!fileName) return undefined;
-        if (path.isAbsolute(fileName)) return path.dirname(fileName);
-
-        const hostCwd = typeof host.getCurrentDirectory === 'function'
-          ? host.getCurrentDirectory()
-          : undefined;
-        if (hostCwd) return path.resolve(hostCwd, path.dirname(fileName));
-
-        const projectCwd = typeof info.project?.getCurrentDirectory === 'function'
-          ? info.project.getCurrentDirectory()
-          : undefined;
-        if (projectCwd) return path.resolve(projectCwd, path.dirname(fileName));
-
-        return undefined;
+      function isTsOrTsxFile(fileName: string): boolean {
+        const lower = fileName.toLowerCase();
+        return lower.endsWith('.ts') || lower.endsWith('.tsx');
       }
 
-      function findNearestPackageJson(fileName: string): string | undefined {
-        let dir = resolveFileDir(fileName);
-        if (!dir) return undefined;
-
-        const cached = nearestPackageJsonCache.get(dir);
-        if (cached !== undefined) return cached ?? undefined;
-
-        const visited: string[] = [];
-        while (true) {
-          visited.push(dir);
-          const candidate = path.join(dir, 'package.json');
-          if (tsModule.sys.fileExists?.(candidate)) {
-            for (const v of visited) nearestPackageJsonCache.set(v, candidate);
-            return candidate;
-          }
-          const parent = path.dirname(dir);
-          if (parent === dir) {
-            for (const v of visited) nearestPackageJsonCache.set(v, null);
-            return undefined;
-          }
-          dir = parent;
-        }
-      }
-
-      function hasStartupJsOrCssxJsDeps(packageJsonPath: string): boolean {
-        const mtimeMs = tsModule.sys.getModifiedTime?.(packageJsonPath)?.valueOf();
-        const cached = packageDepsCache.get(packageJsonPath);
-        if (cached && cached.mtimeMs === mtimeMs) {
-          return cached.enabled;
-        }
-
-        const text = tsModule.sys.readFile?.(packageJsonPath);
-        if (!text) {
-          packageDepsCache.set(packageJsonPath, { enabled: false, mtimeMs });
-          return false;
-        }
-
-        try {
-          const pkg = JSON.parse(text);
-          const deps = pkg?.dependencies ?? {};
-          const peerDeps = pkg?.peerDependencies ?? {};
-          const enabled = (
-            Object.prototype.hasOwnProperty.call(deps, 'startupjs')
-            || Object.prototype.hasOwnProperty.call(deps, 'cssxjs')
-            || Object.prototype.hasOwnProperty.call(peerDeps, 'startupjs')
-            || Object.prototype.hasOwnProperty.call(peerDeps, 'cssxjs')
-          );
-          packageDepsCache.set(packageJsonPath, { enabled, mtimeMs });
-          return enabled;
-        } catch {
-          packageDepsCache.set(packageJsonPath, { enabled: false, mtimeMs });
-          return false;
-        }
-      }
-
-      function shouldInjectExtraReactAttributes(fileName: string): boolean {
-        if (injectCssxjsTypesMode === 'none') return false;
+      function shouldInjectExtraReactAttributes(fileName: string, text: string): boolean {
+        if (!isTsOrTsxFile(fileName)) return false;
+        if (injectCssxjsTypesMode === 'never') return false;
         if (injectCssxjsTypesMode === 'force') return true;
-        const packageJsonPath = findNearestPackageJson(fileName);
-        if (!packageJsonPath) return false;
-        return hasStartupJsOrCssxJsDeps(packageJsonPath);
+        return STARTUPJS_OR_CSSXJS_RE.test(text);
       }
 
       host.getScriptSnapshot = (fileName: string) => {
@@ -157,7 +88,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         try {
           const text = original.getText(0, original.getLength());
           const cached = docCache.get(fileName);
-          const extraTypesEnabled = shouldInjectExtraReactAttributes(fileName);
+          const extraTypesEnabled = shouldInjectExtraReactAttributes(fileName, text);
 
           // Return cached shadow if original text hasn't changed
           if (
