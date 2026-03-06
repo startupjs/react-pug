@@ -24,6 +24,9 @@
       "contentName": "source.pug",
       "patterns": [
         {
+          "include": "#js-template-interpolation"
+        },
+        {
           "include": "#pug-comment"
         },
         {
@@ -52,6 +55,32 @@
         },
         {
           "include": "source.pug"
+        }
+      ]
+    },
+    "js-template-interpolation": {
+      "begin": "(\\$\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.template-expression.begin.ts"
+        }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.template-expression.end.ts"
+        }
+      },
+      "name": "meta.embedded.expression.js.template",
+      "patterns": [
+        {
+          "include": "#pug-tagged-template"
+        },
+        {
+          "include": "source.tsx"
+        },
+        {
+          "include": "source.ts"
         }
       ]
     },

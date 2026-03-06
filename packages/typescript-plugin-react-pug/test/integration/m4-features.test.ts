@@ -218,9 +218,9 @@ describe('diagnostics with parse errors', () => {
   beforeAll(async () => {
     const init = await loadPlugin();
 
-    // Create a virtual file with ${} interpolation that triggers parse error
+    // Create a virtual file with malformed pug that triggers parse error
     errorFile = path.join(FIXTURES_DIR, 'error-virtual.tsx');
-    errorText = 'const v = pug`${bad}`;';
+    errorText = 'const v = pug`div(`;';
 
     const virtualFiles = new Map<string, string>();
     virtualFiles.set(errorFile, errorText);

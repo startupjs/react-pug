@@ -1,5 +1,6 @@
 import type { CodeMapping, CodeInformation, PugParseError, PugToken } from './mapping';
 import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from './mapping';
+import { extractPugRegions } from './extractRegions';
 
 // ── TsxEmitter ──────────────────────────────────────────────────
 
@@ -278,6 +279,379 @@ function findValueOffsetOnLine(
   return fallbackOffset;
 }
 
+interface JsTemplateInterpolation {
+  marker: string;
+  start: number;
+  end: number;
+  exprStart: number;
+  exprEnd: number;
+  expression: string;
+}
+
+interface InterpolationContext {
+  interpolations: JsTemplateInterpolation[];
+}
+
+const interpolationContextStack: InterpolationContext[] = [];
+
+function currentInterpolationContext(): InterpolationContext | null {
+  return interpolationContextStack.length > 0
+    ? interpolationContextStack[interpolationContextStack.length - 1]
+    : null;
+}
+
+function createInterpolationMarker(index: number, length: number): string {
+  const seed = `_${index.toString(36)}_`;
+  if (seed.length === length) return seed;
+  if (seed.length < length) return seed + '_'.repeat(length - seed.length);
+  const middleLength = Math.max(1, length - 2);
+  const middle = index.toString(36).slice(0, middleLength).padEnd(middleLength, '_');
+  return (`_${middle}_`).slice(0, length);
+}
+
+function findInterpolationEnd(text: string, exprStart: number): number | null {
+  let i = exprStart;
+  let depth = 1;
+  let inSingle = false;
+  let inDouble = false;
+  let inTemplate = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let escaped = false;
+
+  while (i < text.length) {
+    const ch = text[i];
+    const next = text[i + 1] ?? '';
+
+    if (inLineComment) {
+      if (ch === '\n') inLineComment = false;
+      i += 1;
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false;
+        i += 2;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (inSingle) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '\'') {
+        inSingle = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (inDouble) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inDouble = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (inTemplate) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '`') {
+        inTemplate = false;
+      } else if (ch === '$' && next === '{') {
+        depth += 1;
+        i += 2;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      inLineComment = true;
+      i += 2;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      i += 2;
+      continue;
+    }
+    if (ch === '\'') {
+      inSingle = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '`') {
+      inTemplate = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '{') {
+      depth += 1;
+      i += 1;
+      continue;
+    }
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return i;
+      i += 1;
+      continue;
+    }
+    i += 1;
+  }
+
+  return null;
+}
+
+function prepareTemplateInterpolations(text: string): {
+  sanitizedText: string;
+  context: InterpolationContext;
+} {
+  const interpolations: JsTemplateInterpolation[] = [];
+  let out = '';
+  let cursor = 0;
+  let markerIndex = 0;
+
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] !== '$' || text[i + 1] !== '{') continue;
+
+    const start = i;
+    const end = findInterpolationEnd(text, i + 2);
+    if (end == null) continue;
+
+    const exprStart = start + 2;
+    const exprEnd = end;
+    const totalLength = end - start + 1;
+    const marker = createInterpolationMarker(markerIndex, totalLength);
+    markerIndex += 1;
+
+    interpolations.push({
+      marker,
+      start,
+      end,
+      exprStart,
+      exprEnd,
+      expression: text.slice(exprStart, exprEnd),
+    });
+
+    out += text.slice(cursor, start);
+    out += marker;
+    cursor = end + 1;
+    i = end;
+  }
+
+  out += text.slice(cursor);
+  return {
+    sanitizedText: out,
+    context: { interpolations },
+  };
+}
+
+function findNextInterpolationOccurrence(
+  text: string,
+  from: number,
+  context: InterpolationContext | null,
+): { index: number; interpolation: JsTemplateInterpolation } | null {
+  if (!context || context.interpolations.length === 0) return null;
+
+  let bestIdx = -1;
+  let bestInterpolation: JsTemplateInterpolation | null = null;
+  for (const interpolation of context.interpolations) {
+    const idx = text.indexOf(interpolation.marker, from);
+    if (idx < 0) continue;
+    if (bestIdx < 0 || idx < bestIdx) {
+      bestIdx = idx;
+      bestInterpolation = interpolation;
+    }
+  }
+
+  if (bestIdx < 0 || bestInterpolation == null) return null;
+  return { index: bestIdx, interpolation: bestInterpolation };
+}
+
+function strippedToRawOffset(rawText: string, strippedOffset: number, commonIndent: number): number {
+  if (commonIndent === 0) return strippedOffset;
+  let stripped = 0;
+  let raw = 0;
+  const lines = rawText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
+    const strippedLineLen = Math.max(0, line.length - indentToRemove);
+    if (strippedOffset <= stripped + strippedLineLen) {
+      const colInStripped = strippedOffset - stripped;
+      return raw + indentToRemove + colInStripped;
+    }
+    stripped += strippedLineLen + 1;
+    raw += line.length + 1;
+  }
+  return raw;
+}
+
+function emitCompiledPugRegionInExpression(
+  expression: string,
+  expressionOffset: number,
+  region: {
+    originalStart: number;
+    originalEnd: number;
+    pugTextStart: number;
+    pugTextEnd: number;
+    commonIndent: number;
+  },
+  compiled: CompileResult,
+  emitter: TsxEmitter,
+): void {
+  if (compiled.mappings.length === 0) {
+    emitter.emitSynthetic(compiled.tsx);
+    return;
+  }
+
+  const rawText = expression.slice(region.pugTextStart, region.pugTextEnd);
+  const segments: Array<{
+    generatedStart: number;
+    generatedLength: number;
+    sourceStart: number;
+    sourceLength: number;
+    info: CodeInformation;
+  }> = [];
+
+  for (const mapping of compiled.mappings) {
+    const sourceOffsets = mapping.sourceOffsets ?? [];
+    const generatedOffsets = mapping.generatedOffsets ?? [];
+    const lengths = mapping.lengths ?? [];
+    const generatedLengths = mapping.generatedLengths ?? [];
+    const segmentCount = Math.min(sourceOffsets.length, generatedOffsets.length, lengths.length);
+    for (let i = 0; i < segmentCount; i += 1) {
+      segments.push({
+        generatedStart: generatedOffsets[i],
+        generatedLength: generatedLengths[i] ?? lengths[i],
+        sourceStart: sourceOffsets[i],
+        sourceLength: lengths[i],
+        info: mapping.data,
+      });
+    }
+  }
+
+  segments.sort((a, b) => a.generatedStart - b.generatedStart);
+
+  let cursor = 0;
+  for (const segment of segments) {
+    if (segment.generatedStart > cursor) {
+      emitter.emitSynthetic(compiled.tsx.slice(cursor, segment.generatedStart));
+    }
+
+    const chunk = compiled.tsx.slice(
+      segment.generatedStart,
+      segment.generatedStart + segment.generatedLength,
+    );
+    const rawOffset = strippedToRawOffset(rawText, segment.sourceStart, region.commonIndent);
+    const sourceOffset = expressionOffset + region.pugTextStart + rawOffset;
+    if (segment.generatedLength === segment.sourceLength) {
+      emitter.emitMapped(chunk, sourceOffset, segment.info);
+    } else {
+      emitter.emitDerived(chunk, sourceOffset, segment.sourceLength, segment.info);
+    }
+    cursor = segment.generatedStart + segment.generatedLength;
+  }
+
+  if (cursor < compiled.tsx.length) {
+    emitter.emitSynthetic(compiled.tsx.slice(cursor));
+  }
+}
+
+function emitJsExpressionWithNestedPug(
+  expression: string,
+  expressionOffset: number,
+  emitter: TsxEmitter,
+  info: CodeInformation = FULL_FEATURES,
+): void {
+  if (!expression.includes('pug`') && !expression.includes('pug `')) {
+    emitter.emitMapped(expression, expressionOffset, info);
+    return;
+  }
+
+  const regions = extractPugRegions(expression, 'inline-expression.tsx', 'pug');
+  if (regions.length === 0) {
+    emitter.emitMapped(expression, expressionOffset, info);
+    return;
+  }
+
+  let cursor = 0;
+  for (const region of regions) {
+    if (region.originalStart > cursor) {
+      const plain = expression.slice(cursor, region.originalStart);
+      emitJsExpressionWithNestedPug(plain, expressionOffset + cursor, emitter, info);
+    }
+
+    const compiled = compilePugToTsx(region.pugText);
+    emitCompiledPugRegionInExpression(expression, expressionOffset, region, compiled, emitter);
+    cursor = region.originalEnd;
+  }
+
+  if (cursor < expression.length) {
+    const tail = expression.slice(cursor);
+    emitJsExpressionWithNestedPug(tail, expressionOffset + cursor, emitter, info);
+  }
+}
+
+function emitExpressionWithTemplateInterpolations(
+  expression: string,
+  expressionOffset: number,
+  emitter: TsxEmitter,
+  info: CodeInformation = FULL_FEATURES,
+): void {
+  const context = currentInterpolationContext();
+  let cursor = 0;
+
+  while (cursor < expression.length) {
+    const hit = findNextInterpolationOccurrence(expression, cursor, context);
+    if (!hit) {
+      emitJsExpressionWithNestedPug(
+        expression.slice(cursor),
+        expressionOffset + cursor,
+        emitter,
+        info,
+      );
+      break;
+    }
+
+    if (hit.index > cursor) {
+      emitJsExpressionWithNestedPug(
+        expression.slice(cursor, hit.index),
+        expressionOffset + cursor,
+        emitter,
+        info,
+      );
+    }
+
+    const interpolation = hit.interpolation;
+    if (interpolation.expression.trim().length === 0) {
+      emitter.emitSynthetic('undefined');
+    } else {
+      emitJsExpressionWithNestedPug(interpolation.expression, interpolation.exprStart, emitter, info);
+    }
+    cursor = hit.index + interpolation.marker.length;
+  }
+}
+
 /** HTML void elements that should self-close */
 const VOID_ELEMENTS = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
@@ -484,7 +858,7 @@ function emitAttribute(
       // Expression value
       emitter.emitSynthetic('={');
       const valOffset = attrOffset + attr.name.length + 1;
-      emitter.emitMapped(val, valOffset, FULL_FEATURES);
+      emitExpressionWithTemplateInterpolations(val, valOffset, emitter, FULL_FEATURES);
       emitter.emitSynthetic('}');
     }
   }
@@ -502,7 +876,32 @@ function emitText(
   const offset = valueIndex >= 0
     ? lineStart + valueIndex
     : lineColToOffset(pugText, node.line, node.column);
-  emitter.emitMapped(node.val, offset, SYNTHETIC);
+
+  const context = currentInterpolationContext();
+  let cursor = 0;
+  while (cursor < node.val.length) {
+    const hit = findNextInterpolationOccurrence(node.val, cursor, context);
+    if (!hit) {
+      if (cursor < node.val.length) {
+        emitter.emitMapped(node.val.slice(cursor), offset + cursor, SYNTHETIC);
+      }
+      break;
+    }
+
+    if (hit.index > cursor) {
+      emitter.emitMapped(node.val.slice(cursor, hit.index), offset + cursor, SYNTHETIC);
+    }
+
+    const interpolation = hit.interpolation;
+    emitter.emitSynthetic('{');
+    if (interpolation.expression.trim().length === 0) {
+      emitter.emitSynthetic('undefined');
+    } else {
+      emitJsExpressionWithNestedPug(interpolation.expression, interpolation.exprStart, emitter);
+    }
+    emitter.emitSynthetic('}');
+    cursor = hit.index + interpolation.marker.length;
+  }
 }
 
 function emitCode(
@@ -523,17 +922,17 @@ function emitCode(
   if (node.buffer && node.isInline) {
     // Inline interpolation: #{expr} -> {expr} in JSX child context, bare expr in JS expression context
     if (wrapInJsxBraces) emitter.emitSynthetic('{');
-    emitter.emitMapped(node.val, valueOffset, FULL_FEATURES);
+    emitExpressionWithTemplateInterpolations(node.val, valueOffset, emitter, FULL_FEATURES);
     if (wrapInJsxBraces) emitter.emitSynthetic('}');
   } else if (node.buffer) {
     // Buffered code: = expr -> {expr} in JSX child context, bare expr in JS expression context
     if (wrapInJsxBraces) emitter.emitSynthetic('{');
-    emitter.emitMapped(node.val, valueOffset, FULL_FEATURES);
+    emitExpressionWithTemplateInterpolations(node.val, valueOffset, emitter, FULL_FEATURES);
     if (wrapInJsxBraces) emitter.emitSynthetic('}');
   } else {
     // Unbuffered code block: - const x = 10
     // Emitted as a statement; IIFE wrapping is handled by emitNodesWithCodeBlocks
-    emitter.emitMapped(node.val, valueOffset, FULL_FEATURES);
+    emitExpressionWithTemplateInterpolations(node.val, valueOffset, emitter, FULL_FEATURES);
     emitter.emitSynthetic(';');
   }
 }
@@ -714,7 +1113,7 @@ function emitConditional(
   );
 
   if (wrapInJsxBraces) emitter.emitSynthetic('{');
-  emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
+  emitExpressionWithTemplateInterpolations(node.test, exprOffset, emitter, FULL_FEATURES);
   emitter.emitSynthetic(' ? ');
 
   // Consequent block
@@ -753,7 +1152,7 @@ function emitConditionalInner(
     testOffset + 8,
   );
 
-  emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
+  emitExpressionWithTemplateInterpolations(node.test, exprOffset, emitter, FULL_FEATURES);
   emitter.emitSynthetic(' ? ');
 
   const consequentNodes = node.consequent?.nodes ?? [];
@@ -809,12 +1208,12 @@ function emitEach(
     );
 
   if (wrapInJsxBraces) emitter.emitSynthetic('{');
-  emitter.emitMapped(node.obj, objOffset, FULL_FEATURES);
+  emitExpressionWithTemplateInterpolations(node.obj, objOffset, emitter, FULL_FEATURES);
   emitter.emitSynthetic('.map((');
-  emitter.emitMapped(node.val, valOffset, FULL_FEATURES);
+  emitExpressionWithTemplateInterpolations(node.val, valOffset, emitter, FULL_FEATURES);
   if (node.key != null) {
     emitter.emitSynthetic(', ');
-    emitter.emitMapped(node.key, keyOffset, FULL_FEATURES);
+    emitExpressionWithTemplateInterpolations(node.key, keyOffset, emitter, FULL_FEATURES);
   }
   emitter.emitSynthetic(') => (');
 
@@ -843,7 +1242,7 @@ function emitWhile(
 
   if (wrapInJsxBraces) emitter.emitSynthetic('{');
   emitter.emitSynthetic('(() => {const __r: JSX.Element[] = [];while (');
-  emitter.emitMapped(node.test, exprOffset, FULL_FEATURES);
+  emitExpressionWithTemplateInterpolations(node.test, exprOffset, emitter, FULL_FEATURES);
   emitter.emitSynthetic(') {__r.push(');
 
   const bodyNodes = node.block?.nodes ?? [];
@@ -918,9 +1317,9 @@ function emitWhenChain(
   );
 
   // Emit: caseExpr === whenExpr ? <body> : <next>
-  emitter.emitMapped(caseExpr, caseExprOffset, VERIFY_ONLY);
+  emitExpressionWithTemplateInterpolations(caseExpr, caseExprOffset, emitter, VERIFY_ONLY);
   emitter.emitSynthetic(' === ');
-  emitter.emitMapped(when.expr, whenExprOffset, FULL_FEATURES);
+  emitExpressionWithTemplateInterpolations(when.expr, whenExprOffset, emitter, FULL_FEATURES);
   emitter.emitSynthetic(' ? ');
 
   const bodyNodes = when.block?.nodes ?? [];
@@ -950,24 +1349,36 @@ export function compilePugToTsx(pugText: string): CompileResult {
   const parse = require('pug-parser');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const stripComments = require('pug-strip-comments');
+  const prepared = prepareTemplateInterpolations(pugText);
+  const pugTextForParse = prepared.sanitizedText;
+  interpolationContextStack.push(prepared.context);
 
-  let tokens: any[];
-  let parseError: PugParseError | null = null;
   try {
-    tokens = lex(pugText, { filename: 'template.pug' });
-  } catch (err: any) {
-    parseError = {
-      message: err.message ?? 'Pug lexer error',
-      line: err.line ?? 1,
-      column: err.column ?? 1,
-      offset: 0,
-    };
+    let tokens: any[];
+    let parseError: PugParseError | null = null;
+    try {
+      tokens = lex(pugTextForParse, { filename: 'template.pug' });
+    } catch (err: any) {
+      parseError = {
+        message: err.message ?? 'Pug lexer error',
+        line: err.line ?? 1,
+        column: err.column ?? 1,
+        offset: 0,
+      };
 
-    const recoveredText = buildTypingRecoveryText(pugText);
-    if (recoveredText !== pugText) {
-      try {
-        tokens = lex(recoveredText, { filename: 'template.pug' });
-      } catch {
+      const recoveredText = buildTypingRecoveryText(pugTextForParse);
+      if (recoveredText !== pugTextForParse) {
+        try {
+          tokens = lex(recoveredText, { filename: 'template.pug' });
+        } catch {
+          return {
+            tsx: '(null as any as JSX.Element)',
+            mappings: [],
+            lexerTokens: [],
+            parseError,
+          };
+        }
+      } else {
         return {
           tsx: '(null as any as JSX.Element)',
           mappings: [],
@@ -975,75 +1386,70 @@ export function compilePugToTsx(pugText: string): CompileResult {
           parseError,
         };
       }
-    } else {
-      return {
-        tsx: '(null as any as JSX.Element)',
-        mappings: [],
-        lexerTokens: [],
-        parseError,
-      };
-    }
-  }
-
-  const lexerTokens: PugToken[] = tokens
-    .filter((t: any) => t.loc)
-    .map((t: any) => ({
-      type: t.type,
-      loc: t.loc,
-      val: t.val != null ? String(t.val) : undefined,
-    }));
-
-  let ast: any;
-  try {
-    const stripped = stripComments(tokens, { filename: 'template.pug' });
-    ast = parse(stripped, { filename: 'template.pug' });
-  } catch (err: any) {
-    if (parseError == null) {
-      parseError = {
-        message: err.message ?? 'Pug parser error',
-        line: err.line ?? 1,
-        column: err.column ?? 1,
-        offset: 0,
-      };
     }
 
-    // Recovery parse: keep IntelliSense usable while template is temporarily incomplete.
-    const recoveredText = buildTypingRecoveryText(pugText);
-    if (recoveredText !== pugText) {
-      try {
-        const recoveredTokens = lex(recoveredText, { filename: 'template.pug' });
-        const recoveredStripped = stripComments(recoveredTokens, { filename: 'template.pug' });
-        ast = parse(recoveredStripped, { filename: 'template.pug' });
-      } catch {
-        // Fall through to placeholder.
+    const lexerTokens: PugToken[] = tokens
+      .filter((t: any) => t.loc)
+      .map((t: any) => ({
+        type: t.type,
+        loc: t.loc,
+        val: t.val != null ? String(t.val) : undefined,
+      }));
+
+    let ast: any;
+    try {
+      const stripped = stripComments(tokens, { filename: 'template.pug' });
+      ast = parse(stripped, { filename: 'template.pug' });
+    } catch (err: any) {
+      if (parseError == null) {
+        parseError = {
+          message: err.message ?? 'Pug parser error',
+          line: err.line ?? 1,
+          column: err.column ?? 1,
+          offset: 0,
+        };
+      }
+
+      // Recovery parse: keep IntelliSense usable while template is temporarily incomplete.
+      const recoveredText = buildTypingRecoveryText(pugTextForParse);
+      if (recoveredText !== pugTextForParse) {
+        try {
+          const recoveredTokens = lex(recoveredText, { filename: 'template.pug' });
+          const recoveredStripped = stripComments(recoveredTokens, { filename: 'template.pug' });
+          ast = parse(recoveredStripped, { filename: 'template.pug' });
+        } catch {
+          // Fall through to placeholder.
+        }
+      }
+
+      if (!ast) {
+        return {
+          tsx: '(null as any as JSX.Element)',
+          mappings: [],
+          lexerTokens,
+          parseError,
+        };
       }
     }
 
-    if (!ast) {
-      return {
-        tsx: '(null as any as JSX.Element)',
-        mappings: [],
-        lexerTokens,
-        parseError,
-      };
+    const emitter = new TsxEmitter();
+
+    if (ast.nodes.length === 0) {
+      emitter.emitSynthetic('(null as any as JSX.Element)');
+    } else {
+      emitter.emitSynthetic('(');
+      emitBlockAsExpression(ast.nodes, emitter, pugTextForParse);
+      emitter.emitSynthetic(')');
     }
+
+    const result = emitter.getResult();
+    return {
+      tsx: result.tsx,
+      mappings: result.mappings,
+      lexerTokens,
+      parseError,
+    };
+  } finally {
+    interpolationContextStack.pop();
   }
-
-  const emitter = new TsxEmitter();
-
-  if (ast.nodes.length === 0) {
-    emitter.emitSynthetic('(null as any as JSX.Element)');
-  } else {
-    emitter.emitSynthetic('(');
-    emitBlockAsExpression(ast.nodes, emitter, pugText);
-    emitter.emitSynthetic(')');
-  }
-
-  const result = emitter.getResult();
-  return {
-    tsx: result.tsx,
-    mappings: result.mappings,
-    lexerTokens,
-    parseError,
-  };
 }

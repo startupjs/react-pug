@@ -32,7 +32,7 @@ export function buildShadowDocument(
   // Compile each region and populate shadow fields
   for (const region of regions) {
     if (region.parseError != null) {
-      // Region already has an error (e.g. ${} interpolation) -- use placeholder
+      // Region already has an extraction-time error -- use placeholder
       region.tsxText = '(null as any as JSX.Element)';
       region.mappings = [];
       region.lexerTokens = [];

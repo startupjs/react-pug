@@ -71,9 +71,9 @@ describe('pug parse error diagnostic spans', () => {
   beforeAll(async () => {
     const init = await loadPlugin();
 
-    // File with ${} interpolation to trigger parseError
+    // File with malformed pug to trigger parseError
     errorFile = path.join(FIXTURES_DIR, 'diag-span-error.tsx');
-    errorText = 'const v = pug`${bad}`;';
+    errorText = 'const v = pug`div(`;';
     const virtualFiles = new Map<string, string>();
     virtualFiles.set(errorFile, errorText);
 
@@ -110,11 +110,11 @@ describe('pug parse error diagnostic spans', () => {
   it('pug parse error span extends to end of line or reasonable length', async () => {
     const initFn = await loadPlugin();
 
-    // Single-line pug with ${} interpolation error
+    // Single-line malformed pug expression
     // Here the error offset will point at the pug content after the backtick,
     // and the span should extend up to the closing backtick (end of content).
     const singleFile = path.join(FIXTURES_DIR, 'diag-span-single.tsx');
-    const singleText = 'const v = pug`${bad} more text`;';
+    const singleText = 'const v = pug`div( more text`;';
     const virtualFiles = new Map<string, string>();
     virtualFiles.set(singleFile, singleText);
 
@@ -334,7 +334,7 @@ describe('mapped diagnostic length guarantee', () => {
   it('pug parse error diagnostics have length >= 1', async () => {
     const init = await loadPlugin();
     const errorFile = path.join(FIXTURES_DIR, 'diag-length-error.tsx');
-    const errorText = 'const v = pug`${x}`;';
+    const errorText = 'const v = pug`div(`;';
     const virtualFiles = new Map<string, string>();
     virtualFiles.set(errorFile, errorText);
 
@@ -570,6 +570,8 @@ describe('complex pug expression diagnostics map to exact symbol ranges', () => 
       '  - const localValue = missingCode + 1',
       '  each row in (missingEach ? rowsA : rowsB)',
       '    span= row.id',
+      '  span= ${missingTemplate}',
+      '  span= ${pug`span= missingNestedTemplate`}',
       '`;',
     ].join('\n');
     const virtualFiles = new Map<string, string>();
@@ -589,6 +591,8 @@ describe('complex pug expression diagnostics map to exact symbol ranges', () => 
       'missingInterp',
       'missingCode',
       'missingEach',
+      'missingTemplate',
+      'missingNestedTemplate',
     ];
 
     for (const name of expected) {

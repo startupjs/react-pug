@@ -161,6 +161,22 @@ describe('attributes', () => {
     const result = compilePugToTsx('Button(...props)');
     expect(result.tsx).toContain('{...props}');
   });
+
+  it('supports ${} interpolation in attribute expressions', () => {
+    const result = compilePugToTsx('Button(tooltip=${submitDescription})');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toContain('tooltip=');
+    expect(result.tsx).toContain('submitDescription');
+    expect(result.tsx).not.toContain('${');
+  });
+
+  it('supports nested pug inside ${} interpolation', () => {
+    const result = compilePugToTsx('Button(tooltip=${pug`span= submitDescription`})');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toContain('<span');
+    expect(result.tsx).toContain('submitDescription');
+    expect(result.tsx).not.toContain('pug`span=');
+  });
 });
 
 // ── Text tests ───────────────────────────────────────────────────
@@ -487,6 +503,34 @@ describe('source mappings', () => {
       m => m.data === FULL_FEATURES
         && m.sourceOffsets[0] === objOffset
         && m.lengths[0] === obj.length,
+    )).toBe(true);
+  });
+
+  it('maps ${} interpolation expression to exact source span', () => {
+    const pug = 'span= ${missingName}';
+    const result = compilePugToTsx(pug);
+    const name = 'missingName';
+    const nameOffset = pug.indexOf(name);
+    expect(nameOffset).toBeGreaterThanOrEqual(0);
+
+    expect(result.mappings.some(
+      m => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === nameOffset
+        && m.lengths[0] === name.length,
+    )).toBe(true);
+  });
+
+  it('maps nested pug expression internals inside ${} to exact source span', () => {
+    const pug = 'span= ${pug`span= nestedValue`}';
+    const result = compilePugToTsx(pug);
+    const name = 'nestedValue';
+    const nameOffset = pug.indexOf(name);
+    expect(nameOffset).toBeGreaterThanOrEqual(0);
+
+    expect(result.mappings.some(
+      m => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === nameOffset
+        && m.lengths[0] === name.length,
     )).toBe(true);
   });
 });

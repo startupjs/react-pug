@@ -6,7 +6,7 @@ import { extractPugRegions } from '../../src/language/extractRegions';
 // [x] Multiple pug templates -- all found, sorted by offset
 // [x] No pug templates -- returns empty array
 // [x] Common indent stripping -- minimum indent removed from all lines
-// [x] Template with ${} interpolation -- parseError set with diagnostic message
+// [x] Template with ${} interpolation -- extracted without parseError
 // [x] Nested in function/class -- correctly finds inside any TS construct
 // [x] Decorators and generics -- @babel/parser handles them
 // [x] File with syntax error -- error recovery (regex fallback)
@@ -15,7 +15,7 @@ import { extractPugRegions } from '../../src/language/extractRegions';
 // [x] Single-line template -- works correctly
 // [x] Whitespace-only template -- handled gracefully
 // [x] JSX file (.jsx) -- works with JSX syntax
-// [x] Multiple expressions in quasi -- ${} detected correctly
+// [x] Multiple expressions in quasi -- preserved in pugText
 // [x] Fast path: file without pug` string returns empty array immediately
 // [x] pugText offsets allow slicing original text to get template content
 // [x] Shadow fields initialized to defaults (shadowStart=0, shadowEnd=0, etc.)
@@ -162,14 +162,13 @@ describe('common indent stripping', () => {
 // ── Interpolation detection ──────────────────────────────────────
 
 describe('template interpolation', () => {
-  it('sets parseError for ${} interpolation', () => {
+  it('extracts template with ${} interpolation without parseError', () => {
     const text = 'const v = pug`div ${name}`';
     const regions = extractPugRegions(text, 'app.tsx');
 
     expect(regions).toHaveLength(1);
-    expect(regions[0].parseError).not.toBeNull();
-    expect(regions[0].parseError!.message).toContain('${}');
-    expect(regions[0].parseError!.message).toContain('#{}');
+    expect(regions[0].parseError).toBeNull();
+    expect(regions[0].pugText).toContain('${name}');
   });
 
   it('no parseError for template without interpolation', () => {
@@ -180,13 +179,26 @@ describe('template interpolation', () => {
     expect(regions[0].parseError).toBeNull();
   });
 
-  it('detects multiple ${} expressions', () => {
+  it('preserves multiple ${} expressions', () => {
     const text = 'const v = pug`div ${a} and ${b}`';
     const regions = extractPugRegions(text, 'app.tsx');
 
     expect(regions).toHaveLength(1);
-    expect(regions[0].parseError).not.toBeNull();
-    expect(regions[0].parseError!.message).toContain('${}');
+    expect(regions[0].parseError).toBeNull();
+    expect(regions[0].pugText).toContain('${a}');
+    expect(regions[0].pugText).toContain('${b}');
+  });
+
+  it('does not create overlapping nested regions for pug inside ${}', () => {
+    const text = [
+      'const v = pug`',
+      '  div',
+      '    span= ${pug`span Nested`}',
+      '`;',
+    ].join('\n');
+    const regions = extractPugRegions(text, 'app.tsx');
+    expect(regions).toHaveLength(1);
+    expect(regions[0].pugText).toContain('${pug`span Nested`}');
   });
 });
 

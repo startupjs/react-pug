@@ -145,7 +145,7 @@ describe('plugin with default config (empty {})', () => {
     // Use a virtual file with parse error
     const init = await loadPlugin();
     const errorFile = path.join(FIXTURES_DIR, 'default-cfg-error.tsx');
-    const errorText = 'const v = pug`${bad}`;';
+    const errorText = 'const v = pug`div(`;';
     const virtualFiles = new Map<string, string>();
     virtualFiles.set(errorFile, errorText);
 
@@ -172,7 +172,7 @@ describe('plugin with diagnostics.enabled=false', () => {
     const init = await loadPlugin();
 
     errorFile = path.join(FIXTURES_DIR, 'diag-cfg-error.tsx');
-    const errorText = 'const v = pug`${bad}`;';
+    const errorText = 'const v = pug`div(`;';
     const virtualFiles = new Map<string, string>();
     virtualFiles.set(errorFile, errorText);
 

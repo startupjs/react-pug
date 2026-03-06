@@ -256,48 +256,34 @@ describe('region offset accuracy', () => {
   });
 });
 
-// ── Parse error handling ────────────────────────────────────────
+// ── Template interpolation support ──────────────────────────────
 
-describe('parse error handling', () => {
-  it('${} interpolation sets parseError and uses placeholder', () => {
-    const text = 'const v = pug`${bad}`;';
+describe('template interpolation support', () => {
+  it('${} interpolation compiles and keeps mappings', () => {
+    const text = 'const v = pug`span= ${badName}`;';
     const doc = buildShadowDocument(text, 'test.tsx');
 
     expect(doc.regions).toHaveLength(1);
     const region = doc.regions[0];
-    expect(region.parseError).not.toBeNull();
-    expect(region.tsxText).toBe('(null as any as JSX.Element)');
-    expect(region.mappings).toHaveLength(0);
-    expect(region.lexerTokens).toHaveLength(0);
+    expect(region.parseError).toBeNull();
+    expect(region.tsxText).toContain('badName');
+    expect(region.mappings.length).toBeGreaterThan(0);
   });
 
-  it('parse error region has correct shadow offsets', () => {
-    const text = 'const v = pug`${bad}`;\nconst end = 1;';
+  it('nested pug inside ${} is compiled (no raw inner pug remains)', () => {
+    const text = [
+      'const v = pug`',
+      '  div',
+      '    span= ${pug`Button(label="x")`}',
+      '`;',
+    ].join('\n');
     const doc = buildShadowDocument(text, 'test.tsx');
 
+    expect(doc.regions).toHaveLength(1);
     const region = doc.regions[0];
-    const extracted = doc.shadowText.slice(region.shadowStart, region.shadowEnd);
-    expect(extracted).toBe(region.tsxText);
-    expect(doc.shadowText).toContain('const end = 1;');
-  });
-
-  it('mix of valid and error regions', () => {
-    const text = 'const a = pug`div`;\nconst b = pug`${bad}`;';
-    const doc = buildShadowDocument(text, 'test.tsx');
-
-    expect(doc.regions).toHaveLength(2);
-    // First region: valid
-    expect(doc.regions[0].parseError).toBeNull();
-    expect(doc.regions[0].tsxText).toContain('<div');
-    // Second region: error
-    expect(doc.regions[1].parseError).not.toBeNull();
-    expect(doc.regions[1].tsxText).toContain('null');
-
-    // Both shadow positions should be correct
-    for (const region of doc.regions) {
-      const extracted = doc.shadowText.slice(region.shadowStart, region.shadowEnd);
-      expect(extracted).toBe(region.tsxText);
-    }
+    expect(region.parseError).toBeNull();
+    expect(region.tsxText).toContain('<Button');
+    expect(region.tsxText).not.toContain('pug`Button');
   });
 });
 

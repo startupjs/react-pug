@@ -46,6 +46,9 @@ function findPugTemplates(node: Node, results: TaggedTemplateExpression[], tagNa
     node.tag.name === tagName
   ) {
     results.push(node);
+    // Do not recurse into this tagged template. Nested pug tags (e.g. inside ${...})
+    // are handled by the parent pug region compiler to avoid overlapping regions.
+    return;
   }
 
   for (const key of Object.keys(node)) {
@@ -147,9 +150,6 @@ export function extractPugRegions(text: string, filename: string, tagName: strin
     const pugTextEnd = quasis[quasis.length - 1].end ?? ((quasi.end ?? 0) - 1);
     const rawContent = text.slice(pugTextStart, pugTextEnd);
 
-    // Check for ${} interpolations
-    const hasInterpolations = quasi.expressions.length > 0;
-
     const { stripped, indent } = stripCommonIndent(rawContent);
 
     const region: PugRegion = {
@@ -165,15 +165,7 @@ export function extractPugRegions(text: string, filename: string, tagName: strin
       tsxText: '',
       mappings: [],
       lexerTokens: [],
-      parseError: hasInterpolations
-        ? {
-            message:
-              'JS template interpolation ${} not supported inside pug; use Pug\'s #{} interpolation',
-            line: 1,
-            column: 1,
-            offset: 0,
-          }
-        : null,
+      parseError: null,
     };
 
     regions.push(region);

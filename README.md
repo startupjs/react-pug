@@ -118,7 +118,7 @@ High-level supported Pug features:
 - tags/components
 - attributes and spread attributes
 - class/id shorthand
-- interpolation (`#{}` / `!{}`)
+- interpolation (`#{}` / `!{}` / `${}`)
 - line expressions (`tag= expression`)
 - conditionals (`if / else if / else`)
 - loops (`each`, `while`)
@@ -127,6 +127,5 @@ High-level supported Pug features:
 
 ## Known Limitations
 
-- JavaScript `${}` interpolation inside `pug\`...\`` is not supported; use Pug `#{}`.
 - This extension provides editor tooling only (not runtime/build-time transform).
 - In heavily malformed in-progress edits, temporary IntelliSense mapping may be approximate until syntax stabilizes.

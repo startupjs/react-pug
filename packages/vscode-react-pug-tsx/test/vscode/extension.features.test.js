@@ -783,6 +783,8 @@ suite('Extension Host Features (example workspace)', () => {
       '  - const localValue = missingCode + 1',
       '  each row in (missingEach ? rowsA : rowsB)',
       '    span= row.id',
+      '  span= ${missingTemplate}',
+      '  span= ${pug`span= missingNestedTemplate`}',
       '`;',
       'export { view };',
     ].join('\n');
@@ -797,9 +799,9 @@ suite('Extension Host Features (example workspace)', () => {
       const missing = result.filter((d) => {
         const msg = typeof d.message === 'string' ? d.message : '';
         return d.code === 2304
-          && (/missingInterp|missingCode|missingEach/.test(msg));
+          && (/missingInterp|missingCode|missingEach|missingTemplate|missingNestedTemplate/.test(msg));
       });
-      return missing.length >= 3 ? missing : null;
+      return missing.length >= 5 ? missing : null;
     }, 45000, 500);
     const allDiagnostics = vscode.languages.getDiagnostics(doc.uri);
     const problematicSyntactic = allDiagnostics.filter((d) => d.code === 1136 || d.code === 1109);
@@ -810,7 +812,7 @@ suite('Extension Host Features (example workspace)', () => {
     );
 
     const text = doc.getText();
-    const expected = ['missingInterp', 'missingCode', 'missingEach'].map((name) => ({
+    const expected = ['missingInterp', 'missingCode', 'missingEach', 'missingTemplate', 'missingNestedTemplate'].map((name) => ({
       name,
       start: text.indexOf(name),
       length: name.length,
@@ -1047,7 +1049,9 @@ suite('Extension Host Features (example workspace)', () => {
       '  Button(o',
       '  Button(onClick=han',
       '  span= act',
+      '  span= ${act}',
       '  h3 #{act',
+      '  span= ${pug`span= act`}',
       '  if sho',
       '    span ok',
       '  each todo in ite',
@@ -1065,7 +1069,9 @@ suite('Extension Host Features (example workspace)', () => {
       { id: 'attr-name', marker: 'Button(o', expected: 'onClick' },
       { id: 'attr-value', marker: 'Button(onClick=han', expected: 'handler' },
       { id: 'line-eq', marker: 'span= act', expected: 'activeTodos' },
+      { id: 'template-interp', marker: 'span= ${act', expected: 'activeTodos' },
       { id: 'interp', marker: 'h3 #{act', expected: 'activeTodos' },
+      { id: 'nested-template-interp', marker: 'pug`span= act', expected: 'activeTodos' },
       { id: 'if-test', marker: 'if sho', expected: 'showCompleted' },
       { id: 'each-in', marker: 'each todo in ite', expected: 'items' },
       { id: 'unbuffered', marker: '- const local = han', expected: 'handler' },
