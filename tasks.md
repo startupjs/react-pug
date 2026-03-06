@@ -229,8 +229,8 @@ Commit: `test: add shared fixture matrix across compiler integrations`
 
 ### Task 6.2: DX scripts
 
-- [ ] Add top-level scripts to run package-specific tests and all compiler tests.
-- [ ] Ensure CI includes new test jobs.
+- [x] Add top-level scripts to run package-specific tests and all compiler tests.
+- [x] Ensure CI includes new test jobs.
 
 Commit: `chore: wire compiler integration tests into scripts and CI`
 

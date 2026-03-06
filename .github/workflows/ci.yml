@@ -9,6 +9,26 @@ on:
       - master
 
 jobs:
+  compiler-integrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test compiler integrations
+        run: npm run test:compilers
+
   quality-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 20
