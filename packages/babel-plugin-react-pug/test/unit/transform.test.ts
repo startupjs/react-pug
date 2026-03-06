@@ -5,9 +5,13 @@ import babelPluginReactPug, {
   transformReactPugSourceForBabel,
 } from '../../src/index';
 
-function transform(code: string, options: Record<string, unknown> = {}): string {
+function transform(
+  code: string,
+  options: Record<string, unknown> = {},
+  filename: string = 'fixture.tsx',
+): string {
   const result = transformSync(code, {
-    filename: 'fixture.tsx',
+    filename,
     configFile: false,
     babelrc: false,
     parserOpts: {
@@ -120,6 +124,52 @@ describe('babel-plugin-react-pug transform', () => {
     const out = transform('const view = html`span One`;', { tagFunction: 'html' });
     expect(out).toContain('<span');
     expect(out).not.toContain('html`');
+  });
+
+  it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
+    const out = transform([
+      'import { pug } from "startupjs";',
+      'const active = { active: true };',
+      'const view = pug`span.title(styleName=active)`;',
+    ].join('\n'));
+    expect(out).toContain('styleName={["title", active]}');
+  });
+
+  it('allows forcing class shorthand property and merge strategy', () => {
+    const transformed = transformReactPugSourceForBabel(
+      'const view = pug`span.title(class=isActive)`;',
+      'fixture.tsx',
+      { classShorthandProperty: 'class', classShorthandMerge: 'concatenate', mode: 'runtime' },
+    );
+    expect(transformed.code).toContain('class={"title" + " " + (isActive)}');
+  });
+
+  it('keeps JS/JSX runtime output free of TS-only syntax', () => {
+    const out = transform([
+      'const view = pug`',
+      '  while ready',
+      '    span Ok',
+      '`;',
+    ].join('\n'), {}, 'fixture.jsx');
+    expect(out).toContain('const __r = []');
+    expect(out).not.toContain('JSX.Element');
+    expect(out).not.toContain(' as any ');
+  });
+
+  it('produces babel sourcemaps when enabled', () => {
+    const result = transformSync('const view = pug`span= title`;', {
+      filename: 'sourcemap-fixture.tsx',
+      configFile: false,
+      babelrc: false,
+      sourceMaps: true,
+      parserOpts: {
+        sourceType: 'module',
+        plugins: ['typescript', 'jsx'],
+      },
+      plugins: [[babelPluginReactPug, { mode: 'runtime' }]],
+    });
+    expect(result?.map).toBeTruthy();
+    expect(result?.map?.sources).toContain('sourcemap-fixture.tsx');
   });
 
   it('stores transform metadata on babel file for downstream remapping', () => {

@@ -13,6 +13,35 @@ describe('eslint-plugin-react-pug processor', () => {
     expect(blocks[0]).not.toContain('pug`');
   });
 
+  it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'import { pug } from "startupjs";',
+      'const active = { active: true };',
+      'const view = pug`span.title(styleName=active)`;',
+    ].join('\n');
+    const [code] = processor.preprocess(input, 'file.jsx');
+    expect(code).toContain('styleName={["title", active]}');
+  });
+
+  it('supports forcing class shorthand property and merge strategy', () => {
+    const processor = createReactPugProcessor({
+      classShorthandProperty: 'class',
+      classShorthandMerge: 'concatenate',
+    });
+    const [code] = processor.preprocess('const view = pug`span.title(class=isActive)`;', 'file.jsx');
+    expect(code).toContain('class={"title" + " " + (isActive)}');
+  });
+
+  it('preprocess output for JS/JSX is runtime-safe and TS-free', () => {
+    const processor = createReactPugProcessor();
+    const input = ['const view = pug`', '  while ready', '    span Ok', '`;'].join('\n');
+    const [code] = processor.preprocess(input, 'file.jsx');
+    expect(code).toContain('const __r = []');
+    expect(code).not.toContain('JSX.Element');
+    expect(code).not.toContain(' as any ');
+  });
+
   it('postprocess remaps locations to original source', () => {
     const processor = createReactPugProcessor();
     const input = ['const x = 1;', 'const view = pug`span= missingName`;'].join('\n');

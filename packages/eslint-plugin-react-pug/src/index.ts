@@ -1,12 +1,18 @@
 import {
+  type ClassAttributeOption,
+  type ClassMergeOption,
   lineColumnToOffset,
   mapGeneratedRangeToOriginal,
   offsetToLineColumn,
+  type StartupjsCssxjsOption,
   transformSourceFile,
 } from '@startupjs/react-pug-core';
 
 export interface EslintReactPugProcessorOptions {
   tagFunction?: string;
+  classShorthandProperty?: ClassAttributeOption;
+  classShorthandMerge?: ClassMergeOption;
+  startupjsCssxjs?: StartupjsCssxjsOption;
 }
 
 interface EslintLintMessage {
@@ -66,6 +72,9 @@ export function createReactPugProcessor(
       const transformed = transformSourceFile(text, filename, {
         tagFunction: options.tagFunction ?? 'pug',
         compileMode: 'runtime',
+        classAttribute: options.classShorthandProperty ?? 'auto',
+        classMerge: options.classShorthandMerge ?? 'auto',
+        startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
       });
       cache.set(filename, transformed);
       return [transformed.code];

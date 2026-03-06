@@ -28,6 +28,25 @@ describe('swc-plugin-react-pug transform', () => {
     expect(result.code).toContain('Tooltip');
   });
 
+  it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
+    const source = [
+      'import { pug } from "startupjs";',
+      'const active = { active: true };',
+      'const view = pug`span.title(styleName=active)`;',
+    ].join('\n');
+    const result = transformReactPugSourceForSwc(source, 'fixture.tsx');
+    expect(result.code).toContain('styleName={["title", active]}');
+  });
+
+  it('allows forcing class shorthand property and merge strategy', () => {
+    const source = 'const view = pug`span.title(class=isActive)`;';
+    const result = transformReactPugSourceForSwc(source, 'fixture.tsx', {
+      classShorthandProperty: 'class',
+      classShorthandMerge: 'concatenate',
+    });
+    expect(result.code).toContain('class={"title" + " " + (isActive)}');
+  });
+
   it('emits runtime-safe while output', () => {
     const source = ['const view = pug`', '  while ready', '    span Ok', '`;'].join('\n');
     const result = transformReactPugSourceForSwc(source, 'fixture.tsx');
@@ -55,6 +74,17 @@ describe('swc-plugin-react-pug transform', () => {
     expect(result.swcCode).toContain('todo.text');
     expect(result.swcCode).not.toContain('pug`');
     expect(result.swcMap).toBeTypeOf('string');
+    const parsedMap = JSON.parse(result.swcMap!);
+    expect(Array.isArray(parsedMap.sources)).toBe(true);
+    expect(parsedMap.sources.join('\n')).toContain('fixture.tsx');
+  });
+
+  it('keeps JS/JSX runtime output free of TS-only syntax', () => {
+    const source = ['const view = pug`', '  while ready', '    span Ok', '`;'].join('\n');
+    const result = transformReactPugSourceForSwc(source, 'fixture.jsx');
+    expect(result.code).toContain('const __r = []');
+    expect(result.code).not.toContain('JSX.Element');
+    expect(result.code).not.toContain(' as any ');
   });
 });
 

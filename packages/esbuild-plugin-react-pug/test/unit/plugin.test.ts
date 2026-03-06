@@ -27,6 +27,36 @@ describe('esbuild-plugin-react-pug', () => {
     expect(transformed.code).toContain('<Button');
   });
 
+  it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
+    const transformed = transformReactPugSourceForEsbuild([
+      'import { pug } from "startupjs";',
+      'const active = { active: true };',
+      'const view = pug`span.title(styleName=active)`;',
+    ].join('\n'), 'fixture.tsx');
+    expect(transformed.code).toContain('styleName={["title", active]}');
+  });
+
+  it('allows forcing class shorthand property and merge strategy', () => {
+    const transformed = transformReactPugSourceForEsbuild(
+      'const view = pug`span.title(class=isActive)`;',
+      'fixture.tsx',
+      { classShorthandProperty: 'class', classShorthandMerge: 'concatenate' },
+    );
+    expect(transformed.code).toContain('class={"title" + " " + (isActive)}');
+  });
+
+  it('keeps JS/JSX runtime output free of TS-only syntax', () => {
+    const transformed = transformReactPugSourceForEsbuild([
+      'const view = pug`',
+      '  while ready',
+      '    span Ok',
+      '`;',
+    ].join('\n'), 'fixture.jsx');
+    expect(transformed.code).toContain('const __r = []');
+    expect(transformed.code).not.toContain('JSX.Element');
+    expect(transformed.code).not.toContain(' as any ');
+  });
+
   it('compiles through esbuild with pug syntax in source', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'esbuild-react-pug-'));
     const entry = join(dir, 'entry.tsx');
@@ -80,6 +110,34 @@ describe('esbuild-plugin-react-pug', () => {
     expect(mapped).not.toBeNull();
     expect(mapped!.startLine).toBe(2);
     expect(source.slice(mapped!.start, mapped!.end)).toContain('missingValue');
+  });
+
+  it('emits sourcemap output via esbuild build pipeline', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'esbuild-react-pug-map-'));
+    const entry = join(dir, 'entry.tsx');
+
+    try {
+      await writeFile(entry, 'const view = pug`span= title`; export { view };');
+      const result = await build({
+        entryPoints: [entry],
+        bundle: false,
+        write: false,
+        format: 'esm',
+        jsx: 'transform',
+        sourcemap: 'inline',
+        plugins: [reactPugEsbuildPlugin()],
+      });
+      const jsFile = result.outputFiles?.find((f) => !f.path.endsWith('.map'));
+      expect(jsFile).toBeTruthy();
+      const match = jsFile!.text.match(/sourceMappingURL=data:application\/json;base64,([A-Za-z0-9+/=]+)/);
+      expect(match).toBeTruthy();
+      const decoded = Buffer.from(match![1], 'base64').toString('utf8');
+      const parsed = JSON.parse(decoded);
+      expect(Array.isArray(parsed.sources)).toBe(true);
+      expect(parsed.sources.join('\n')).toContain('entry.tsx');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('maps diagnostics correctly when multiple pug regions are present', () => {

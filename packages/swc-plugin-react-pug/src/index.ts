@@ -2,11 +2,14 @@ import {
   mapGeneratedDiagnosticToOriginal,
   mapGeneratedRangeToOriginal,
   transformSourceFile,
+  type ClassAttributeOption,
+  type ClassMergeOption,
   type GeneratedDiagnosticLike,
   type OffsetRange,
   type OriginalDiagnosticLocation,
   type PugDocument,
   type PugRegion,
+  type StartupjsCssxjsOption,
 } from '@startupjs/react-pug-core';
 import { transformSync, type Options as SwcOptions } from '@swc/core';
 
@@ -15,6 +18,9 @@ export type SwcPugCompileMode = 'runtime' | 'languageService';
 export interface SwcReactPugOptions {
   tagFunction?: string;
   mode?: SwcPugCompileMode;
+  classShorthandProperty?: ClassAttributeOption;
+  classShorthandMerge?: ClassMergeOption;
+  startupjsCssxjs?: StartupjsCssxjsOption;
 }
 
 export interface SwcReactPugMetadata {
@@ -40,6 +46,9 @@ export function transformReactPugSourceForSwc(
   const transformed = transformSourceFile(sourceText, fileName, {
     tagFunction: options.tagFunction ?? 'pug',
     compileMode: options.mode ?? 'runtime',
+    classAttribute: options.classShorthandProperty ?? 'auto',
+    classMerge: options.classShorthandMerge ?? 'auto',
+    startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
   });
 
   return {

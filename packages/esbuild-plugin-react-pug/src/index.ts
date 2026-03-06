@@ -2,9 +2,12 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import type { Loader, OnLoadArgs, OnLoadResult, Plugin } from 'esbuild';
 import {
+  type ClassAttributeOption,
+  type ClassMergeOption,
   lineColumnToOffset,
   mapGeneratedDiagnosticToOriginal,
   mapGeneratedRangeToOriginal,
+  type StartupjsCssxjsOption,
   transformSourceFile,
   type GeneratedDiagnosticLike,
   type OffsetRange,
@@ -17,6 +20,9 @@ export interface EsbuildReactPugOptions {
   tagFunction?: string;
   include?: RegExp;
   exclude?: RegExp;
+  classShorthandProperty?: ClassAttributeOption;
+  classShorthandMerge?: ClassMergeOption;
+  startupjsCssxjs?: StartupjsCssxjsOption;
 }
 
 export interface EsbuildReactPugMetadata {
@@ -60,6 +66,9 @@ export function transformReactPugSourceForEsbuild(
   const transformed = transformSourceFile(sourceText, fileName, {
     tagFunction: options.tagFunction ?? 'pug',
     compileMode: 'runtime',
+    classAttribute: options.classShorthandProperty ?? 'auto',
+    classMerge: options.classShorthandMerge ?? 'auto',
+    startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
   });
 
   return {

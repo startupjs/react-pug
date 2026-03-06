@@ -3,6 +3,9 @@ import { parse } from '@babel/parser';
 import type { Program } from '@babel/types';
 import {
   mapGeneratedDiagnosticToOriginal,
+  type ClassAttributeOption,
+  type ClassMergeOption,
+  type StartupjsCssxjsOption,
   transformSourceFile,
   type GeneratedDiagnosticLike,
   type OriginalDiagnosticLocation,
@@ -15,6 +18,9 @@ export type BabelPugCompileMode = 'runtime' | 'languageService';
 export interface BabelReactPugPluginOptions {
   tagFunction?: string;
   mode?: BabelPugCompileMode;
+  classShorthandProperty?: ClassAttributeOption;
+  classShorthandMerge?: ClassMergeOption;
+  startupjsCssxjs?: StartupjsCssxjsOption;
 }
 
 export interface BabelReactPugMetadata {
@@ -35,6 +41,9 @@ export function transformReactPugSourceForBabel(
   const transformed = transformSourceFile(sourceText, fileName, {
     tagFunction: options.tagFunction ?? 'pug',
     compileMode: options.mode ?? 'runtime',
+    classAttribute: options.classShorthandProperty ?? 'auto',
+    classMerge: options.classShorthandMerge ?? 'auto',
+    startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
   });
 
   return {
