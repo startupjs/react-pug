@@ -4,8 +4,10 @@ import type { Loader, OnLoadArgs, OnLoadResult, Plugin } from 'esbuild';
 import {
   lineColumnToOffset,
   mapGeneratedDiagnosticToOriginal,
+  mapGeneratedRangeToOriginal,
   transformSourceFile,
   type GeneratedDiagnosticLike,
+  type OffsetRange,
   type OriginalDiagnosticLocation,
   type PugDocument,
   type PugRegion,
@@ -31,6 +33,12 @@ export interface EsbuildGeneratedDiagnosticLike {
   line: number;
   column: number; // esbuild columns are 0-based
   length?: number;
+}
+
+export interface EsbuildGeneratedRangeLike {
+  line: number;
+  column: number; // esbuild columns are 0-based
+  length: number;
 }
 
 const DEFAULT_FILTER = /\.[cm]?[jt]sx?$/;
@@ -74,6 +82,15 @@ export function mapEsbuildGeneratedDiagnosticToOriginal(
     length: Math.max(1, diagnostic.length ?? 1),
   };
   return mapGeneratedDiagnosticToOriginal(metadata.document, generatedDiagnostic);
+}
+
+export function mapEsbuildGeneratedRangeToOriginal(
+  transformedCode: string,
+  metadata: EsbuildReactPugMetadata,
+  range: EsbuildGeneratedRangeLike,
+): OffsetRange | null {
+  const startOffset = lineColumnToOffset(transformedCode, range.line, range.column + 1);
+  return mapGeneratedRangeToOriginal(metadata.document, startOffset, Math.max(1, range.length));
 }
 
 async function loadAndTransform(

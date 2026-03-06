@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { build } from 'esbuild';
 import {
   mapEsbuildGeneratedDiagnosticToOriginal,
+  mapEsbuildGeneratedRangeToOriginal,
   reactPugEsbuildPlugin,
   transformReactPugSourceForEsbuild,
 } from '../../src/index';
@@ -79,5 +80,46 @@ describe('esbuild-plugin-react-pug', () => {
     expect(mapped).not.toBeNull();
     expect(mapped!.startLine).toBe(2);
     expect(source.slice(mapped!.start, mapped!.end)).toContain('missingValue');
+  });
+
+  it('maps diagnostics correctly when multiple pug regions are present', () => {
+    const source = [
+      'const a = pug`span= firstMissing`;',
+      'const b = pug`span= secondMissing`;',
+    ].join('\n');
+
+    const transformed = transformReactPugSourceForEsbuild(source, 'fixture.tsx');
+    const index = transformed.code.indexOf('secondMissing');
+    const prefix = transformed.code.slice(0, index);
+    const line = prefix.split('\n').length;
+    const column = index - prefix.lastIndexOf('\n') - 1;
+
+    const mapped = mapEsbuildGeneratedDiagnosticToOriginal(
+      transformed.code,
+      transformed.metadata,
+      { line, column, length: 'secondMissing'.length },
+    );
+
+    expect(mapped).not.toBeNull();
+    expect(mapped!.startLine).toBe(2);
+    expect(source.slice(mapped!.start, mapped!.end)).toContain('secondMissing');
+  });
+
+  it('maps esbuild-style ranges back to original source', () => {
+    const source = 'const view = pug`span= valueMissing`;\n';
+    const transformed = transformReactPugSourceForEsbuild(source, 'fixture.tsx');
+    const index = transformed.code.indexOf('valueMissing');
+    const prefix = transformed.code.slice(0, index);
+    const line = prefix.split('\n').length;
+    const column = index - prefix.lastIndexOf('\n') - 1;
+
+    const mapped = mapEsbuildGeneratedRangeToOriginal(
+      transformed.code,
+      transformed.metadata,
+      { line, column, length: 'valueMissing'.length },
+    );
+
+    expect(mapped).not.toBeNull();
+    expect(source.slice(mapped!.start, mapped!.end)).toContain('valueMissing');
   });
 });
