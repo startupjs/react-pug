@@ -1,0 +1,76 @@
+import { describe, expect, it } from 'vitest';
+import { Linter } from 'eslint';
+import plugin, { createReactPugProcessor } from '../../src/index';
+
+describe('eslint-plugin-react-pug processor', () => {
+  it('preprocess transforms pug templates into lintable JSX/JS', () => {
+    const processor = createReactPugProcessor();
+    const input = 'const view = pug`Button(label="Save")`;';
+    const blocks = processor.preprocess(input, 'file.jsx');
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toContain('<Button');
+    expect(blocks[0]).not.toContain('pug`');
+  });
+
+  it('postprocess remaps locations to original source', () => {
+    const processor = createReactPugProcessor();
+    const input = ['const x = 1;', 'const view = pug`span= missingName`;'].join('\n');
+    const [code] = processor.preprocess(input, 'file.jsx');
+
+    const generatedLine = code.slice(0, code.indexOf('missingName')).split('\n').length;
+    const mapped = processor.postprocess([
+      [{ line: generatedLine, column: 10, endLine: generatedLine, endColumn: 21, ruleId: 'no-undef' } as any],
+    ], 'file.jsx');
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0].line).toBe(2);
+    expect(mapped[0].ruleId).toBe('no-undef');
+  });
+
+  it('runs eslint rule no-undef on pug expressions and maps result', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  span= missingValue',
+      '`;',
+    ].join('\n');
+
+    const [code] = processor.preprocess(input, 'file.jsx');
+
+    const linter = new Linter({ configType: 'eslintrc' });
+    const lintMessages = linter.verify(
+      code,
+      {
+        parserOptions: {
+          ecmaVersion: 2022,
+          sourceType: 'module',
+          ecmaFeatures: {
+            jsx: true,
+          },
+        },
+        env: {
+          es2022: true,
+        },
+        rules: {
+          'no-undef': 'error',
+        },
+      },
+      'file.jsx',
+    );
+
+    const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
+    const noUndef = mapped.find((m) => m.ruleId === 'no-undef');
+
+    expect(noUndef).toBeTruthy();
+    expect(noUndef?.line).toBe(2);
+    expect(noUndef?.column).toBeGreaterThan(1);
+    expect(noUndef?.message).toContain('missingValue');
+  });
+
+  it('exports plugin with default processor', () => {
+    expect(plugin).toBeTruthy();
+    expect(plugin.processors).toBeTruthy();
+    expect(plugin.processors['pug-react']).toBeTruthy();
+  });
+});
