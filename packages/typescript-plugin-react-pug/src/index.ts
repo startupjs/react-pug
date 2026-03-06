@@ -17,8 +17,8 @@ type __PugReactFlagObject = Record<string, __PugReactSimpleValue>
 // part: string OR array of (string | flag-object)
 type __PugReactPartProp = string | Array<string | __PugReactFlagObject>
 
-// styleName: string OR flag-object OR array of (string | flag-object)
-type __PugReactStyleNameProp = string | __PugReactFlagObject | Array<string | __PugReactFlagObject>
+// styleName: string OR flag-object OR array of (undefined | string | flag-object)
+type __PugReactStyleNameProp = string | __PugReactFlagObject | Array<undefined | string | __PugReactFlagObject>
 
 declare module 'react' {
   // For ANY React component (<MyComp ... />)
