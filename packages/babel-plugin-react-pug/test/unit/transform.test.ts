@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { transformSync } from '@babel/core';
-import babelPluginReactPug from '../../src/index';
+import babelPluginReactPug, {
+  mapBabelGeneratedDiagnosticToOriginal,
+  transformReactPugSourceForBabel,
+} from '../../src/index';
 
 function transform(code: string, options: Record<string, unknown> = {}): string {
   const result = transformSync(code, {
@@ -117,5 +120,63 @@ describe('babel-plugin-react-pug transform', () => {
     const out = transform('const view = html`span One`;', { tagFunction: 'html' });
     expect(out).toContain('<span');
     expect(out).not.toContain('html`');
+  });
+
+  it('stores transform metadata on babel file for downstream remapping', () => {
+    const input = 'const view = pug`span= title`;';
+    const result = transformSync(input, {
+      filename: 'fixture.tsx',
+      configFile: false,
+      babelrc: false,
+      parserOpts: {
+        sourceType: 'module',
+        plugins: ['typescript', 'jsx'],
+      },
+      plugins: [[babelPluginReactPug, { mode: 'runtime' }]],
+    });
+
+    const metadata = (result?.metadata as any)?.reactPug;
+    expect(metadata).toBeTruthy();
+    expect(metadata.regions.length).toBe(1);
+  });
+});
+
+describe('babel-plugin-react-pug mapping helpers', () => {
+  it('maps generated diagnostic position back to original pug location', () => {
+    const input = [
+      'const title = \"hello\";',
+      'const view = pug`span= title.toUpperCase()`;',
+    ].join('\n');
+
+    const transformed = transformReactPugSourceForBabel(input, 'fixture.tsx', { mode: 'runtime' });
+    const generatedOffset = transformed.code.indexOf('toUpperCase');
+    const mapped = mapBabelGeneratedDiagnosticToOriginal(transformed.metadata, {
+      start: generatedOffset,
+      length: 'toUpperCase'.length,
+    });
+
+    expect(mapped).not.toBeNull();
+    expect(mapped!.startLine).toBe(2);
+    expect(input.slice(mapped!.start, mapped!.end)).toContain('toUpperCase');
+  });
+
+  it('maps nested interpolation diagnostics back to outer source', () => {
+    const input = [
+      'const view = pug`',
+      '  Button(tooltip=${pug`',
+      '    span= submitDescription',
+      '  `})',
+      '`;',
+    ].join('\n');
+
+    const transformed = transformReactPugSourceForBabel(input, 'fixture.tsx', { mode: 'runtime' });
+    const generatedOffset = transformed.code.indexOf('submitDescription');
+    const mapped = mapBabelGeneratedDiagnosticToOriginal(transformed.metadata, {
+      start: generatedOffset,
+      length: 'submitDescription'.length,
+    });
+
+    expect(mapped).not.toBeNull();
+    expect(input.slice(mapped!.start, mapped!.end)).toContain('submitDescription');
   });
 });
