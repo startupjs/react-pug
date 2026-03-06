@@ -1079,3 +1079,32 @@ describe('control flow edge cases', () => {
     expect(result.tsx).toContain('Zero or negative');
   });
 });
+
+// ── Runtime compile mode ────────────────────────────────────────
+
+describe('runtime compile mode', () => {
+  it('emits runtime-safe while loop output without TS annotations', () => {
+    const result = compilePugToTsx('while ready\n  span Ok', { mode: 'runtime' });
+    expect(result.tsx).toContain('const __r = []');
+    expect(result.tsx).not.toContain('JSX.Element[]');
+  });
+
+  it('emits null placeholder in runtime mode for invalid pug', () => {
+    const result = compilePugToTsx('div(\n  !!!invalid', { mode: 'runtime' });
+    expect(result.tsx).toContain('null');
+    expect(result.tsx).not.toContain('(null as any as JSX.Element)');
+    expect(result.parseError).not.toBeNull();
+  });
+
+  it('preserves nested pug interpolation behavior in runtime mode', () => {
+    const pug = [
+      'Button(',
+      '  tooltip=${pug`span= tooltipText`}',
+      ')',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.tsx).toContain('<Button');
+    expect(result.tsx).toContain('<span');
+    expect(result.tsx).toContain('tooltipText');
+  });
+});

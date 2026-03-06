@@ -1,6 +1,7 @@
 import type { PugDocument, PugRegion } from './mapping';
 import { buildShadowDocument } from './shadowDocument';
 import { originalToShadow, shadowToOriginal } from './positionMapping';
+import type { CompileMode } from './pugToTsx';
 
 export interface SourceTransformOptions {
   /**
@@ -8,6 +9,13 @@ export interface SourceTransformOptions {
    * Defaults to `pug`.
    */
   tagFunction?: string;
+
+  /**
+   * Output mode used by pug compiler.
+   * - `languageService`: TS-oriented output for editor/type-service usage.
+   * - `runtime`: JS/JSX-safe output for build tools.
+   */
+  compileMode?: CompileMode;
 }
 
 export interface SourceTransformResult {
@@ -45,7 +53,13 @@ export function transformSourceFile(
   options: SourceTransformOptions = {},
 ): SourceTransformResult {
   const tagFunction = options.tagFunction ?? 'pug';
-  const document = buildShadowDocument(sourceText, fileName, 1, tagFunction);
+  const document = buildShadowDocument(
+    sourceText,
+    fileName,
+    1,
+    tagFunction,
+    { mode: options.compileMode ?? 'languageService' },
+  );
 
   return {
     code: document.shadowText,

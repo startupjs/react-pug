@@ -74,4 +74,16 @@ describe('transformSourceFile', () => {
     const generatedOffset = result.mapOriginalOffsetToGenerated(originalOffset);
     expect(generatedOffset).toBe(originalOffset);
   });
+
+  it('supports runtime compile mode for build-tool output', () => {
+    const source = [
+      'const view = pug`',
+      '  while ready',
+      '    span Done',
+      '`;',
+    ].join('\n');
+    const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
+    expect(result.code).toContain('const __r = []');
+    expect(result.code).not.toContain('JSX.Element[]');
+  });
 });

@@ -293,11 +293,18 @@ interface InterpolationContext {
 }
 
 const interpolationContextStack: InterpolationContext[] = [];
+const compileModeStack: CompileMode[] = [];
 
 function currentInterpolationContext(): InterpolationContext | null {
   return interpolationContextStack.length > 0
     ? interpolationContextStack[interpolationContextStack.length - 1]
     : null;
+}
+
+function currentCompileMode(): CompileMode {
+  return compileModeStack.length > 0
+    ? compileModeStack[compileModeStack.length - 1]
+    : 'languageService';
 }
 
 function createInterpolationMarker(index: number, length: number): string {
@@ -601,7 +608,7 @@ function emitJsExpressionWithNestedPug(
       emitJsExpressionWithNestedPug(plain, expressionOffset + cursor, emitter, info);
     }
 
-    const compiled = compilePugToTsx(region.pugText);
+    const compiled = compilePugToTsx(region.pugText, { mode: currentCompileMode() });
     emitCompiledPugRegionInExpression(expression, expressionOffset, region, compiled, emitter);
     cursor = region.originalEnd;
   }
@@ -1241,7 +1248,11 @@ function emitWhile(
   );
 
   if (wrapInJsxBraces) emitter.emitSynthetic('{');
-  emitter.emitSynthetic('(() => {const __r: JSX.Element[] = [];while (');
+  if (currentCompileMode() === 'runtime') {
+    emitter.emitSynthetic('(() => {const __r = [];while (');
+  } else {
+    emitter.emitSynthetic('(() => {const __r: JSX.Element[] = [];while (');
+  }
   emitExpressionWithTemplateInterpolations(node.test, exprOffset, emitter, FULL_FEATURES);
   emitter.emitSynthetic(') {__r.push(');
 
@@ -1338,11 +1349,22 @@ export interface CompileResult {
   parseError: PugParseError | null;
 }
 
+export type CompileMode = 'languageService' | 'runtime';
+
+export interface CompileOptions {
+  mode?: CompileMode;
+}
+
+function fallbackNullExpression(mode: CompileMode): string {
+  return mode === 'runtime' ? 'null' : '(null as any as JSX.Element)';
+}
+
 /**
  * Compile pug text to TSX with source mappings.
  * Pipeline: pug-lexer -> pug-strip-comments -> pug-parser -> TsxEmitter
  */
-export function compilePugToTsx(pugText: string): CompileResult {
+export function compilePugToTsx(pugText: string, options: CompileOptions = {}): CompileResult {
+  const mode = options.mode ?? 'languageService';
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const lex = require('@startupjs/pug-lexer');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1352,6 +1374,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
   const prepared = prepareTemplateInterpolations(pugText);
   const pugTextForParse = prepared.sanitizedText;
   interpolationContextStack.push(prepared.context);
+  compileModeStack.push(mode);
 
   try {
     let tokens: any[];
@@ -1372,7 +1395,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
           tokens = lex(recoveredText, { filename: 'template.pug' });
         } catch {
           return {
-            tsx: '(null as any as JSX.Element)',
+            tsx: fallbackNullExpression(mode),
             mappings: [],
             lexerTokens: [],
             parseError,
@@ -1380,7 +1403,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
         }
       } else {
         return {
-          tsx: '(null as any as JSX.Element)',
+          tsx: fallbackNullExpression(mode),
           mappings: [],
           lexerTokens: [],
           parseError,
@@ -1424,7 +1447,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
 
       if (!ast) {
         return {
-          tsx: '(null as any as JSX.Element)',
+          tsx: fallbackNullExpression(mode),
           mappings: [],
           lexerTokens,
           parseError,
@@ -1435,7 +1458,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
     const emitter = new TsxEmitter();
 
     if (ast.nodes.length === 0) {
-      emitter.emitSynthetic('(null as any as JSX.Element)');
+      emitter.emitSynthetic(fallbackNullExpression(mode));
     } else {
       emitter.emitSynthetic('(');
       emitBlockAsExpression(ast.nodes, emitter, pugTextForParse);
@@ -1450,6 +1473,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
       parseError,
     };
   } finally {
+    compileModeStack.pop();
     interpolationContextStack.pop();
   }
 }
