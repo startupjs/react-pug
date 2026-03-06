@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
+    "@swc/core": "^1.15.18",
     "@types/node": "^25.3.3",
     "@types/vscode": "^1.109.0",
     "@vscode/test-cli": "^0.0.12",
