@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   mapSwcGeneratedDiagnosticToOriginal,
+  mapSwcGeneratedRangeToOriginal,
   transformReactPugSourceForSwc,
   transformWithSwcReactPug,
 } from '../../src/index';
@@ -74,5 +75,44 @@ describe('swc-plugin-react-pug mapping helpers', () => {
     expect(mapped).not.toBeNull();
     expect(mapped!.startLine).toBe(2);
     expect(source.slice(mapped!.start, mapped!.end)).toContain('toUpperCase');
+  });
+
+  it('maps generated ranges when file has multiple pug regions', () => {
+    const source = [
+      'const first = pug`span= one`;',
+      'const second = pug`span= two.toUpperCase()`;',
+    ].join('\n');
+
+    const transformed = transformReactPugSourceForSwc(source, 'fixture.tsx');
+    const generatedOffset = transformed.code.indexOf('two.toUpperCase');
+    const mapped = mapSwcGeneratedRangeToOriginal(
+      transformed.metadata,
+      generatedOffset,
+      'two.toUpperCase'.length,
+    );
+
+    expect(mapped).not.toBeNull();
+    expect(source.slice(mapped!.start, mapped!.end)).toContain('two.toUpperCase');
+  });
+
+  it('maps generated ranges for nested pug interpolation', () => {
+    const source = [
+      'const view = pug`',
+      '  Button(tooltip=${pug`',
+      '    span= submitDescription.toLowerCase()',
+      '  `})',
+      '`;',
+    ].join('\n');
+
+    const transformed = transformReactPugSourceForSwc(source, 'fixture.tsx');
+    const generatedOffset = transformed.code.indexOf('submitDescription.toLowerCase');
+    const mapped = mapSwcGeneratedRangeToOriginal(
+      transformed.metadata,
+      generatedOffset,
+      'submitDescription.toLowerCase'.length,
+    );
+
+    expect(mapped).not.toBeNull();
+    expect(source.slice(mapped!.start, mapped!.end)).toContain('submitDescription.toLowerCase');
   });
 });

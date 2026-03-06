@@ -1,7 +1,9 @@
 import {
   mapGeneratedDiagnosticToOriginal,
+  mapGeneratedRangeToOriginal,
   transformSourceFile,
   type GeneratedDiagnosticLike,
+  type OffsetRange,
   type OriginalDiagnosticLocation,
   type PugDocument,
   type PugRegion,
@@ -54,6 +56,14 @@ export function mapSwcGeneratedDiagnosticToOriginal(
   diagnostic: GeneratedDiagnosticLike,
 ): OriginalDiagnosticLocation | null {
   return mapGeneratedDiagnosticToOriginal(metadata.document, diagnostic);
+}
+
+export function mapSwcGeneratedRangeToOriginal(
+  metadata: SwcReactPugMetadata,
+  generatedStart: number,
+  generatedLength: number,
+): OffsetRange | null {
+  return mapGeneratedRangeToOriginal(metadata.document, generatedStart, generatedLength);
 }
 
 export function transformWithSwcReactPug(
