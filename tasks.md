@@ -221,9 +221,9 @@ Commit: `feat(esbuild): add sourcemap and diagnostic mapping utilities`
 
 ### Task 6.1: Coverage hardening
 
-- [ ] Add shared fixtures reused across Babel/SWC/esbuild/ESLint tests.
-- [ ] Add stress tests (complex nested interpolations, mixed control flow).
-- [ ] Add regression tests for all discovered failures.
+- [x] Add shared fixtures reused across Babel/SWC/esbuild/ESLint tests.
+- [x] Add stress tests (complex nested interpolations, mixed control flow).
+- [x] Add regression tests for all discovered failures.
 
 Commit: `test: add shared fixture matrix across compiler integrations`
 

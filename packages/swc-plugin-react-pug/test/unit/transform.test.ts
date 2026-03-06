@@ -5,6 +5,13 @@ import {
   transformReactPugSourceForSwc,
   transformWithSwcReactPug,
 } from '../../src/index';
+import {
+  COMPILER_JS_RUNTIME_SOURCE,
+  COMPILER_MULTI_REGION_SOURCE,
+  COMPILER_NESTED_INTERPOLATION_SOURCE,
+  COMPILER_STRESS_SOURCE_TSX,
+  expectNoTsOnlyRuntimeSyntax,
+} from '../../../react-pug-core/test/fixtures/compiler-fixtures';
 
 describe('swc-plugin-react-pug transform', () => {
   it('pretransforms pug tagged template regions', () => {
@@ -14,18 +21,10 @@ describe('swc-plugin-react-pug transform', () => {
   });
 
   it('supports nested pug inside interpolation', () => {
-    const source = [
-      'const view = pug`',
-      '  Button(tooltip=${pug`',
-      '    span Tooltip',
-      '  `})',
-      '`;',
-    ].join('\n');
-
-    const result = transformReactPugSourceForSwc(source, 'fixture.tsx');
+    const result = transformReactPugSourceForSwc(COMPILER_NESTED_INTERPOLATION_SOURCE, 'fixture.tsx');
     expect(result.code).toContain('<Button');
     expect(result.code).toContain('<span');
-    expect(result.code).toContain('Tooltip');
+    expect(result.code).toContain('submitDescription');
   });
 
   it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
@@ -80,11 +79,17 @@ describe('swc-plugin-react-pug transform', () => {
   });
 
   it('keeps JS/JSX runtime output free of TS-only syntax', () => {
-    const source = ['const view = pug`', '  while ready', '    span Ok', '`;'].join('\n');
-    const result = transformReactPugSourceForSwc(source, 'fixture.jsx');
+    const result = transformReactPugSourceForSwc(COMPILER_JS_RUNTIME_SOURCE, 'fixture.jsx');
     expect(result.code).toContain('const __r = []');
-    expect(result.code).not.toContain('JSX.Element');
-    expect(result.code).not.toContain(' as any ');
+    expectNoTsOnlyRuntimeSyntax(result.code);
+  });
+
+  it('transforms shared stress fixture with nested + multi-region coverage', () => {
+    const result = transformReactPugSourceForSwc(COMPILER_STRESS_SOURCE_TSX, 'fixture.tsx');
+    expect(result.code).not.toContain('pug`');
+    expect(result.code).toContain('tooltipText.toUpperCase');
+    expect(result.code).toContain('tooltipText.toLowerCase');
+    expect(result.code).toContain('.map(');
   });
 });
 
@@ -108,12 +113,7 @@ describe('swc-plugin-react-pug mapping helpers', () => {
   });
 
   it('maps generated ranges when file has multiple pug regions', () => {
-    const source = [
-      'const first = pug`span= one`;',
-      'const second = pug`span= two.toUpperCase()`;',
-    ].join('\n');
-
-    const transformed = transformReactPugSourceForSwc(source, 'fixture.tsx');
+    const transformed = transformReactPugSourceForSwc(COMPILER_MULTI_REGION_SOURCE, 'fixture.tsx');
     const generatedOffset = transformed.code.indexOf('two.toUpperCase');
     const mapped = mapSwcGeneratedRangeToOriginal(
       transformed.metadata,
@@ -122,27 +122,19 @@ describe('swc-plugin-react-pug mapping helpers', () => {
     );
 
     expect(mapped).not.toBeNull();
-    expect(source.slice(mapped!.start, mapped!.end)).toContain('two.toUpperCase');
+    expect(COMPILER_MULTI_REGION_SOURCE.slice(mapped!.start, mapped!.end)).toContain('two.toUpperCase');
   });
 
   it('maps generated ranges for nested pug interpolation', () => {
-    const source = [
-      'const view = pug`',
-      '  Button(tooltip=${pug`',
-      '    span= submitDescription.toLowerCase()',
-      '  `})',
-      '`;',
-    ].join('\n');
-
-    const transformed = transformReactPugSourceForSwc(source, 'fixture.tsx');
-    const generatedOffset = transformed.code.indexOf('submitDescription.toLowerCase');
+    const transformed = transformReactPugSourceForSwc(COMPILER_STRESS_SOURCE_TSX, 'fixture.tsx');
+    const generatedOffset = transformed.code.indexOf('tooltipText.toUpperCase');
     const mapped = mapSwcGeneratedRangeToOriginal(
       transformed.metadata,
       generatedOffset,
-      'submitDescription.toLowerCase'.length,
+      'tooltipText.toUpperCase'.length,
     );
 
     expect(mapped).not.toBeNull();
-    expect(source.slice(mapped!.start, mapped!.end)).toContain('submitDescription.toLowerCase');
+    expect(COMPILER_STRESS_SOURCE_TSX.slice(mapped!.start, mapped!.end)).toContain('tooltipText.toUpperCase');
   });
 });

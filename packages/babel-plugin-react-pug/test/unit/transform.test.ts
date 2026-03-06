@@ -4,6 +4,13 @@ import babelPluginReactPug, {
   mapBabelGeneratedDiagnosticToOriginal,
   transformReactPugSourceForBabel,
 } from '../../src/index';
+import {
+  COMPILER_JS_RUNTIME_SOURCE,
+  COMPILER_MULTI_REGION_SOURCE,
+  COMPILER_NESTED_INTERPOLATION_SOURCE,
+  COMPILER_STRESS_SOURCE_TSX,
+  expectNoTsOnlyRuntimeSyntax,
+} from '../../../react-pug-core/test/fixtures/compiler-fixtures';
 
 function transform(
   code: string,
@@ -84,18 +91,10 @@ describe('babel-plugin-react-pug transform', () => {
   });
 
   it('supports nested pug templates inside ${} interpolation', () => {
-    const out = transform([
-      'const view = pug`',
-      '  Button(',
-      '    tooltip=${pug`',
-      '      span Tooltip',
-      '    `}',
-      '  )',
-      '`;',
-    ].join('\n'));
+    const out = transform(COMPILER_NESTED_INTERPOLATION_SOURCE);
     expect(out).toContain('<Button');
     expect(out).toContain('<span');
-    expect(out).toContain('Tooltip');
+    expect(out).toContain('submitDescription');
   });
 
   it('supports text nodes piped with |', () => {
@@ -145,15 +144,9 @@ describe('babel-plugin-react-pug transform', () => {
   });
 
   it('keeps JS/JSX runtime output free of TS-only syntax', () => {
-    const out = transform([
-      'const view = pug`',
-      '  while ready',
-      '    span Ok',
-      '`;',
-    ].join('\n'), {}, 'fixture.jsx');
+    const out = transform(COMPILER_JS_RUNTIME_SOURCE, {}, 'fixture.jsx');
     expect(out).toContain('const __r = []');
-    expect(out).not.toContain('JSX.Element');
-    expect(out).not.toContain(' as any ');
+    expectNoTsOnlyRuntimeSyntax(out);
   });
 
   it('produces babel sourcemaps when enabled', () => {
@@ -189,6 +182,14 @@ describe('babel-plugin-react-pug transform', () => {
     expect(metadata).toBeTruthy();
     expect(metadata.regions.length).toBe(1);
   });
+
+  it('transforms shared stress fixture with multi-region + nested interpolation', () => {
+    const out = transform(COMPILER_STRESS_SOURCE_TSX);
+    expect(out).not.toContain('pug`');
+    expect(out).toContain('tooltipText.toUpperCase');
+    expect(out).toContain('tooltipText.toLowerCase');
+    expect(out).toContain('.map(');
+  });
 });
 
 describe('babel-plugin-react-pug mapping helpers', () => {
@@ -211,13 +212,7 @@ describe('babel-plugin-react-pug mapping helpers', () => {
   });
 
   it('maps nested interpolation diagnostics back to outer source', () => {
-    const input = [
-      'const view = pug`',
-      '  Button(tooltip=${pug`',
-      '    span= submitDescription',
-      '  `})',
-      '`;',
-    ].join('\n');
+    const input = COMPILER_NESTED_INTERPOLATION_SOURCE;
 
     const transformed = transformReactPugSourceForBabel(input, 'fixture.tsx', { mode: 'runtime' });
     const generatedOffset = transformed.code.indexOf('submitDescription');
@@ -228,5 +223,31 @@ describe('babel-plugin-react-pug mapping helpers', () => {
 
     expect(mapped).not.toBeNull();
     expect(input.slice(mapped!.start, mapped!.end)).toContain('submitDescription');
+  });
+
+  it('maps diagnostics for stress fixture back to original source across regions', () => {
+    const input = COMPILER_STRESS_SOURCE_TSX;
+    const transformed = transformReactPugSourceForBabel(input, 'fixture.tsx', { mode: 'runtime' });
+    const generatedOffset = transformed.code.indexOf('tooltipText.toLowerCase');
+    const mapped = mapBabelGeneratedDiagnosticToOriginal(transformed.metadata, {
+      start: generatedOffset,
+      length: 'tooltipText.toLowerCase'.length,
+    });
+
+    expect(mapped).not.toBeNull();
+    expect(input.slice(mapped!.start, mapped!.end)).toContain('tooltipText.toLowerCase');
+  });
+
+  it('maps diagnostics when source has multiple simple pug regions', () => {
+    const input = COMPILER_MULTI_REGION_SOURCE;
+    const transformed = transformReactPugSourceForBabel(input, 'fixture.tsx', { mode: 'runtime' });
+    const generatedOffset = transformed.code.indexOf('two.toUpperCase');
+    const mapped = mapBabelGeneratedDiagnosticToOriginal(transformed.metadata, {
+      start: generatedOffset,
+      length: 'two.toUpperCase'.length,
+    });
+
+    expect(mapped).not.toBeNull();
+    expect(input.slice(mapped!.start, mapped!.end)).toContain('two.toUpperCase');
   });
 });

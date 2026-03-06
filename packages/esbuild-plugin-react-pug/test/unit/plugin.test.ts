@@ -9,6 +9,12 @@ import {
   reactPugEsbuildPlugin,
   transformReactPugSourceForEsbuild,
 } from '../../src/index';
+import {
+  COMPILER_JS_RUNTIME_SOURCE,
+  COMPILER_MULTI_REGION_SOURCE,
+  COMPILER_STRESS_SOURCE_TSX,
+  expectNoTsOnlyRuntimeSyntax,
+} from '../../../react-pug-core/test/fixtures/compiler-fixtures';
 
 describe('esbuild-plugin-react-pug', () => {
   it('creates an esbuild plugin object', () => {
@@ -46,15 +52,9 @@ describe('esbuild-plugin-react-pug', () => {
   });
 
   it('keeps JS/JSX runtime output free of TS-only syntax', () => {
-    const transformed = transformReactPugSourceForEsbuild([
-      'const view = pug`',
-      '  while ready',
-      '    span Ok',
-      '`;',
-    ].join('\n'), 'fixture.jsx');
+    const transformed = transformReactPugSourceForEsbuild(COMPILER_JS_RUNTIME_SOURCE, 'fixture.jsx');
     expect(transformed.code).toContain('const __r = []');
-    expect(transformed.code).not.toContain('JSX.Element');
-    expect(transformed.code).not.toContain(' as any ');
+    expectNoTsOnlyRuntimeSyntax(transformed.code);
   });
 
   it('compiles through esbuild with pug syntax in source', async () => {
@@ -141,13 +141,9 @@ describe('esbuild-plugin-react-pug', () => {
   });
 
   it('maps diagnostics correctly when multiple pug regions are present', () => {
-    const source = [
-      'const a = pug`span= firstMissing`;',
-      'const b = pug`span= secondMissing`;',
-    ].join('\n');
-
+    const source = COMPILER_MULTI_REGION_SOURCE;
     const transformed = transformReactPugSourceForEsbuild(source, 'fixture.tsx');
-    const index = transformed.code.indexOf('secondMissing');
+    const index = transformed.code.indexOf('two.toUpperCase');
     const prefix = transformed.code.slice(0, index);
     const line = prefix.split('\n').length;
     const column = index - prefix.lastIndexOf('\n') - 1;
@@ -155,12 +151,12 @@ describe('esbuild-plugin-react-pug', () => {
     const mapped = mapEsbuildGeneratedDiagnosticToOriginal(
       transformed.code,
       transformed.metadata,
-      { line, column, length: 'secondMissing'.length },
+      { line, column, length: 'two.toUpperCase'.length },
     );
 
     expect(mapped).not.toBeNull();
     expect(mapped!.startLine).toBe(2);
-    expect(source.slice(mapped!.start, mapped!.end)).toContain('secondMissing');
+    expect(source.slice(mapped!.start, mapped!.end)).toContain('two.toUpperCase');
   });
 
   it('maps esbuild-style ranges back to original source', () => {
@@ -179,5 +175,23 @@ describe('esbuild-plugin-react-pug', () => {
 
     expect(mapped).not.toBeNull();
     expect(source.slice(mapped!.start, mapped!.end)).toContain('valueMissing');
+  });
+
+  it('maps diagnostics for shared stress fixture back to original nested interpolation', () => {
+    const source = COMPILER_STRESS_SOURCE_TSX;
+    const transformed = transformReactPugSourceForEsbuild(source, 'fixture.tsx');
+    const index = transformed.code.indexOf('tooltipText.toUpperCase');
+    const prefix = transformed.code.slice(0, index);
+    const line = prefix.split('\n').length;
+    const column = index - prefix.lastIndexOf('\n') - 1;
+
+    const mapped = mapEsbuildGeneratedDiagnosticToOriginal(
+      transformed.code,
+      transformed.metadata,
+      { line, column, length: 'tooltipText.toUpperCase'.length },
+    );
+
+    expect(mapped).not.toBeNull();
+    expect(source.slice(mapped!.start, mapped!.end)).toContain('tooltipText.toUpperCase');
   });
 });

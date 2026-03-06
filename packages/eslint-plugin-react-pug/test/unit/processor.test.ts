@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Linter } from 'eslint';
 import plugin, { createReactPugProcessor } from '../../src/index';
+import {
+  COMPILER_JS_RUNTIME_SOURCE,
+  COMPILER_STRESS_SOURCE_TSX,
+  expectNoTsOnlyRuntimeSyntax,
+} from '../../../react-pug-core/test/fixtures/compiler-fixtures';
 
 describe('eslint-plugin-react-pug processor', () => {
   it('preprocess transforms pug templates into lintable JSX/JS', () => {
@@ -35,11 +40,9 @@ describe('eslint-plugin-react-pug processor', () => {
 
   it('preprocess output for JS/JSX is runtime-safe and TS-free', () => {
     const processor = createReactPugProcessor();
-    const input = ['const view = pug`', '  while ready', '    span Ok', '`;'].join('\n');
-    const [code] = processor.preprocess(input, 'file.jsx');
+    const [code] = processor.preprocess(COMPILER_JS_RUNTIME_SOURCE, 'file.jsx');
     expect(code).toContain('const __r = []');
-    expect(code).not.toContain('JSX.Element');
-    expect(code).not.toContain(' as any ');
+    expectNoTsOnlyRuntimeSyntax(code);
   });
 
   it('postprocess remaps locations to original source', () => {
@@ -101,5 +104,40 @@ describe('eslint-plugin-react-pug processor', () => {
     expect(plugin).toBeTruthy();
     expect(plugin.processors).toBeTruthy();
     expect(plugin.processors['pug-react']).toBeTruthy();
+  });
+
+  it('handles shared stress fixture and remaps no-undef from nested interpolation', () => {
+    const processor = createReactPugProcessor();
+    const input = COMPILER_STRESS_SOURCE_TSX.replace(
+      'tooltipText.toUpperCase()',
+      'tooltipText.toUpperCase() + notDefinedInsideNestedPug',
+    );
+    const [code] = processor.preprocess(input, 'file.tsx');
+
+    const linter = new Linter({ configType: 'eslintrc' });
+    const lintMessages = linter.verify(
+      code,
+      {
+        parserOptions: {
+          ecmaVersion: 2022,
+          sourceType: 'module',
+          ecmaFeatures: {
+            jsx: true,
+          },
+        },
+        env: {
+          es2022: true,
+        },
+        rules: {
+          'no-undef': 'error',
+        },
+      },
+      'file.tsx',
+    );
+
+    const mapped = processor.postprocess([lintMessages as any], 'file.tsx');
+    const noUndef = mapped.find((m) => m.ruleId === 'no-undef' && m.message.includes('notDefinedInsideNestedPug'));
+    expect(noUndef).toBeTruthy();
+    expect(noUndef?.line).toBeGreaterThan(1);
   });
 });
