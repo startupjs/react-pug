@@ -109,6 +109,7 @@ interface PugEach {
   key: string | null;
   obj: string;
   block: PugBlock;
+  alternate?: PugBlock | null;
   line: number;
   column: number;
 }
@@ -1304,7 +1305,14 @@ function emitConditionalInner(
   }
 }
 
-/** each item, i in items -> {items.map((item, i) => (<body/>))} */
+function createNonConflictingName(base: string, disallowed: Set<string>): string {
+  if (!disallowed.has(base)) return base;
+  let suffix = 1;
+  while (disallowed.has(`${base}${suffix}`)) suffix++;
+  return `${base}${suffix}`;
+}
+
+/** each item, i in items -> {(() => { const __r = []; ... for (const item of items) ... })()} */
 function emitEach(
   node: PugEach,
   emitter: TsxEmitter,
@@ -1322,7 +1330,17 @@ function emitEach(
   const keyIndex = node.key != null && valIndex >= 0
     ? pugLine.indexOf(node.key, valIndex + node.val.length)
     : -1;
-  const keyOffset = keyIndex >= 0 ? lineStart + keyIndex : -1;
+  const keyOffset = keyIndex >= 0
+    ? lineStart + keyIndex
+    : (node.key != null
+      ? findValueOffsetOnLine(
+        pugText,
+        node.line,
+        node.column,
+        node.key,
+        lineStart + Math.max(0, pugLine.indexOf(node.key)),
+      )
+      : -1);
 
   const inSearchStart = keyIndex >= 0
     ? keyIndex + (node.key?.length ?? 0)
@@ -1341,20 +1359,50 @@ function emitEach(
       lineStart + Math.max(0, pugLine.indexOf(node.obj)),
     );
 
-  if (wrapInJsxBraces) emitter.emitSynthetic('{');
-  emitExpressionWithTemplateInterpolations(node.obj, objOffset, emitter, FULL_FEATURES);
-  emitter.emitSynthetic('.map((');
-  emitExpressionWithTemplateInterpolations(node.val, valOffset, emitter, FULL_FEATURES);
-  if (node.key != null) {
-    emitter.emitSynthetic(', ');
-    emitExpressionWithTemplateInterpolations(node.key, keyOffset, emitter, FULL_FEATURES);
-  }
-  emitter.emitSynthetic(') => (');
-
   const bodyNodes = node.block?.nodes ?? [];
+  const elseNodes = node.alternate?.nodes ?? null;
+
+  const disallowedNames = new Set<string>([node.val]);
+  if (node.key != null) disallowedNames.add(node.key);
+  const resultVar = createNonConflictingName('__pugEachResult', disallowedNames);
+  disallowedNames.add(resultVar);
+  const indexVar = node.key != null
+    ? createNonConflictingName('__pugEachIndex', disallowedNames)
+    : null;
+
+  if (wrapInJsxBraces) emitter.emitSynthetic('{');
+  emitter.emitSynthetic('(() => {');
+  if (currentCompileMode() === 'runtime') {
+    emitter.emitSynthetic(`const ${resultVar} = [];`);
+  } else {
+    emitter.emitSynthetic(`const ${resultVar}: JSX.Element[] = [];`);
+  }
+  if (indexVar != null) emitter.emitSynthetic(`let ${indexVar} = 0;`);
+  emitter.emitSynthetic('for (const ');
+  emitExpressionWithTemplateInterpolations(node.val, valOffset, emitter, FULL_FEATURES);
+  emitter.emitSynthetic(' of ');
+  emitExpressionWithTemplateInterpolations(node.obj, objOffset, emitter, FULL_FEATURES);
+  emitter.emitSynthetic(') {');
+  if (node.key != null && indexVar != null) {
+    emitter.emitSynthetic('const ');
+    emitExpressionWithTemplateInterpolations(node.key, keyOffset, emitter, FULL_FEATURES);
+    emitter.emitSynthetic(` = ${indexVar};`);
+  }
+  emitter.emitSynthetic(`${resultVar}.push(`);
+
   emitBlockAsExpression(bodyNodes, emitter, pugText);
 
-  emitter.emitSynthetic('))');
+  emitter.emitSynthetic(');');
+  if (indexVar != null) emitter.emitSynthetic(`${indexVar}++;`);
+  emitter.emitSynthetic('}');
+  if (elseNodes != null) {
+    emitter.emitSynthetic(`return ${resultVar}.length ? ${resultVar} : `);
+    emitBlockAsExpression(elseNodes, emitter, pugText);
+    emitter.emitSynthetic(';');
+  } else {
+    emitter.emitSynthetic(`return ${resultVar};`);
+  }
+  emitter.emitSynthetic('})()');
   if (wrapInJsxBraces) emitter.emitSynthetic('}');
 }
 

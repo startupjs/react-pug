@@ -65,7 +65,7 @@ export default observer(({ breed }) => {
 const CatsList = observer(({ onEdit, breed, eventId }) => {
   if (!eventId) return (<Alert variant={'error'}>No event specified</Alert>)
   const $cats = useSub($.cats, { eventId, breed, $sort: { breed: 1, number: 1 } })
-  return ($cats.map(($cat) => (<Item key={$cat.getId()}><CatCard $cat={$cat} /><Item className="Right"><Div vAlign={'center'} row={true} gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}<Button variant={'text'} icon={faPen} onPress={() => onEdit($cat)} tooltip={'Edit'} /><Link href={'/events/' + eventId + '/matches/' + $cat.getId()}><Button variant={'text'} icon={faHeart} tooltip={'Matches'} /></Link><Link href={'/cats/' + $cat.token.get()}><Button variant={'text'} icon={faLink} tooltip={'Cat profile link'}>Link</Button></Link></Div></Item></Item>)))
+  return ((() => {const __pugEachResult: JSX.Element[] = [];for (const $cat of $cats) {__pugEachResult.push(<Item key={$cat.getId()}><CatCard $cat={$cat} /><Item className="Right"><Div vAlign={'center'} row={true} gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}<Button variant={'text'} icon={faPen} onPress={() => onEdit($cat)} tooltip={'Edit'} /><Link href={'/events/' + eventId + '/matches/' + $cat.getId()}><Button variant={'text'} icon={faHeart} tooltip={'Matches'} /></Link><Link href={'/cats/' + $cat.token.get()}><Button variant={'text'} icon={faLink} tooltip={'Cat profile link'}>Link</Button></Link></Div></Item></Item>);}return __pugEachResult;})())
 })
 
 function hasContact ($cat) {
@@ -79,7 +79,7 @@ const SelectLikesInput = observer(({ $value, ...props }) => {
 
 const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
   const $cats = useSub($.cats, { eventId, breed: oppositeBreed, $sort: { breed: 1, number: 1 } })
-  return ($cats.map(($cat) => ((() => {const catId = $cat.getId();return <Item className="item" key={catId} styleName={{ selected: $likes[catId].get() }} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small={true} /></Item>;})())))
+  return ((() => {const __pugEachResult: JSX.Element[] = [];for (const $cat of $cats) {__pugEachResult.push((() => {const catId = $cat.getId();return <Item className="item" key={catId} styleName={{ selected: $likes[catId].get() }} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small={true} /></Item>;})());}return __pugEachResult.length ? __pugEachResult : <Alert variant={'info'}>No cats with selected breed yet</Alert>;})())
   styl`
     .item
       border-radius 1u

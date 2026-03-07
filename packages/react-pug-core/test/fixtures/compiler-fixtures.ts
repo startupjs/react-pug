@@ -31,6 +31,8 @@ export const COMPILER_STRESS_SOURCE_TSX = [
   '          `}',
   '        )',
   '          span.label= item.text',
+  '      else',
+  '        span.none No pending items',
   '    else',
   '      - const fallback = tooltipText + "!"',
   '      span.empty= fallback',

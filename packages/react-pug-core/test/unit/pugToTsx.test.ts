@@ -23,7 +23,7 @@ import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from '../../src/lang
 // [x] Buffered code: = expr -> {expr}
 // [x] Comments: stripped from output
 // [x] Conditionals: if/else -> ternary, if/else-if/else -> chained ternary
-// [x] Each loops: each item in items -> items.map(), with key/index
+// [x] Each loops: each item in items -> for..of IIFE accumulator, with key/index
 // [x] While loops: while condition -> IIFE with __r array
 // [x] Case/When: case expr / when val -> chained ternaries
 // [x] Code blocks: unbuffered code, IIFE wrapping when mixed with JSX
@@ -657,25 +657,27 @@ describe('conditionals', () => {
 // ── Each loops ──────────────────────────────────────────────────
 
 describe('each loops', () => {
-  it('basic each -> obj.map((val) => (...))', () => {
+  it('basic each -> for..of accumulator IIFE', () => {
     const pug = 'each item in items\n  li= item';
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const item of items)');
+    expect(result.tsx).toContain('const __pugEachResult: JSX.Element[] = []');
     expect(result.tsx).toContain('item');
-    expect(result.tsx).toContain('=>');
+    expect(result.tsx).toContain('__pugEachResult.push(');
     expect(result.tsx).toContain('<li');
     expect(result.parseError).toBeNull();
   });
 
-  it('each with key -> obj.map((val, key) => (...))', () => {
+  it('each with key -> for..of plus index binding', () => {
     const pug = 'each item, i in items\n  li= item';
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const item of items)');
     expect(result.tsx).toContain('item');
-    expect(result.tsx).toContain(', i');
-    expect(result.tsx).toContain('=>');
+    expect(result.tsx).toContain('let __pugEachIndex = 0;');
+    expect(result.tsx).toContain('const i = __pugEachIndex;');
+    expect(result.tsx).toContain('__pugEachIndex++;');
   });
 
   it('obj expression is mapped with FULL_FEATURES', () => {
@@ -710,7 +712,7 @@ describe('each loops', () => {
     const pug = 'each user in users\n  .card\n    h2= user.name\n    p= user.email';
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('users');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const user of users)');
     expect(result.tsx).toContain('<div');
     expect(result.tsx).toContain('className="card"');
     expect(result.tsx).toContain('<h2');
@@ -719,7 +721,7 @@ describe('each loops', () => {
     expect(result.tsx).toContain('</div>');
   });
 
-  it('each with empty body -> parse error or null in map', () => {
+  it('each with empty body -> parse error or null pushed', () => {
     // Bare each with no children may cause a parser error
     const pug = 'each item in items';
     const result = compilePugToTsx(pug);
@@ -732,10 +734,30 @@ describe('each loops', () => {
     const pug = 'each item in list\n  div= item';
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('list');
-    expect(result.tsx).toContain('.map(');
-    expect(result.tsx).not.toContain('{list.map(');
+    expect(result.tsx).toContain('for (const item of list)');
+    expect(result.tsx).not.toContain('.map(');
     expect(result.tsx).toContain('<div');
     expect(result.parseError).toBeNull();
+  });
+
+  it('each with else returns alternate block when list is empty', () => {
+    const pug = [
+      'each cat in cats',
+      '  li= cat.name',
+      'else',
+      '  p.empty No cats',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('for (const cat of cats)');
+    expect(result.tsx).toContain('return __pugEachResult.length ? __pugEachResult : ');
+    expect(result.tsx).toContain('<p className="empty">No cats</p>');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('emits runtime-safe each loop output without TS annotations', () => {
+    const result = compilePugToTsx('each item in list\n  span= item', { mode: 'runtime' });
+    expect(result.tsx).toContain('const __pugEachResult = []');
+    expect(result.tsx).not.toContain('JSX.Element[]');
   });
 });
 
@@ -993,7 +1015,7 @@ describe('control flow edge cases', () => {
     ].join('\n');
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const item of items)');
     expect(result.tsx).toContain('item.active');
     expect(result.tsx).toContain('?');
     expect(result.tsx).toContain('item.name');
@@ -1009,11 +1031,11 @@ describe('control flow edge cases', () => {
     expect(result.tsx).toContain('showList');
     expect(result.tsx).toContain('?');
     expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const item of items)');
     expect(result.tsx).toContain('<li');
   });
 
-  it('else branch with each emits map expression (not object literal)', () => {
+  it('else branch with each emits loop expression (not object literal)', () => {
     const pug = [
       'if activeTodos.length === 0',
       '  p.empty All done!',
@@ -1023,8 +1045,8 @@ describe('control flow edge cases', () => {
     ].join('\n');
     const result = compilePugToTsx(pug);
     expect(result.parseError).toBeNull();
-    expect(result.tsx).toContain('activeTodos.map((');
-    expect(result.tsx).not.toMatch(/:\s*\{\s*activeTodos\.map\(/);
+    expect(result.tsx).toContain('for (const todo of activeTodos)');
+    expect(result.tsx).not.toMatch(/:\s*\{\s*for\s*\(/);
   });
 
   it('control flow with sibling tags uses fragment', () => {

@@ -63,7 +63,7 @@ describe('babel-plugin-react-pug transform', () => {
     ].join('\n'));
     expect(out).toContain('show');
     expect(out).toContain('todos');
-    expect(out).toContain('.map(');
+    expect(out).toContain('for (const todo of todos)');
     expect(out).toContain('todo.text');
   });
 
@@ -188,7 +188,8 @@ describe('babel-plugin-react-pug transform', () => {
     expect(out).not.toContain('pug`');
     expect(out).toContain('tooltipText.toUpperCase');
     expect(out).toContain('tooltipText.toLowerCase');
-    expect(out).toContain('.map(');
+    expect(out).toContain('for (const item of list.filter(it => !it.done))');
+    expect(out).toContain('No pending items');
   });
 });
 

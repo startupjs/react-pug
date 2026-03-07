@@ -91,7 +91,8 @@ describe('swc-plugin-react-pug transform', () => {
     expect(result.code).not.toContain('pug`');
     expect(result.code).toContain('tooltipText.toUpperCase');
     expect(result.code).toContain('tooltipText.toLowerCase');
-    expect(result.code).toContain('.map(');
+    expect(result.code).toContain('for (const item of (list.filter(it => !it.done)))');
+    expect(result.code).toContain('No pending items');
   });
 });
 

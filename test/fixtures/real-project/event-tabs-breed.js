@@ -141,6 +141,8 @@ const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
         onPress=() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)
       )
         CatCard($cat=$cat small)
+    else
+      Alert(variant='info') No cats with selected breed yet
   `
   styl`
     .item

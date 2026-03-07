@@ -73,7 +73,13 @@ const CatsList = observer(({
       number: 1
     }
   });
-  return $cats.map($cat => <Item key={$cat.getId()}><CatCard $cat={$cat} /><Item styleName={["Right"]}><Div vAlign={'center'} row={true} gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}<Button variant={'text'} icon={faPen} onPress={() => onEdit($cat)} tooltip={'Edit'} /><Link href={'/events/' + eventId + '/matches/' + $cat.getId()}><Button variant={'text'} icon={faHeart} tooltip={'Matches'} /></Link><Link href={'/cats/' + $cat.token.get()}><Button variant={'text'} icon={faLink} tooltip={'Cat profile link'}>Link</Button></Link></Div></Item></Item>);
+  return (() => {
+    const __pugEachResult = [];
+    for (const $cat of $cats) {
+      __pugEachResult.push(<Item key={$cat.getId()}><CatCard $cat={$cat} /><Item styleName={["Right"]}><Div vAlign={'center'} row={true} gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}<Button variant={'text'} icon={faPen} onPress={() => onEdit($cat)} tooltip={'Edit'} /><Link href={'/events/' + eventId + '/matches/' + $cat.getId()}><Button variant={'text'} icon={faHeart} tooltip={'Matches'} /></Link><Link href={'/cats/' + $cat.token.get()}><Button variant={'text'} icon={faLink} tooltip={'Cat profile link'}>Link</Button></Link></Div></Item></Item>);
+    }
+    return __pugEachResult;
+  })();
 });
 function hasContact($cat) {
   return ($cat.phone.get() || '').trim() || ($cat.catgram.get() || '').trim() || ($cat.phonegram.get() || '').trim();
@@ -104,12 +110,18 @@ const SelectLikes = observer(({
       number: 1
     }
   });
-  return $cats.map($cat => (() => {
-    const catId = $cat.getId();
-    return <Item styleName={["item", {
-      selected: $likes[catId].get()
-    }]} key={catId} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small={true} /></Item>;
-  })());
+  return (() => {
+    const __pugEachResult = [];
+    for (const $cat of $cats) {
+      __pugEachResult.push((() => {
+        const catId = $cat.getId();
+        return <Item styleName={["item", {
+          selected: $likes[catId].get()
+        }]} key={catId} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small={true} /></Item>;
+      })());
+    }
+    return __pugEachResult.length ? __pugEachResult : <Alert variant={'info'}>No cats with selected breed yet</Alert>;
+  })();
   styl`
     .item
       border-radius 1u

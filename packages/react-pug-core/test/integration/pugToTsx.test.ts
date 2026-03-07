@@ -239,14 +239,22 @@ describe('compilePugToTsx - conditionals', () => {
 describe('compilePugToTsx - each loops', () => {
   it('compiles each with value and key', () => {
     const result = compilePugToTsx('each item, idx in items\n  div= item');
-    expect(result.tsx).toContain('items.map((item, idx)');
+    expect(result.tsx).toContain('for (const item of items)');
+    expect(result.tsx).toContain('const idx = __pugEachIndex');
     expect(result.tsx).toContain('{item}');
   });
 
   it('compiles each with value only', () => {
     const result = compilePugToTsx('each item in list\n  span');
-    expect(result.tsx).toContain('list.map((item)');
+    expect(result.tsx).toContain('for (const item of list)');
     expect(result.tsx).toContain('<span />');
+  });
+
+  it('compiles each with else fallback to alternate branch', () => {
+    const result = compilePugToTsx('each item in list\n  span= item\nelse\n  p Empty');
+    expect(result.tsx).toContain('for (const item of list)');
+    expect(result.tsx).toContain('return __pugEachResult.length ? __pugEachResult : ');
+    expect(result.tsx).toContain('<p>Empty</p>');
   });
 
   it('maps obj, val, and key with FULL_FEATURES', () => {

@@ -519,7 +519,7 @@ describe('pug with control flow in shadow document', () => {
 
     const region = doc.regions[0];
     expect(region.tsxText).toContain('items');
-    expect(region.tsxText).toContain('.map(');
+    expect(region.tsxText).toContain('for (const item of items)');
     expect(region.tsxText).toContain('<li');
   });
 });
