@@ -1192,6 +1192,33 @@ describe('class shorthand strategy', () => {
     });
     expect(result.tsx).toContain('styleName={["title", "bold"]}');
   });
+
+  it('keeps mapping for existing className attr when merged with shorthand class', () => {
+    const pug = "h1.active(className='hello')";
+    const result = compilePugToTsx(pug);
+    const classNameOffset = pug.indexOf('className');
+    expect(classNameOffset).toBeGreaterThanOrEqual(0);
+    expect(result.mappings.some(
+      (m) => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === classNameOffset
+        && m.lengths[0] === 'className'.length,
+    )).toBe(true);
+  });
+
+  it('keeps mapping for existing styleName attr when merged with shorthand class', () => {
+    const pug = 'Button.active(styleName=active)';
+    const result = compilePugToTsx(pug, {
+      classAttribute: 'styleName',
+      classMerge: 'classnames',
+    });
+    const styleNameOffset = pug.indexOf('styleName');
+    expect(styleNameOffset).toBeGreaterThanOrEqual(0);
+    expect(result.mappings.some(
+      (m) => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === styleNameOffset
+        && m.lengths[0] === 'styleName'.length,
+    )).toBe(true);
+  });
 });
 
 describe('component path from uppercase shorthand', () => {

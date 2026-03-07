@@ -813,8 +813,22 @@ function emitMergedClassShorthandAttribute(
   emitter: TsxEmitter,
   pugText: string,
 ): void {
+  const emitTargetAttrName = () => {
+    emitter.emitSynthetic(' ');
+    if (existingAttr) {
+      emitter.emitMapped(
+        existingAttr.name,
+        lineColToOffset(pugText, existingAttr.line, existingAttr.column),
+        FULL_FEATURES,
+      );
+    } else {
+      emitter.emitSynthetic(targetAttr);
+    }
+  };
+
   if (mergeMode === 'classnames') {
-    emitter.emitSynthetic(` ${targetAttr}={[`);
+    emitTargetAttrName();
+    emitter.emitSynthetic('={[');
     for (let i = 0; i < classNames.length; i += 1) {
       if (i > 0) emitter.emitSynthetic(', ');
       emitter.emitSynthetic('"');
@@ -836,7 +850,8 @@ function emitMergedClassShorthandAttribute(
   }
 
   if (existingAttr) {
-    emitter.emitSynthetic(` ${targetAttr}={`);
+    emitTargetAttrName();
+    emitter.emitSynthetic('={');
     emitter.emitSynthetic('"');
     emitStaticClassLiteral(classNames, emitter);
     emitter.emitSynthetic('" + " " + (');
@@ -845,7 +860,8 @@ function emitMergedClassShorthandAttribute(
     return;
   }
 
-  emitter.emitSynthetic(` ${targetAttr}="`);
+  emitTargetAttrName();
+  emitter.emitSynthetic('="');
   emitStaticClassLiteral(classNames, emitter);
   emitter.emitSynthetic('"');
 }

@@ -158,6 +158,54 @@ suite('Extension Host Features (example workspace)', () => {
     });
   });
 
+  test('hover on merged className/styleName attrs still shows type info', async function () {
+    const hoverDoc = await createTempDoc(
+      '__vscode_test_hover_merged_class_attrs.tsx',
+      [
+        "import React from 'react';",
+        'const startupMarker = "startupjs";',
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const active = { active: true };',
+        'const view = pug`',
+        "  h1.active(className='hello')",
+        '  h1.active(styleName=active)',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+
+    const text = hoverDoc.getText();
+    const classNameIdx = text.indexOf('className');
+    const styleNameIdx = text.indexOf('styleName');
+    assert.ok(classNameIdx > 0, 'Could not find className in merged shorthand fixture');
+    assert.ok(styleNameIdx > 0, 'Could not find styleName in merged shorthand fixture');
+
+    const classNamePos = hoverDoc.positionAt(classNameIdx + 1);
+    const styleNamePos = hoverDoc.positionAt(styleNameIdx + 1);
+
+    const classNameHover = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeHoverProvider',
+        hoverDoc.uri,
+        classNamePos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    });
+    const classNameText = classNameHover.map(hoverText).join('\n');
+    assert.ok(/className/i.test(classNameText), 'Expected hover to include className type info');
+
+    const styleNameHover = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeHoverProvider',
+        hoverDoc.uri,
+        styleNamePos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    });
+    const styleNameText = styleNameHover.map(hoverText).join('\n');
+    assert.ok(/styleName/i.test(styleNameText), 'Expected hover to include styleName type info');
+  });
+
   test('completion inside pug includes typed component props', async function () {
     const completionDoc = await createTempDoc(
       '__vscode_test_completion.tsx',
