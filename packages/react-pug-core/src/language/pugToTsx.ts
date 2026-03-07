@@ -930,7 +930,8 @@ function emitTag(
   // Determine if tag has children
   const children = node.block?.nodes ?? [];
   const hasChildren = children.length > 0;
-  const isVoid = VOID_ELEMENTS.has(node.name.toLowerCase());
+  const isComponentTag = /^[A-Z]/.test(node.name);
+  const isVoid = !isComponentTag && VOID_ELEMENTS.has(node.name.toLowerCase());
 
   if (!hasChildren || isVoid) {
     emitter.emitSynthetic(' />');
@@ -1075,7 +1076,9 @@ function emitChildren(
 ): void {
   const hasUnbufferedCode = nodes.some(isUnbufferedCode);
   if (hasUnbufferedCode) {
+    emitter.emitSynthetic('{');
     emitBlockWithCodeSupport(nodes, emitter, pugText);
+    emitter.emitSynthetic('}');
   } else {
     for (const node of nodes) {
       emitNode(node, emitter, pugText);

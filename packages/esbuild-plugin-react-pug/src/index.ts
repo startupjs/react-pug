@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import type { Loader, OnLoadArgs, OnLoadResult, Plugin } from 'esbuild';
 import {
+  createTransformSourceMap,
   type ClassAttributeOption,
   type ClassMergeOption,
   lineColumnToOffset,
@@ -14,6 +15,7 @@ import {
   type OriginalDiagnosticLocation,
   type PugDocument,
   type PugRegion,
+  type TransformSourceMap,
 } from '@startupjs/react-pug-core';
 
 export interface EsbuildReactPugOptions {
@@ -33,6 +35,7 @@ export interface EsbuildReactPugMetadata {
 export interface EsbuildReactPugTransformResult {
   code: string;
   metadata: EsbuildReactPugMetadata;
+  sourceMap: TransformSourceMap;
 }
 
 export interface EsbuildGeneratedDiagnosticLike {
@@ -77,6 +80,7 @@ export function transformReactPugSourceForEsbuild(
       document: transformed.document,
       regions: transformed.regions,
     },
+    sourceMap: createTransformSourceMap(transformed, fileName),
   };
 }
 
@@ -114,10 +118,17 @@ async function loadAndTransform(
   const sourceText = await readFile(args.path, 'utf8');
   const transformed = transformReactPugSourceForEsbuild(sourceText, args.path, options);
   if (transformed.metadata.regions.length === 0) return null;
+  const transformedLoader: Loader = loader === 'js'
+    ? 'jsx'
+    : loader === 'ts'
+      ? 'tsx'
+      : loader;
+  const inlineSourceMap = Buffer.from(JSON.stringify(transformed.sourceMap), 'utf8').toString('base64');
+  const contentsWithMap = `${transformed.code}\n//# sourceMappingURL=data:application/json;base64,${inlineSourceMap}`;
 
   return {
-    contents: transformed.code,
-    loader,
+    contents: contentsWithMap,
+    loader: transformedLoader,
   };
 }
 

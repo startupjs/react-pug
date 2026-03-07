@@ -1,4 +1,5 @@
 import {
+  createTransformSourceMap,
   mapGeneratedDiagnosticToOriginal,
   mapGeneratedRangeToOriginal,
   transformSourceFile,
@@ -81,11 +82,27 @@ export function transformWithSwcReactPug(
   swcOptions: SwcOptions = {},
   options: SwcReactPugOptions = {},
 ): SwcReactPugCompileResult {
-  const transformed = transformReactPugSourceForSwc(sourceText, fileName, options);
+  const transformedCore = transformSourceFile(sourceText, fileName, {
+    tagFunction: options.tagFunction ?? 'pug',
+    compileMode: options.mode ?? 'runtime',
+    classAttribute: options.classShorthandProperty ?? 'auto',
+    classMerge: options.classShorthandMerge ?? 'auto',
+    startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
+  });
+  const transformed = {
+    code: transformedCore.code,
+    metadata: {
+      document: transformedCore.document,
+      regions: transformedCore.regions,
+    },
+  };
+  const inputSourceMap = createTransformSourceMap(transformedCore, fileName);
+
   const swcResult = transformSync(transformed.code, {
+    ...swcOptions,
     filename: fileName,
     sourceMaps: swcOptions.sourceMaps,
-    ...swcOptions,
+    inputSourceMap: (swcOptions as any).inputSourceMap ?? JSON.stringify(inputSourceMap),
   });
 
   return {

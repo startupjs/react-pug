@@ -88,6 +88,35 @@ describe('esbuild-plugin-react-pug', () => {
     }
   });
 
+  it('compiles .js sources by switching transformed loader to jsx', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'esbuild-react-pug-js-'));
+    const entry = join(dir, 'entry.js');
+
+    try {
+      await writeFile(entry, [
+        'const view = pug`',
+        '  span Hello',
+        '`;',
+        'export { view };',
+      ].join('\n'));
+
+      const result = await build({
+        entryPoints: [entry],
+        bundle: false,
+        write: false,
+        format: 'esm',
+        jsx: 'transform',
+        plugins: [reactPugEsbuildPlugin()],
+      });
+
+      const out = result.outputFiles?.[0]?.text ?? '';
+      expect(out).toContain('createElement');
+      expect(out).not.toContain('pug`');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('maps esbuild-style line/column diagnostics back to original source', () => {
     const source = [
       'const view = pug`',
@@ -129,12 +158,14 @@ describe('esbuild-plugin-react-pug', () => {
       });
       const jsFile = result.outputFiles?.find((f) => !f.path.endsWith('.map'));
       expect(jsFile).toBeTruthy();
-      const match = jsFile!.text.match(/sourceMappingURL=data:application\/json;base64,([A-Za-z0-9+/=]+)/);
+      const match = jsFile!.text.match(/sourceMappingURL=data:application\/json(?:;charset=[^;]+)?;base64,([A-Za-z0-9+/=]+)/);
       expect(match).toBeTruthy();
       const decoded = Buffer.from(match![1], 'base64').toString('utf8');
       const parsed = JSON.parse(decoded);
       expect(Array.isArray(parsed.sources)).toBe(true);
       expect(parsed.sources.join('\n')).toContain('entry.tsx');
+      expect(Array.isArray(parsed.sourcesContent)).toBe(true);
+      expect(parsed.sourcesContent[0]).toContain('pug`span= title`');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -1,0 +1,45 @@
+{
+  "version": 3,
+  "names": [
+    "React",
+    "pug",
+    "styl",
+    "observer",
+    "useSub",
+    "$",
+    "Div",
+    "Span",
+    "Avatar",
+    "Link",
+    "$cat",
+    "showPhone",
+    "large",
+    "small",
+    "name",
+    "number",
+    "phone",
+    "catgram",
+    "photoFileId",
+    "phonegram",
+    "get",
+    "getCatgramLink",
+    "getPhonegramLink",
+    "Photo",
+    "fileId",
+    "$file",
+    "files",
+    "url",
+    "getUrl",
+    "err",
+    "username",
+    "test"
+  ],
+  "sources": [
+    "test/fixtures/real-project/CatCard.js"
+  ],
+  "sourcesContent": [
+    "import React from 'react'\nimport { pug, styl, observer, useSub, $ } from 'startupjs'\nimport { Div, Span, Avatar, Link } from 'startupjs-ui'\n\nexport default observer(({ $cat, showPhone, large, small }) => {\n  const { name, number, phone, catgram, photoFileId, phonegram } = $cat.get()\n  return pug`\n    Div(part='root' row vAlign='center')\n      if photoFileId\n        Photo.avatar(styleName={ large, small } fileId=photoFileId name=name)\n      else\n        Avatar.avatar(styleName={ large, small })= name\n      Div(row)\n        Span.text(bold styleName={ large })= (number || 'X') + '. '\n        Div\n          Span.text(styleName={ large })= name\n          if showPhone\n            if phone\n              Span.text(styleName={ large })\n                Span(bold) Phone:#{' '}\n                = phone\n            if catgram\n              Span.text(styleName={ large })\n                Span(bold) Catgram:#{' '}\n                Link.text(styleName={ large } to=getCatgramLink(catgram))= catgram\n            if phonegram\n              Span.text(styleName={ large })\n                Span(bold) Phonegram:#{' '}\n                Link.text(styleName={ large } to=getPhonegramLink(phonegram))= phonegram\n  `\n  /* eslint-disable-line */styl`\n    .avatar\n      margin-right 1u\n      &.large\n        width 12u\n        height @width\n      &.small\n        width 4u\n        height @width\n    .text.large\n      font(h6)\n  `\n})\n\nconst Photo = observer(({ fileId, name }) => {\n  const $file = useSub($.files[fileId])\n  let url\n  try { url = $file.getUrl() } catch (err) {}\n  return pug`\n    Avatar(part='root' src=url)= name\n  `\n})\n\nfunction getCatgramLink (username) {\n  if (!username) return\n  if (/:\\/\\//.test(username)) return username\n  return 'https://catgr.am/' + username\n}\n\nfunction getPhonegramLink (username) {\n  if (!username) return\n  if (/:\\/\\//.test(username)) return username\n  return 'https://www.phonegram.com/' + username\n}\n"
+  ],
+  "mappings": "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",
+  "ignoreList": []
+}

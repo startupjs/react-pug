@@ -76,6 +76,8 @@ describe('swc-plugin-react-pug transform', () => {
     const parsedMap = JSON.parse(result.swcMap!);
     expect(Array.isArray(parsedMap.sources)).toBe(true);
     expect(parsedMap.sources.join('\n')).toContain('fixture.tsx');
+    expect(Array.isArray(parsedMap.sourcesContent)).toBe(true);
+    expect(parsedMap.sourcesContent[0]).toContain('pug`');
   });
 
   it('keeps JS/JSX runtime output free of TS-only syntax', () => {

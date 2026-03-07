@@ -101,6 +101,13 @@ describe('tag compilation', () => {
     expect(result.tsx).toContain('<span');
     expect(result.tsx).toContain('</div>');
   });
+
+  it('does not treat capitalized components like Link as void html tags', () => {
+    const result = compilePugToTsx("Link(href='/x')\n  Button(label='A')");
+    expect(result.tsx).toContain('<Link');
+    expect(result.tsx).toContain('</Link>');
+    expect(result.tsx).toContain('<Button');
+  });
 });
 
 // ── Class and ID shorthand tests ─────────────────────────────────
@@ -908,6 +915,20 @@ describe('code blocks', () => {
     expect(result.tsx).toContain('return ');
     expect(result.tsx).toContain('<h1');
     expect(result.tsx).toContain('})()');
+  });
+
+  it('wraps mixed unbuffered children in JSX expression container', () => {
+    const pug = [
+      'Modal(title="Demo")',
+      '  - const oppositeBreed = selectedBreed === "domestic" ? "wild" : "domestic"',
+      '  span= oppositeBreed',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('<Modal');
+    expect(result.tsx).toContain('{(() => {');
+    expect(result.tsx).toContain('const oppositeBreed');
+    expect(result.tsx).toContain('<span');
+    expect(result.parseError).toBeNull();
   });
 
   it('code block expression is mapped with FULL_FEATURES', () => {

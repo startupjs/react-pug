@@ -2,6 +2,14 @@ import type { PugDocument, PugRegion } from './mapping';
 import { buildShadowDocument } from './shadowDocument';
 import { originalToShadow, shadowToOriginal } from './positionMapping';
 import type { ClassAttributeName, ClassMergeMode, CompileMode } from './pugToTsx';
+import { offsetToLineColumn } from './diagnosticMapping';
+import {
+  addSegment,
+  GenMapping,
+  setSourceContent,
+  toEncodedMap,
+  type EncodedSourceMap,
+} from '@jridgewell/gen-mapping';
 
 const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
 
@@ -72,6 +80,8 @@ export interface SourceTransformResult {
   mapOriginalOffsetToGenerated: (offset: number) => number | null;
 }
 
+export type TransformSourceMap = EncodedSourceMap;
+
 export function transformSourceFile(
   sourceText: string,
   fileName: string,
@@ -109,4 +119,57 @@ export function transformSourceFile(
     mapGeneratedOffsetToOriginal: (offset: number) => shadowToOriginal(document, offset),
     mapOriginalOffsetToGenerated: (offset: number) => originalToShadow(document, offset),
   };
+}
+
+/**
+ * Build a standard VLQ source map from transformed code back to original source.
+ * This is intended to be used as an input source map for downstream compilers.
+ */
+export function createTransformSourceMap(
+  transformed: Pick<SourceTransformResult, 'code' | 'document' | 'mapGeneratedOffsetToOriginal'>,
+  fileName: string = transformed.document.uri,
+): TransformSourceMap {
+  const sourceName = fileName;
+  const map = new GenMapping({ file: fileName });
+  setSourceContent(map, sourceName, transformed.document.originalText);
+
+  let generatedLine = 0;
+  let generatedColumn = 0;
+  let lastMappedOriginalOffset: number | null = null;
+
+  for (let i = 0; i < transformed.code.length; i += 1) {
+    const mappedOriginalOffset = transformed.mapGeneratedOffsetToOriginal(i);
+    if (mappedOriginalOffset != null) {
+      const shouldEmitSegment = (
+        generatedColumn === 0
+        || lastMappedOriginalOffset == null
+        || mappedOriginalOffset !== lastMappedOriginalOffset + 1
+      );
+
+      if (shouldEmitSegment) {
+        const original = offsetToLineColumn(transformed.document.originalText, mappedOriginalOffset);
+        addSegment(
+          map,
+          generatedLine,
+          generatedColumn,
+          sourceName,
+          Math.max(0, original.line - 1),
+          Math.max(0, original.column - 1),
+        );
+      }
+      lastMappedOriginalOffset = mappedOriginalOffset;
+    } else {
+      lastMappedOriginalOffset = null;
+    }
+
+    if (transformed.code.charCodeAt(i) === 10) {
+      generatedLine += 1;
+      generatedColumn = 0;
+      lastMappedOriginalOffset = null;
+    } else {
+      generatedColumn += 1;
+    }
+  }
+
+  return toEncodedMap(map);
 }
