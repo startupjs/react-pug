@@ -109,6 +109,7 @@ interface PugEach {
   key: string | null;
   obj: string;
   block: PugBlock;
+  alternate?: PugBlock | null;
   line: number;
   column: number;
 }
@@ -293,11 +294,42 @@ interface InterpolationContext {
 }
 
 const interpolationContextStack: InterpolationContext[] = [];
+interface CompileContext {
+  mode: CompileMode;
+  classAttribute: ClassAttributeName;
+  classMerge: ClassMergeMode;
+  componentPathFromUppercaseClassShorthand: boolean;
+}
+const compileContextStack: CompileContext[] = [];
 
 function currentInterpolationContext(): InterpolationContext | null {
   return interpolationContextStack.length > 0
     ? interpolationContextStack[interpolationContextStack.length - 1]
     : null;
+}
+
+function currentCompileMode(): CompileMode {
+  return compileContextStack.length > 0
+    ? compileContextStack[compileContextStack.length - 1].mode
+    : 'languageService';
+}
+
+function currentClassAttribute(): ClassAttributeName {
+  return compileContextStack.length > 0
+    ? compileContextStack[compileContextStack.length - 1].classAttribute
+    : 'className';
+}
+
+function currentClassMerge(): ClassMergeMode {
+  return compileContextStack.length > 0
+    ? compileContextStack[compileContextStack.length - 1].classMerge
+    : 'concatenate';
+}
+
+function currentComponentPathFromUppercaseClassShorthand(): boolean {
+  return compileContextStack.length > 0
+    ? compileContextStack[compileContextStack.length - 1].componentPathFromUppercaseClassShorthand
+    : true;
 }
 
 function createInterpolationMarker(index: number, length: number): string {
@@ -601,7 +633,11 @@ function emitJsExpressionWithNestedPug(
       emitJsExpressionWithNestedPug(plain, expressionOffset + cursor, emitter, info);
     }
 
-    const compiled = compilePugToTsx(region.pugText);
+    const compiled = compilePugToTsx(region.pugText, {
+      mode: currentCompileMode(),
+      classAttribute: currentClassAttribute(),
+      classMerge: currentClassMerge(),
+    });
     emitCompiledPugRegionInExpression(expression, expressionOffset, region, compiled, emitter);
     cursor = region.originalEnd;
   }
@@ -725,6 +761,111 @@ function emitNode(
   }
 }
 
+interface StaticClassShorthand {
+  name: string;
+  offset: number;
+  sourceLength: number;
+  nameOffset: number;
+}
+
+function emitAttributeValueAsExpression(
+  attr: PugAttr,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  if (attr.val === true) {
+    emitter.emitSynthetic('true');
+    return;
+  }
+
+  if (typeof attr.val !== 'string') {
+    emitter.emitSynthetic('undefined');
+    return;
+  }
+
+  const attrOffset = lineColToOffset(pugText, attr.line, attr.column);
+  const valOffset = attrOffset + attr.name.length + 1;
+  const val = attr.val;
+
+  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith('\'') && val.endsWith('\''))) {
+    emitter.emitMapped(val, valOffset, FULL_FEATURES);
+    return;
+  }
+
+  emitExpressionWithTemplateInterpolations(val, valOffset, emitter, FULL_FEATURES);
+}
+
+function emitStaticClassLiteral(
+  classNames: StaticClassShorthand[],
+  emitter: TsxEmitter,
+): void {
+  const combinedClass = classNames.map((c) => c.name).join(' ');
+  if (combinedClass.length === 0) return;
+  const first = classNames[0];
+  emitter.emitDerived(combinedClass, first.offset, Math.max(1, first.sourceLength), CSS_CLASS);
+}
+
+function emitMergedClassShorthandAttribute(
+  targetAttr: ClassAttributeName,
+  mergeMode: ClassMergeMode,
+  classNames: StaticClassShorthand[],
+  existingAttr: PugAttr | null,
+  emitter: TsxEmitter,
+  pugText: string,
+): void {
+  const emitTargetAttrName = () => {
+    emitter.emitSynthetic(' ');
+    if (existingAttr) {
+      emitter.emitMapped(
+        existingAttr.name,
+        lineColToOffset(pugText, existingAttr.line, existingAttr.column),
+        FULL_FEATURES,
+      );
+    } else {
+      emitter.emitSynthetic(targetAttr);
+    }
+  };
+
+  if (mergeMode === 'classnames') {
+    emitTargetAttrName();
+    emitter.emitSynthetic('={[');
+    for (let i = 0; i < classNames.length; i += 1) {
+      if (i > 0) emitter.emitSynthetic(', ');
+      emitter.emitSynthetic('"');
+      emitter.emitDerived(
+        classNames[i].name,
+        classNames[i].offset,
+        Math.max(1, classNames[i].sourceLength),
+        CSS_CLASS,
+      );
+      emitter.emitSynthetic('"');
+    }
+
+    if (existingAttr) {
+      if (classNames.length > 0) emitter.emitSynthetic(', ');
+      emitAttributeValueAsExpression(existingAttr, emitter, pugText);
+    }
+    emitter.emitSynthetic(']}');
+    return;
+  }
+
+  if (existingAttr) {
+    emitTargetAttrName();
+    emitter.emitSynthetic('={');
+    emitter.emitSynthetic('"');
+    emitStaticClassLiteral(classNames, emitter);
+    emitter.emitSynthetic('" + " " + (');
+    emitAttributeValueAsExpression(existingAttr, emitter, pugText);
+    emitter.emitSynthetic(')}');
+    return;
+  }
+
+  emitTargetAttrName();
+  emitter.emitSynthetic('="');
+  emitStaticClassLiteral(classNames, emitter);
+  emitter.emitSynthetic('"');
+}
+
 function emitTag(
   node: PugTag,
   emitter: TsxEmitter,
@@ -733,7 +874,7 @@ function emitTag(
   const tagOffset = lineColToOffset(pugText, node.line, node.column);
 
   // Collect class names and id from shorthand attrs
-  const classNames: string[] = [];
+  const classNames: StaticClassShorthand[] = [];
   let idValue: string | null = null;
   const regularAttrs: PugAttr[] = [];
 
@@ -742,9 +883,21 @@ function emitTag(
       // Shorthand class: val is like "'card'" (with quotes)
       const raw = attr.val;
       if (raw.startsWith("'") && raw.endsWith("'")) {
-        classNames.push(raw.slice(1, -1));
+        const classOffset = lineColToOffset(pugText, attr.line, attr.column);
+        classNames.push({
+          name: raw.slice(1, -1),
+          offset: classOffset,
+          sourceLength: Math.max(1, raw.length),
+          nameOffset: classOffset + 1,
+        });
       } else if (raw.startsWith('"') && raw.endsWith('"')) {
-        classNames.push(raw.slice(1, -1));
+        const classOffset = lineColToOffset(pugText, attr.line, attr.column);
+        classNames.push({
+          name: raw.slice(1, -1),
+          offset: classOffset,
+          sourceLength: Math.max(1, raw.length),
+          nameOffset: classOffset + 1,
+        });
       } else {
         // Dynamic class expression
         regularAttrs.push(attr);
@@ -763,6 +916,22 @@ function emitTag(
     }
   }
 
+  const componentPathFromUppercaseClassShorthand = currentComponentPathFromUppercaseClassShorthand();
+  const componentPathSegments: StaticClassShorthand[] = [];
+  if (componentPathFromUppercaseClassShorthand && /^[A-Z]/.test(node.name)) {
+    for (const classShorthand of classNames) {
+      if (!/^[A-Z]/.test(classShorthand.name)) break;
+      componentPathSegments.push(classShorthand);
+    }
+    if (componentPathSegments.length > 0) {
+      classNames.splice(0, componentPathSegments.length);
+    }
+  }
+
+  const resolvedTagName = componentPathSegments.length > 0
+    ? `${node.name}.${componentPathSegments.map((segment) => segment.name).join('.')}`
+    : node.name;
+
   // Check if tag name is synthetic (implicit div from shorthand)
   const isSyntheticDiv = node.name === 'div' && (classNames.length > 0 || idValue !== null)
     && node.column === (pugText.split('\n')[node.line - 1]?.indexOf('.') ?? -1) + 1;
@@ -773,15 +942,31 @@ function emitTag(
     emitter.emitSynthetic(node.name);
   } else {
     emitter.emitMapped(node.name, tagOffset, FULL_FEATURES);
+    for (const segment of componentPathSegments) {
+      emitter.emitSynthetic('.');
+      emitter.emitDerived(
+        segment.name,
+        segment.nameOffset,
+        Math.max(1, segment.name.length),
+        FULL_FEATURES,
+      );
+    }
   }
 
-  // Emit className from shorthands
+  // Emit shorthand classes according to current class strategy.
   if (classNames.length > 0) {
-    const combinedClass = classNames.join(' ');
-    emitter.emitSynthetic(' className="');
-    const classOffset = lineColToOffset(pugText, node.line, node.column);
-    emitter.emitDerived(combinedClass, classOffset, 1, CSS_CLASS);
-    emitter.emitSynthetic('"');
+    const targetAttr = currentClassAttribute();
+    const mergeMode = currentClassMerge();
+    const existingIndex = regularAttrs.findIndex((a) => a.name === targetAttr);
+    const existingAttr = existingIndex >= 0 ? regularAttrs.splice(existingIndex, 1)[0] : null;
+    emitMergedClassShorthandAttribute(
+      targetAttr,
+      mergeMode,
+      classNames,
+      existingAttr,
+      emitter,
+      pugText,
+    );
   }
 
   // Emit id from shorthand
@@ -799,7 +984,8 @@ function emitTag(
   // Determine if tag has children
   const children = node.block?.nodes ?? [];
   const hasChildren = children.length > 0;
-  const isVoid = VOID_ELEMENTS.has(node.name.toLowerCase());
+  const isComponentTag = /^[A-Z]/.test(resolvedTagName);
+  const isVoid = !isComponentTag && VOID_ELEMENTS.has(node.name.toLowerCase());
 
   if (!hasChildren || isVoid) {
     emitter.emitSynthetic(' />');
@@ -810,7 +996,7 @@ function emitTag(
     if (isSyntheticDiv) {
       emitter.emitSynthetic(node.name);
     } else {
-      emitter.emitSynthetic(node.name);
+      emitter.emitSynthetic(resolvedTagName);
     }
     emitter.emitSynthetic('>');
   }
@@ -944,7 +1130,9 @@ function emitChildren(
 ): void {
   const hasUnbufferedCode = nodes.some(isUnbufferedCode);
   if (hasUnbufferedCode) {
+    emitter.emitSynthetic('{');
     emitBlockWithCodeSupport(nodes, emitter, pugText);
+    emitter.emitSynthetic('}');
   } else {
     for (const node of nodes) {
       emitNode(node, emitter, pugText);
@@ -1170,7 +1358,14 @@ function emitConditionalInner(
   }
 }
 
-/** each item, i in items -> {items.map((item, i) => (<body/>))} */
+function createNonConflictingName(base: string, disallowed: Set<string>): string {
+  if (!disallowed.has(base)) return base;
+  let suffix = 1;
+  while (disallowed.has(`${base}${suffix}`)) suffix++;
+  return `${base}${suffix}`;
+}
+
+/** each item, i in items -> {(() => { const __r = []; ... for (const item of items) ... })()} */
 function emitEach(
   node: PugEach,
   emitter: TsxEmitter,
@@ -1188,7 +1383,17 @@ function emitEach(
   const keyIndex = node.key != null && valIndex >= 0
     ? pugLine.indexOf(node.key, valIndex + node.val.length)
     : -1;
-  const keyOffset = keyIndex >= 0 ? lineStart + keyIndex : -1;
+  const keyOffset = keyIndex >= 0
+    ? lineStart + keyIndex
+    : (node.key != null
+      ? findValueOffsetOnLine(
+        pugText,
+        node.line,
+        node.column,
+        node.key,
+        lineStart + Math.max(0, pugLine.indexOf(node.key)),
+      )
+      : -1);
 
   const inSearchStart = keyIndex >= 0
     ? keyIndex + (node.key?.length ?? 0)
@@ -1207,20 +1412,50 @@ function emitEach(
       lineStart + Math.max(0, pugLine.indexOf(node.obj)),
     );
 
-  if (wrapInJsxBraces) emitter.emitSynthetic('{');
-  emitExpressionWithTemplateInterpolations(node.obj, objOffset, emitter, FULL_FEATURES);
-  emitter.emitSynthetic('.map((');
-  emitExpressionWithTemplateInterpolations(node.val, valOffset, emitter, FULL_FEATURES);
-  if (node.key != null) {
-    emitter.emitSynthetic(', ');
-    emitExpressionWithTemplateInterpolations(node.key, keyOffset, emitter, FULL_FEATURES);
-  }
-  emitter.emitSynthetic(') => (');
-
   const bodyNodes = node.block?.nodes ?? [];
+  const elseNodes = node.alternate?.nodes ?? null;
+
+  const disallowedNames = new Set<string>([node.val]);
+  if (node.key != null) disallowedNames.add(node.key);
+  const resultVar = createNonConflictingName('__pugEachResult', disallowedNames);
+  disallowedNames.add(resultVar);
+  const indexVar = node.key != null
+    ? createNonConflictingName('__pugEachIndex', disallowedNames)
+    : null;
+
+  if (wrapInJsxBraces) emitter.emitSynthetic('{');
+  emitter.emitSynthetic('(() => {');
+  if (currentCompileMode() === 'runtime') {
+    emitter.emitSynthetic(`const ${resultVar} = [];`);
+  } else {
+    emitter.emitSynthetic(`const ${resultVar}: JSX.Element[] = [];`);
+  }
+  if (indexVar != null) emitter.emitSynthetic(`let ${indexVar} = 0;`);
+  emitter.emitSynthetic('for (const ');
+  emitExpressionWithTemplateInterpolations(node.val, valOffset, emitter, FULL_FEATURES);
+  emitter.emitSynthetic(' of ');
+  emitExpressionWithTemplateInterpolations(node.obj, objOffset, emitter, FULL_FEATURES);
+  emitter.emitSynthetic(') {');
+  if (node.key != null && indexVar != null) {
+    emitter.emitSynthetic('const ');
+    emitExpressionWithTemplateInterpolations(node.key, keyOffset, emitter, FULL_FEATURES);
+    emitter.emitSynthetic(` = ${indexVar};`);
+  }
+  emitter.emitSynthetic(`${resultVar}.push(`);
+
   emitBlockAsExpression(bodyNodes, emitter, pugText);
 
-  emitter.emitSynthetic('))');
+  emitter.emitSynthetic(');');
+  if (indexVar != null) emitter.emitSynthetic(`${indexVar}++;`);
+  emitter.emitSynthetic('}');
+  if (elseNodes != null) {
+    emitter.emitSynthetic(`return ${resultVar}.length ? ${resultVar} : `);
+    emitBlockAsExpression(elseNodes, emitter, pugText);
+    emitter.emitSynthetic(';');
+  } else {
+    emitter.emitSynthetic(`return ${resultVar};`);
+  }
+  emitter.emitSynthetic('})()');
   if (wrapInJsxBraces) emitter.emitSynthetic('}');
 }
 
@@ -1241,7 +1476,11 @@ function emitWhile(
   );
 
   if (wrapInJsxBraces) emitter.emitSynthetic('{');
-  emitter.emitSynthetic('(() => {const __r: JSX.Element[] = [];while (');
+  if (currentCompileMode() === 'runtime') {
+    emitter.emitSynthetic('(() => {const __r = [];while (');
+  } else {
+    emitter.emitSynthetic('(() => {const __r: JSX.Element[] = [];while (');
+  }
   emitExpressionWithTemplateInterpolations(node.test, exprOffset, emitter, FULL_FEATURES);
   emitter.emitSynthetic(') {__r.push(');
 
@@ -1338,11 +1577,30 @@ export interface CompileResult {
   parseError: PugParseError | null;
 }
 
+export type CompileMode = 'languageService' | 'runtime';
+export type ClassAttributeName = 'className' | 'class' | 'styleName';
+export type ClassMergeMode = 'concatenate' | 'classnames';
+
+export interface CompileOptions {
+  mode?: CompileMode;
+  classAttribute?: ClassAttributeName;
+  classMerge?: ClassMergeMode;
+  componentPathFromUppercaseClassShorthand?: boolean;
+}
+
+function fallbackNullExpression(mode: CompileMode): string {
+  return mode === 'runtime' ? 'null' : '(null as any as JSX.Element)';
+}
+
 /**
  * Compile pug text to TSX with source mappings.
  * Pipeline: pug-lexer -> pug-strip-comments -> pug-parser -> TsxEmitter
  */
-export function compilePugToTsx(pugText: string): CompileResult {
+export function compilePugToTsx(pugText: string, options: CompileOptions = {}): CompileResult {
+  const mode = options.mode ?? 'languageService';
+  const classAttribute = options.classAttribute ?? 'className';
+  const classMerge = options.classMerge ?? 'concatenate';
+  const componentPathFromUppercaseClassShorthand = options.componentPathFromUppercaseClassShorthand ?? true;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const lex = require('@startupjs/pug-lexer');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1352,6 +1610,12 @@ export function compilePugToTsx(pugText: string): CompileResult {
   const prepared = prepareTemplateInterpolations(pugText);
   const pugTextForParse = prepared.sanitizedText;
   interpolationContextStack.push(prepared.context);
+  compileContextStack.push({
+    mode,
+    classAttribute,
+    classMerge,
+    componentPathFromUppercaseClassShorthand,
+  });
 
   try {
     let tokens: any[];
@@ -1372,7 +1636,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
           tokens = lex(recoveredText, { filename: 'template.pug' });
         } catch {
           return {
-            tsx: '(null as any as JSX.Element)',
+            tsx: fallbackNullExpression(mode),
             mappings: [],
             lexerTokens: [],
             parseError,
@@ -1380,7 +1644,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
         }
       } else {
         return {
-          tsx: '(null as any as JSX.Element)',
+          tsx: fallbackNullExpression(mode),
           mappings: [],
           lexerTokens: [],
           parseError,
@@ -1424,7 +1688,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
 
       if (!ast) {
         return {
-          tsx: '(null as any as JSX.Element)',
+          tsx: fallbackNullExpression(mode),
           mappings: [],
           lexerTokens,
           parseError,
@@ -1435,7 +1699,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
     const emitter = new TsxEmitter();
 
     if (ast.nodes.length === 0) {
-      emitter.emitSynthetic('(null as any as JSX.Element)');
+      emitter.emitSynthetic(fallbackNullExpression(mode));
     } else {
       emitter.emitSynthetic('(');
       emitBlockAsExpression(ast.nodes, emitter, pugTextForParse);
@@ -1450,6 +1714,7 @@ export function compilePugToTsx(pugText: string): CompileResult {
       parseError,
     };
   } finally {
+    compileContextStack.pop();
     interpolationContextStack.pop();
   }
 }

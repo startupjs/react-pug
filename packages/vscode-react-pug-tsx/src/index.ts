@@ -3,6 +3,7 @@ import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDoc
 
 const SCHEME = 'pug-react-shadow';
 const TS_PLUGIN_NAME = '@startupjs/typescript-plugin-react-pug';
+const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
 
 let outputChannel: vscode.OutputChannel;
 
@@ -17,6 +18,23 @@ function readPluginConfig() {
   const injectCssxjsTypes: 'never' | 'auto' | 'force' = (
     injectRaw === 'never' || injectRaw === 'auto' || injectRaw === 'force'
   ) ? injectRaw : 'auto';
+  const classShorthandPropertyRaw = config.get<string>('classShorthandProperty', 'auto');
+  const classShorthandProperty: 'auto' | 'className' | 'class' | 'styleName' = (
+    classShorthandPropertyRaw === 'auto'
+    || classShorthandPropertyRaw === 'className'
+    || classShorthandPropertyRaw === 'class'
+    || classShorthandPropertyRaw === 'styleName'
+  ) ? classShorthandPropertyRaw : 'auto';
+  const classShorthandMergeRaw = config.get<string>('classShorthandMerge', 'auto');
+  const classShorthandMerge: 'auto' | 'concatenate' | 'classnames' = (
+    classShorthandMergeRaw === 'auto'
+    || classShorthandMergeRaw === 'concatenate'
+    || classShorthandMergeRaw === 'classnames'
+  ) ? classShorthandMergeRaw : 'auto';
+  const componentPathFromUppercaseClassShorthand = config.get<boolean>(
+    'componentPathFromUppercaseClassShorthand',
+    true,
+  );
 
   return {
     enabled: config.get<boolean>('enabled', true),
@@ -25,7 +43,32 @@ function readPluginConfig() {
     },
     tagFunction: config.get<string>('tagFunction', 'pug'),
     injectCssxjsTypes,
+    classShorthandProperty,
+    classShorthandMerge,
+    componentPathFromUppercaseClassShorthand,
   };
+}
+
+function resolveClassShorthandOptions(
+  sourceText: string,
+  config: ReturnType<typeof readPluginConfig>,
+): { classAttribute: 'className' | 'class' | 'styleName'; classMerge: 'concatenate' | 'classnames' } {
+  const startupDetected = STARTUPJS_OR_CSSXJS_RE.test(sourceText);
+  const shouldUseStyleNameByAuto = config.injectCssxjsTypes === 'force'
+    || (config.injectCssxjsTypes === 'auto' && startupDetected);
+
+  const classAttribute: 'className' | 'class' | 'styleName' = (
+    config.classShorthandProperty === 'className'
+    || config.classShorthandProperty === 'class'
+    || config.classShorthandProperty === 'styleName'
+  ) ? config.classShorthandProperty : (shouldUseStyleNameByAuto ? 'styleName' : 'className');
+
+  const classMerge: 'concatenate' | 'classnames' = (
+    config.classShorthandMerge === 'concatenate'
+    || config.classShorthandMerge === 'classnames'
+  ) ? config.classShorthandMerge : (classAttribute === 'styleName' ? 'classnames' : 'concatenate');
+
+  return { classAttribute, classMerge };
 }
 
 async function configureTsPluginFromSettings(): Promise<void> {
@@ -80,9 +123,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const doc = editor.document;
         const text = doc.getText();
-        const tagFunction = readPluginConfig().tagFunction;
+        const pluginConfig = readPluginConfig();
+        const tagFunction = pluginConfig.tagFunction;
+        const classOptions = resolveClassShorthandOptions(text, pluginConfig);
 
-        const shadow = buildShadowDocument(text, doc.fileName, 1, tagFunction);
+        const shadow = buildShadowDocument(text, doc.fileName, 1, tagFunction, {
+          ...classOptions,
+          componentPathFromUppercaseClassShorthand: pluginConfig.componentPathFromUppercaseClassShorthand,
+        });
 
         if (shadow.regions.length === 0) {
           vscode.window.showInformationMessage('No pug templates found in the current file');

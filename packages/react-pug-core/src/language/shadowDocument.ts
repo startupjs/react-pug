@@ -1,6 +1,23 @@
 import type { PugDocument, PugRegion } from './mapping';
 import { extractPugRegions } from './extractRegions';
-import { compilePugToTsx } from './pugToTsx';
+import { compilePugToTsx, type CompileOptions } from './pugToTsx';
+
+const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
+
+function resolveCompileOptions(
+  originalText: string,
+  compileOptions: CompileOptions,
+): CompileOptions {
+  const startupDetected = STARTUPJS_OR_CSSXJS_RE.test(originalText);
+  const classAttribute = compileOptions.classAttribute ?? (startupDetected ? 'styleName' : 'className');
+  const classMerge = compileOptions.classMerge ?? (classAttribute === 'styleName' ? 'classnames' : 'concatenate');
+
+  return {
+    ...compileOptions,
+    classAttribute,
+    classMerge,
+  };
+}
 
 /**
  * Build a shadow document from source text.
@@ -15,7 +32,9 @@ export function buildShadowDocument(
   uri: string,
   version: number = 1,
   tagName: string = 'pug',
+  compileOptions: CompileOptions = {},
 ): PugDocument {
+  const resolvedCompileOptions = resolveCompileOptions(originalText, compileOptions);
   const regions = extractPugRegions(originalText, uri, tagName);
 
   if (regions.length === 0) {
@@ -33,11 +52,13 @@ export function buildShadowDocument(
   for (const region of regions) {
     if (region.parseError != null) {
       // Region already has an extraction-time error -- use placeholder
-      region.tsxText = '(null as any as JSX.Element)';
+      region.tsxText = resolvedCompileOptions.mode === 'runtime'
+        ? 'null'
+        : '(null as any as JSX.Element)';
       region.mappings = [];
       region.lexerTokens = [];
     } else {
-      const compiled = compilePugToTsx(region.pugText);
+      const compiled = compilePugToTsx(region.pugText, resolvedCompileOptions);
       region.tsxText = compiled.tsx;
       region.mappings = compiled.mappings;
       region.lexerTokens = compiled.lexerTokens;

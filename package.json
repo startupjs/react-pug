@@ -12,6 +12,9 @@
     "package": "npm run check-types && npm run clean:dist && node esbuild.config.mjs --production",
     "package:vsix": "npm run package && node scripts/package-vsix.mjs",
     "watch": "node esbuild.config.mjs --watch",
+    "test:core": "vitest run packages/react-pug-core/test",
+    "test:ts-plugin": "vitest run packages/typescript-plugin-react-pug/test",
+    "test:vscode:unit": "vitest run packages/vscode-react-pug-tsx/test/unit",
     "test:unit": "vitest run",
     "test": "npm run test:unit && npm run test:vscode",
     "deps:example": "node scripts/ensure-workspace-deps.mjs example",
@@ -29,11 +32,15 @@
     "vscode:fresh:example": "node scripts/open-vscode-fresh.mjs example"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@swc/core": "^1.15.18",
+    "@types/babel__core": "^7.20.5",
     "@types/node": "^25.3.3",
     "@types/vscode": "^1.109.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.27.3",
+    "eslint": "^9.39.3",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }

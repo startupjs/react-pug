@@ -211,6 +211,7 @@ describe('getScriptSnapshot patching', () => {
     expect(text).toContain("declare module 'react'");
     expect(text).toContain('part?: __PugReactPartProp');
     expect(text).toContain('styleName?: __PugReactStyleNameProp');
+    expect(text).toContain('type __PugReactStyleNameProp = __PugReactStyleNameLeaf | Array<__PugReactStyleNameProp>');
   });
 
   it('injects extra React attributes in auto mode when source contains "cssxjs"', async () => {
@@ -484,6 +485,64 @@ describe('pug-to-JSX transformation', () => {
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
     expect(text).toContain('<div className="foo" />');
+  });
+
+  it('class shorthand can target class via config', async () => {
+    const { host } = await setupPlugin(
+      { 'app.tsx': 'const v = pug`\n  .foo\n`' },
+      { classShorthandProperty: 'class' },
+    );
+    const text = snapshotText(host.getScriptSnapshot('app.tsx'));
+    expect(text).toContain('<div class="foo" />');
+    expect(text).not.toContain('className=');
+  });
+
+  it('class shorthand auto-switches to styleName+classnames when startupjs marker is present and inject auto', async () => {
+    const { host } = await setupPlugin({
+      'app.tsx': [
+        'import { pug } from "startupjs";',
+        'const v = pug`',
+        '  span.foo(styleName=active)',
+        '`;',
+      ].join('\n'),
+    });
+    const text = snapshotText(host.getScriptSnapshot('app.tsx'));
+    expect(text).toContain('styleName={["foo", active]}');
+  });
+
+  it('class shorthand merge can be forced to concatenate', async () => {
+    const { host } = await setupPlugin(
+      {
+        'app.tsx': 'const v = pug`\n  span.foo(styleName=active)\n`',
+      },
+      {
+        classShorthandProperty: 'styleName',
+        classShorthandMerge: 'concatenate',
+      },
+    );
+    const text = snapshotText(host.getScriptSnapshot('app.tsx'));
+    expect(text).toContain('styleName={"foo" + " " + (active)}');
+  });
+
+  it('uppercase shorthand segments after component name become component path by default', async () => {
+    const { host } = await setupPlugin({
+      'app.tsx': 'const v = pug`\n  Modal.Header.active(onPress=handlePress)\n`',
+    });
+    const text = snapshotText(host.getScriptSnapshot('app.tsx'));
+    expect(text).toContain('<Modal.Header');
+    expect(text).toContain('className="active"');
+    expect(text).not.toContain('className="Header active"');
+  });
+
+  it('componentPathFromUppercaseClassShorthand=false keeps uppercase shorthand as classes', async () => {
+    const { host } = await setupPlugin(
+      { 'app.tsx': 'const v = pug`\n  Modal.Header.active(onPress=handlePress)\n`' },
+      { componentPathFromUppercaseClassShorthand: false },
+    );
+    const text = snapshotText(host.getScriptSnapshot('app.tsx'));
+    expect(text).toContain('<Modal');
+    expect(text).toContain('className="Header active"');
+    expect(text).not.toContain('<Modal.Header');
   });
 
   it('transforms tag with attributes and text', async () => {

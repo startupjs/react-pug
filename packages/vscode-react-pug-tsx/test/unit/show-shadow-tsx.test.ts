@@ -323,6 +323,29 @@ describe('pugReact.showShadowTsx command', () => {
     expect(content).toContain('<span');
   });
 
+  it('auto class strategy switches shadow output to styleName with startupjs marker', async () => {
+    await activateExtension();
+    mockActiveTextEditor = {
+      document: {
+        getText: () => [
+          'import { pug } from "startupjs";',
+          'const active = { active: true };',
+          'const view = pug`span.title(styleName=active)`;',
+        ].join('\n'),
+        fileName: '/test/app.tsx',
+      },
+    };
+
+    const handler = registeredCommands.get('pugReact.showShadowTsx')!;
+    await handler();
+
+    const provider = registeredProviders.get('pug-react-shadow');
+    const uriArg = openTextDocument.mock.calls[0][0];
+    const content = provider.provideTextDocumentContent(uriArg);
+    expect(content).toContain('styleName={["title", active]}');
+    expect(content).not.toContain('className="title"');
+  });
+
   it('shadow content updates on repeated invocations', async () => {
     await activateExtension();
 

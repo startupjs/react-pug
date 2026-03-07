@@ -23,7 +23,7 @@ import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from '../../src/lang
 // [x] Buffered code: = expr -> {expr}
 // [x] Comments: stripped from output
 // [x] Conditionals: if/else -> ternary, if/else-if/else -> chained ternary
-// [x] Each loops: each item in items -> items.map(), with key/index
+// [x] Each loops: each item in items -> for..of IIFE accumulator, with key/index
 // [x] While loops: while condition -> IIFE with __r array
 // [x] Case/When: case expr / when val -> chained ternaries
 // [x] Code blocks: unbuffered code, IIFE wrapping when mixed with JSX
@@ -100,6 +100,13 @@ describe('tag compilation', () => {
     expect(result.tsx).toContain('<div>');
     expect(result.tsx).toContain('<span');
     expect(result.tsx).toContain('</div>');
+  });
+
+  it('does not treat capitalized components like Link as void html tags', () => {
+    const result = compilePugToTsx("Link(href='/x')\n  Button(label='A')");
+    expect(result.tsx).toContain('<Link');
+    expect(result.tsx).toContain('</Link>');
+    expect(result.tsx).toContain('<Button');
   });
 });
 
@@ -650,25 +657,27 @@ describe('conditionals', () => {
 // ── Each loops ──────────────────────────────────────────────────
 
 describe('each loops', () => {
-  it('basic each -> obj.map((val) => (...))', () => {
+  it('basic each -> for..of accumulator IIFE', () => {
     const pug = 'each item in items\n  li= item';
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const item of items)');
+    expect(result.tsx).toContain('const __pugEachResult: JSX.Element[] = []');
     expect(result.tsx).toContain('item');
-    expect(result.tsx).toContain('=>');
+    expect(result.tsx).toContain('__pugEachResult.push(');
     expect(result.tsx).toContain('<li');
     expect(result.parseError).toBeNull();
   });
 
-  it('each with key -> obj.map((val, key) => (...))', () => {
+  it('each with key -> for..of plus index binding', () => {
     const pug = 'each item, i in items\n  li= item';
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const item of items)');
     expect(result.tsx).toContain('item');
-    expect(result.tsx).toContain(', i');
-    expect(result.tsx).toContain('=>');
+    expect(result.tsx).toContain('let __pugEachIndex = 0;');
+    expect(result.tsx).toContain('const i = __pugEachIndex;');
+    expect(result.tsx).toContain('__pugEachIndex++;');
   });
 
   it('obj expression is mapped with FULL_FEATURES', () => {
@@ -703,7 +712,7 @@ describe('each loops', () => {
     const pug = 'each user in users\n  .card\n    h2= user.name\n    p= user.email';
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('users');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const user of users)');
     expect(result.tsx).toContain('<div');
     expect(result.tsx).toContain('className="card"');
     expect(result.tsx).toContain('<h2');
@@ -712,7 +721,7 @@ describe('each loops', () => {
     expect(result.tsx).toContain('</div>');
   });
 
-  it('each with empty body -> parse error or null in map', () => {
+  it('each with empty body -> parse error or null pushed', () => {
     // Bare each with no children may cause a parser error
     const pug = 'each item in items';
     const result = compilePugToTsx(pug);
@@ -725,10 +734,30 @@ describe('each loops', () => {
     const pug = 'each item in list\n  div= item';
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('list');
-    expect(result.tsx).toContain('.map(');
-    expect(result.tsx).not.toContain('{list.map(');
+    expect(result.tsx).toContain('for (const item of list)');
+    expect(result.tsx).not.toContain('.map(');
     expect(result.tsx).toContain('<div');
     expect(result.parseError).toBeNull();
+  });
+
+  it('each with else returns alternate block when list is empty', () => {
+    const pug = [
+      'each cat in cats',
+      '  li= cat.name',
+      'else',
+      '  p.empty No cats',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('for (const cat of cats)');
+    expect(result.tsx).toContain('return __pugEachResult.length ? __pugEachResult : ');
+    expect(result.tsx).toContain('<p className="empty">No cats</p>');
+    expect(result.parseError).toBeNull();
+  });
+
+  it('emits runtime-safe each loop output without TS annotations', () => {
+    const result = compilePugToTsx('each item in list\n  span= item', { mode: 'runtime' });
+    expect(result.tsx).toContain('const __pugEachResult = []');
+    expect(result.tsx).not.toContain('JSX.Element[]');
   });
 });
 
@@ -910,6 +939,20 @@ describe('code blocks', () => {
     expect(result.tsx).toContain('})()');
   });
 
+  it('wraps mixed unbuffered children in JSX expression container', () => {
+    const pug = [
+      'Modal(title="Demo")',
+      '  - const oppositeBreed = selectedBreed === "domestic" ? "wild" : "domestic"',
+      '  span= oppositeBreed',
+    ].join('\n');
+    const result = compilePugToTsx(pug);
+    expect(result.tsx).toContain('<Modal');
+    expect(result.tsx).toContain('{(() => {');
+    expect(result.tsx).toContain('const oppositeBreed');
+    expect(result.tsx).toContain('<span');
+    expect(result.parseError).toBeNull();
+  });
+
   it('code block expression is mapped with FULL_FEATURES', () => {
     const pug = '- const x = 10\nspan= x';
     const result = compilePugToTsx(pug);
@@ -972,7 +1015,7 @@ describe('control flow edge cases', () => {
     ].join('\n');
     const result = compilePugToTsx(pug);
     expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const item of items)');
     expect(result.tsx).toContain('item.active');
     expect(result.tsx).toContain('?');
     expect(result.tsx).toContain('item.name');
@@ -988,11 +1031,11 @@ describe('control flow edge cases', () => {
     expect(result.tsx).toContain('showList');
     expect(result.tsx).toContain('?');
     expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('.map(');
+    expect(result.tsx).toContain('for (const item of items)');
     expect(result.tsx).toContain('<li');
   });
 
-  it('else branch with each emits map expression (not object literal)', () => {
+  it('else branch with each emits loop expression (not object literal)', () => {
     const pug = [
       'if activeTodos.length === 0',
       '  p.empty All done!',
@@ -1002,8 +1045,8 @@ describe('control flow edge cases', () => {
     ].join('\n');
     const result = compilePugToTsx(pug);
     expect(result.parseError).toBeNull();
-    expect(result.tsx).toContain('activeTodos.map((');
-    expect(result.tsx).not.toMatch(/:\s*\{\s*activeTodos\.map\(/);
+    expect(result.tsx).toContain('for (const todo of activeTodos)');
+    expect(result.tsx).not.toMatch(/:\s*\{\s*for\s*\(/);
   });
 
   it('control flow with sibling tags uses fragment', () => {
@@ -1077,5 +1120,129 @@ describe('control flow edge cases', () => {
     expect(result.tsx).toContain('?');
     expect(result.tsx).toContain('Positive');
     expect(result.tsx).toContain('Zero or negative');
+  });
+});
+
+// ── Runtime compile mode ────────────────────────────────────────
+
+describe('runtime compile mode', () => {
+  it('emits runtime-safe while loop output without TS annotations', () => {
+    const result = compilePugToTsx('while ready\n  span Ok', { mode: 'runtime' });
+    expect(result.tsx).toContain('const __r = []');
+    expect(result.tsx).not.toContain('JSX.Element[]');
+  });
+
+  it('emits null placeholder in runtime mode for invalid pug', () => {
+    const result = compilePugToTsx('div(\n  !!!invalid', { mode: 'runtime' });
+    expect(result.tsx).toContain('null');
+    expect(result.tsx).not.toContain('(null as any as JSX.Element)');
+    expect(result.parseError).not.toBeNull();
+  });
+
+  it('preserves nested pug interpolation behavior in runtime mode', () => {
+    const pug = [
+      'Button(',
+      '  tooltip=${pug`span= tooltipText`}',
+      ')',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.tsx).toContain('<Button');
+    expect(result.tsx).toContain('<span');
+    expect(result.tsx).toContain('tooltipText');
+  });
+});
+
+// ── Class shorthand strategy ────────────────────────────────────
+
+describe('class shorthand strategy', () => {
+  it('defaults to className with concatenation semantics', () => {
+    const result = compilePugToTsx('span.title');
+    expect(result.tsx).toContain('className="title"');
+  });
+
+  it('can target plain class attribute', () => {
+    const result = compilePugToTsx('span.title', {
+      classAttribute: 'class',
+      classMerge: 'concatenate',
+    });
+    expect(result.tsx).toContain(' class="title"');
+    expect(result.tsx).not.toContain('className=');
+  });
+
+  it('classnames mode for styleName emits array merge', () => {
+    const result = compilePugToTsx('span.title(styleName=active)', {
+      classAttribute: 'styleName',
+      classMerge: 'classnames',
+    });
+    expect(result.tsx).toContain('styleName={["title", active]}');
+  });
+
+  it('concatenate mode for className merges into string expression', () => {
+    const result = compilePugToTsx('span.title(className=activeClass)', {
+      classAttribute: 'className',
+      classMerge: 'concatenate',
+    });
+    expect(result.tsx).toContain('className={"title" + " " + (activeClass)}');
+  });
+
+  it('classnames mode can be used without explicit attribute', () => {
+    const result = compilePugToTsx('span.title.bold', {
+      classAttribute: 'styleName',
+      classMerge: 'classnames',
+    });
+    expect(result.tsx).toContain('styleName={["title", "bold"]}');
+  });
+
+  it('keeps mapping for existing className attr when merged with shorthand class', () => {
+    const pug = "h1.active(className='hello')";
+    const result = compilePugToTsx(pug);
+    const classNameOffset = pug.indexOf('className');
+    expect(classNameOffset).toBeGreaterThanOrEqual(0);
+    expect(result.mappings.some(
+      (m) => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === classNameOffset
+        && m.lengths[0] === 'className'.length,
+    )).toBe(true);
+  });
+
+  it('keeps mapping for existing styleName attr when merged with shorthand class', () => {
+    const pug = 'Button.active(styleName=active)';
+    const result = compilePugToTsx(pug, {
+      classAttribute: 'styleName',
+      classMerge: 'classnames',
+    });
+    const styleNameOffset = pug.indexOf('styleName');
+    expect(styleNameOffset).toBeGreaterThanOrEqual(0);
+    expect(result.mappings.some(
+      (m) => m.data === FULL_FEATURES
+        && m.sourceOffsets[0] === styleNameOffset
+        && m.lengths[0] === 'styleName'.length,
+    )).toBe(true);
+  });
+});
+
+describe('component path from uppercase shorthand', () => {
+  it('treats leading uppercase shorthand segments as component path by default', () => {
+    const result = compilePugToTsx('Modal.Header.Right.icons.active(onPress=() => {})');
+    expect(result.tsx).toContain('<Modal.Header.Right');
+    expect(result.tsx).toContain('className="icons active"');
+    expect(result.tsx).toContain('onPress={() => {}}');
+    expect(result.tsx).not.toContain('className="Header Right icons active"');
+  });
+
+  it('stops component-path expansion at first lowercase shorthand segment', () => {
+    const result = compilePugToTsx('Modal.icons.active.Header.Right');
+    expect(result.tsx).toContain('<Modal');
+    expect(result.tsx).toContain('className="icons active Header Right"');
+    expect(result.tsx).not.toContain('<Modal.icons');
+  });
+
+  it('can disable uppercase shorthand component-path behavior via option', () => {
+    const result = compilePugToTsx('Modal.Header.Right.icons.active', {
+      componentPathFromUppercaseClassShorthand: false,
+    });
+    expect(result.tsx).toContain('<Modal');
+    expect(result.tsx).toContain('className="Header Right icons active"');
+    expect(result.tsx).not.toContain('<Modal.Header.Right');
   });
 });

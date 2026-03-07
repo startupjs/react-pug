@@ -7,6 +7,11 @@ const FIXTURES_DIR = path.resolve(__dirname, '../fixtures/spike');
 const APP_FILE = path.join(FIXTURES_DIR, 'app.tsx');
 const BUTTON_FILE = path.join(FIXTURES_DIR, 'Button.tsx');
 
+function snapshotText(snapshot: ts.IScriptSnapshot | undefined): string {
+  if (!snapshot) return '';
+  return snapshot.getText(0, snapshot.getLength());
+}
+
 async function loadPlugin() {
   const mod = await import('../../src/index.ts');
   return mod.default ?? mod;
@@ -288,5 +293,50 @@ describe('plugin with tagFunction config', () => {
     // TS should see the raw pug` text and may have errors
     const diags = result.ls.getSemanticDiagnostics(testFile);
     expect(Array.isArray(diags)).toBe(true);
+  });
+});
+
+// ── class shorthand config ──────────────────────────────────────
+
+describe('plugin with class shorthand config', () => {
+  it('auto mode uses styleName+classnames when startupjs marker is present with inject auto', async () => {
+    const init = await loadPlugin();
+    const file = path.join(FIXTURES_DIR, 'class-auto-startupjs.tsx');
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(file, [
+      'import { pug } from "startupjs";',
+      'const active = { active: true };',
+      'const view = pug`span.title(styleName=active)`;',
+    ].join('\n'));
+
+    const result = createLanguageServiceWithPlugin(
+      init,
+      [file, BUTTON_FILE],
+      FIXTURES_DIR,
+      { injectCssxjsTypes: 'auto' },
+      virtualFiles,
+    );
+
+    const shadow = snapshotText(result.host.getScriptSnapshot(file));
+    expect(shadow).toContain('styleName={["title", active]}');
+  });
+
+  it('can force shorthand target to class', async () => {
+    const init = await loadPlugin();
+    const file = path.join(FIXTURES_DIR, 'class-force-class.tsx');
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(file, 'const view = pug`span.title`;');
+
+    const result = createLanguageServiceWithPlugin(
+      init,
+      [file, BUTTON_FILE],
+      FIXTURES_DIR,
+      { classShorthandProperty: 'class' },
+      virtualFiles,
+    );
+
+    const shadow = snapshotText(result.host.getScriptSnapshot(file));
+    expect(shadow).toContain(' class="title"');
+    expect(shadow).not.toContain('className=');
   });
 });

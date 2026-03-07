@@ -174,6 +174,8 @@ describe('highlighting regressions for tag/class/equals lines', () => {
 
     expect('Button').toMatch(componentRegex);
     expect('Button.primary').toMatch(componentRegex);
+    expect('Modal.Header').toMatch(componentRegex);
+    expect('Modal.Header.active').toMatch(componentRegex);
     expect('Button=').toMatch(componentRegex);
 
     expect('span').toMatch(htmlRegex);
@@ -192,6 +194,7 @@ describe('highlighting regressions for tag/class/equals lines', () => {
     const tagBegin = new RegExp(rule.patterns[1].begin);
 
     expect('Button.primary= activeTodos.length').toMatch(componentBegin);
+    expect('Modal.Header.active= activeTodos.length').toMatch(componentBegin);
     expect('span.bold= activeTodos.length').toMatch(tagBegin);
     expect('if a = b').not.toMatch(tagBegin);
   });
@@ -206,6 +209,8 @@ describe('highlighting regressions for tag/class/equals lines', () => {
     const tagWithClass = new RegExp(classRule.patterns[2].match);
 
     expect('Button.primary').toMatch(componentWithClass);
+    expect('Modal.Header.active').toMatch(componentWithClass);
+    expect('Modal.icons.Header.Right').toMatch(componentWithClass);
     expect('span.bold').toMatch(tagWithClass);
   });
 

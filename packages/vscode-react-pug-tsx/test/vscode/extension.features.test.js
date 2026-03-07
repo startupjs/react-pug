@@ -158,6 +158,54 @@ suite('Extension Host Features (example workspace)', () => {
     });
   });
 
+  test('hover on merged className/styleName attrs still shows type info', async function () {
+    const hoverDoc = await createTempDoc(
+      '__vscode_test_hover_merged_class_attrs.tsx',
+      [
+        "import React from 'react';",
+        'const startupMarker = "startupjs";',
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const active = { active: true };',
+        'const view = pug`',
+        "  h1.active(className='hello')",
+        '  h1.active(styleName=active)',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+
+    const text = hoverDoc.getText();
+    const classNameIdx = text.indexOf('className');
+    const styleNameIdx = text.indexOf('styleName');
+    assert.ok(classNameIdx > 0, 'Could not find className in merged shorthand fixture');
+    assert.ok(styleNameIdx > 0, 'Could not find styleName in merged shorthand fixture');
+
+    const classNamePos = hoverDoc.positionAt(classNameIdx + 1);
+    const styleNamePos = hoverDoc.positionAt(styleNameIdx + 1);
+
+    const classNameHover = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeHoverProvider',
+        hoverDoc.uri,
+        classNamePos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    });
+    const classNameText = classNameHover.map(hoverText).join('\n');
+    assert.ok(/className/i.test(classNameText), 'Expected hover to include className type info');
+
+    const styleNameHover = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeHoverProvider',
+        hoverDoc.uri,
+        styleNamePos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    });
+    const styleNameText = styleNameHover.map(hoverText).join('\n');
+    assert.ok(/styleName/i.test(styleNameText), 'Expected hover to include styleName type info');
+  });
+
   test('completion inside pug includes typed component props', async function () {
     const completionDoc = await createTempDoc(
       '__vscode_test_completion.tsx',
@@ -674,6 +722,80 @@ suite('Extension Host Features (example workspace)', () => {
           scopes: stringifySmall(entry.scopes, 240),
         })),
     });
+  });
+
+  test('uppercase shorthand segments can form component path with class tail for highlight + IntelliSense', async function () {
+    this.timeout(60000);
+    const content = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'type HeaderProps = { onPress: () => void; title?: string };',
+      'const Modal: { Header: (props: HeaderProps) => any } = {',
+      '  Header: (_props: HeaderProps) => null,',
+      '};',
+      'const view = pug`',
+      '  Modal.Header.active(',
+      '`;',
+      'export { view };',
+    ].join('\n');
+    const doc = await createTempDoc('__vscode_test_component_path_uppercase_shorthand.tsx', content);
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+
+    const completionIdx = text.indexOf('Modal.Header.active(');
+    assert.ok(completionIdx > 0, 'Could not find Modal.Header.active( completion marker');
+    const completionPos = doc.positionAt(completionIdx + 'Modal.Header.active('.length);
+    editor.selection = new vscode.Selection(completionPos, completionPos);
+    editor.revealRange(new vscode.Range(completionPos, completionPos));
+
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        doc.uri,
+        completionPos,
+      );
+      return result && Array.isArray(result.items) && result.items.length > 0 ? result : null;
+    });
+    const labels = completions.items.map((item) => labelText(item.label));
+    assert.ok(
+      labels.includes('onPress'),
+      `Expected completion to include onPress for Modal.Header props. Top labels: ${labels.slice(0, 30).join(', ')}`,
+    );
+
+    const headerIdx = text.indexOf('Header');
+    assert.ok(headerIdx > 0, 'Could not find Header segment in Modal.Header.active');
+    const hoverPos = doc.positionAt(headerIdx + 1);
+    const hovers = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeHoverProvider',
+        doc.uri,
+        hoverPos,
+      );
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    });
+    const hover = hovers.map(hoverText).join('\n');
+    assert.ok(/HeaderProps|onPress/i.test(hover), 'Expected hover to resolve Modal.Header component type');
+
+    const syntaxTokens = await retry(async () => {
+      const result = await vscode.commands.executeCommand('_workbench.captureSyntaxTokens', doc.uri);
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    }, 45000, 500);
+    const tokenEntries = syntaxTokens
+      .map((token) => ({
+        text: typeof token?.c === 'string' ? token.c : '',
+        scopes: typeof token?.t === 'string' ? token.t : '',
+      }))
+      .filter((entry) => entry.text.length > 0);
+
+    const hasModalScope = tokenEntries.some((entry) =>
+      entry.text.includes('Modal') && /support\.class\.component\.tsx/.test(entry.scopes));
+    const hasHeaderScope = tokenEntries.some((entry) =>
+      entry.text.includes('Header') && /support\.class\.component\.tsx/.test(entry.scopes));
+    const hasActiveClassScope = tokenEntries.some((entry) =>
+      entry.text.includes('.active') && /entity\.other\.attribute-name\.class\.css/.test(entry.scopes));
+
+    assert.ok(hasModalScope, 'Expected Modal segment to keep component scope');
+    assert.ok(hasHeaderScope, 'Expected Header segment to keep component scope');
+    assert.ok(hasActiveClassScope, 'Expected .active segment to keep class shorthand scope');
   });
 
   test('go to definition inside pug resolves in-scope symbol', async () => {

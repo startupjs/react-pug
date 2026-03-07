@@ -1,19 +1,13 @@
 # react-pug
 
-Pug IntelliSense for React inside `pug\`...\`` tagged templates in VS Code.
+Pug support for React in two parts:
 
-You get JSX-like editor features inside Pug regions:
-
-- completions
-- hover
-- go-to-definition
-- rename/references
-- diagnostics/code actions
-- syntax highlighting
+- VS Code IntelliSense inside `pug\`...\`` templates
+- Build/lint transforms for Babel, SWC, esbuild, and ESLint
 
 ## Install
 
-### Option 1: Install from VSIX (from this repo)
+### VS Code extension (from this repo)
 
 ```bash
 npm ci
@@ -21,55 +15,98 @@ npm run package:vsix
 code --install-extension packages/vscode-react-pug-tsx/*.vsix
 ```
 
-### Option 2: Install from Marketplace
-
-If published in your environment, install extension id:
+Extension id:
 
 ```bash
 code --install-extension startupjs.vscode-react-pug-tsx
 ```
 
-## Quick Setup
+## Runtime/Build Packages
 
-Extension activates automatically for:
+Published package names:
 
-- TypeScript / TSX
-- JavaScript / JSX
+- `@startupjs/react-pug-core`
+- `@startupjs/typescript-plugin-react-pug`
+- `vscode-react-pug-tsx`
+- `@startupjs/babel-plugin-react-pug`
+- `@startupjs/swc-plugin-react-pug`
+- `@startupjs/esbuild-plugin-react-pug`
+- `@startupjs/eslint-plugin-react-pug`
 
-No `tsconfig.json` plugin setup or extra npm install is required when using this VS Code extension.
+### Babel
 
-## Usage
-
-```tsx
-import { Button } from './Button'
-
-const view = pug`
-  .app
-    Button(onClick=handleClick label="Click")
-    if show
-      p Hello #{user.name}
-`
+```js
+// babel.config.js
+module.exports = {
+  plugins: [
+    ['@startupjs/babel-plugin-react-pug', {
+      tagFunction: 'pug',
+      classShorthandProperty: 'auto',
+      classShorthandMerge: 'auto',
+      startupjsCssxjs: 'auto',
+      componentPathFromUppercaseClassShorthand: true
+    }]
+  ]
+}
 ```
 
-Command palette command:
+### SWC (programmatic)
 
-- `Pug React: Show Shadow TSX` (opens generated shadow TSX)
+```ts
+import { transformWithSwcReactPug } from '@startupjs/swc-plugin-react-pug'
 
-Main settings:
+const result = transformWithSwcReactPug(sourceCode, fileName, {
+  jsc: {
+    parser: { syntax: 'typescript', tsx: true },
+    transform: { react: { runtime: 'automatic' } }
+  },
+  sourceMaps: true
+})
+```
 
-- `pugReact.enabled` (default `true`)
-- `pugReact.diagnostics.enabled` (default `true`)
-- `pugReact.tagFunction` (default `"pug"`)
-- `pugReact.injectCssxjsTypes` (`"never" | "auto" | "force"`, default `"auto"`)
+### esbuild
 
-## Requirements
+```ts
+import { build } from 'esbuild'
+import { reactPugEsbuildPlugin } from '@startupjs/esbuild-plugin-react-pug'
 
-- VS Code `^1.85.0`
-- TypeScript project using a runtime/build transform such as:
-  - `babel-plugin-transform-react-pug`
-  - `@startupjs/babel-plugin-transform-react-pug`
+await build({
+  entryPoints: ['src/index.tsx'],
+  bundle: true,
+  plugins: [reactPugEsbuildPlugin()],
+  sourcemap: true
+})
+```
 
-This extension provides editor tooling only. It does not perform runtime/build transforms.
+### ESLint processor
+
+```js
+// eslint.config.js (flat config)
+import reactPugPlugin from '@startupjs/eslint-plugin-react-pug'
+
+export default [
+  {
+    files: ['**/*.{js,jsx,ts,tsx}'],
+    plugins: { 'react-pug': reactPugPlugin },
+    processor: 'react-pug/pug-react'
+  }
+]
+```
+
+## VS Code Settings
+
+- `pugReact.enabled`
+- `pugReact.diagnostics.enabled`
+- `pugReact.tagFunction`
+- `pugReact.injectCssxjsTypes`: `never | auto | force`
+- `pugReact.classShorthandProperty`: `auto | className | class | styleName`
+- `pugReact.classShorthandMerge`: `auto | concatenate | classnames`
+- `pugReact.componentPathFromUppercaseClassShorthand`: `boolean` (default `true`)
+
+Class shorthand behavior:
+
+- default auto: `className` + string concatenation
+- auto with `startupjs`/`cssxjs` marker: `styleName` + classnames-style array merge
 
 ## Development
 
@@ -77,12 +114,13 @@ This extension provides editor tooling only. It does not perform runtime/build t
 npm ci
 npm run typecheck
 npm run build
-npm run test:unit
+npm run test:core
+npm run test:ts-plugin
 npm run test:vscode
 npm test
 ```
 
-Useful extras:
+Useful:
 
 ```bash
 npm run test:vscode:example:screenshots
@@ -90,42 +128,36 @@ npm run vscode:fresh:example
 npm run check:pug:example
 ```
 
-Pug-aware CI type check command (without launching VS Code):
+Pug-aware CI type check for a target project (without VS Code UI):
 
 ```bash
 node scripts/check-pug-types.mjs <project-dir>
 ```
 
-## Architecture
-
-For the detailed technical design, data flow, mappings, plugin interception strategy, and test architecture, see:
-
-- [architecture.md](architecture.md)
-
 ## How It Works (High Level)
 
-1. The TypeScript plugin finds `pug\`...\`` regions in your file.
-2. Each Pug region is compiled into a shadow TSX representation.
-3. TypeScript language service runs against that shadow text.
-4. Results (completions, diagnostics, definitions, etc.) are mapped back to original Pug positions.
-
-This keeps native TS/VS Code behavior while giving JSX-like tooling inside Pug templates.
+1. `@startupjs/react-pug-core` finds tagged templates and compiles Pug regions.
+2. For editor tooling, the TS plugin builds a shadow document and remaps LS results.
+3. For build/lint tooling, compiler adapters transform source and remap diagnostics to original Pug ranges.
 
 ## Supported
 
-High-level supported Pug features:
-
 - tags/components
-- attributes and spread attributes
+- attrs and spread attrs
 - class/id shorthand
-- interpolation (`#{}` / `!{}` / `${}`)
-- line expressions (`tag= expression`)
-- conditionals (`if / else if / else`)
-- loops (`each`, `while`)
-- code lines (`- ...`)
-- text nodes and piped text (`|`)
+- interpolation: `#{}`, `!{}`, and `${}` (including nested `pug`)
+- line expressions: `tag= expression`
+- control flow: `if`, `else if`, `else`, `each`, `while`, `case/when`
+- unbuffered code: `- ...`
+- text nodes and `|` piped text
 
 ## Known Limitations
 
-- This extension provides editor tooling only (not runtime/build-time transform).
-- In heavily malformed in-progress edits, temporary IntelliSense mapping may be approximate until syntax stabilizes.
+- VS Code extension currently targets desktop extension host (not web extension host).
+- During heavily malformed in-progress edits, temporary mapping can be approximate until syntax stabilizes.
+
+## Architecture
+
+Detailed design and package internals:
+
+- [architecture.md](architecture.md)

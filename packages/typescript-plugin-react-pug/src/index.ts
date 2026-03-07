@@ -17,8 +17,9 @@ type __PugReactFlagObject = Record<string, __PugReactSimpleValue>
 // part: string OR array of (string | flag-object)
 type __PugReactPartProp = string | Array<string | __PugReactFlagObject>
 
-// styleName: string OR flag-object OR array of (undefined | string | flag-object)
-type __PugReactStyleNameProp = string | __PugReactFlagObject | Array<undefined | string | __PugReactFlagObject>
+// styleName: classnames-compatible value (string/object or nested arrays)
+type __PugReactStyleNameLeaf = undefined | string | __PugReactFlagObject
+type __PugReactStyleNameProp = __PugReactStyleNameLeaf | Array<__PugReactStyleNameProp>
 
 declare module 'react' {
   // For ANY React component (<MyComp ... />)
@@ -57,6 +58,20 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         || injectModeRaw === 'force'
         || injectModeRaw === 'auto'
       ) ? injectModeRaw : 'auto';
+      const classTargetRaw = config.classShorthandProperty;
+      const classShorthandProperty: 'auto' | 'className' | 'class' | 'styleName' = (
+        classTargetRaw === 'auto'
+        || classTargetRaw === 'className'
+        || classTargetRaw === 'class'
+        || classTargetRaw === 'styleName'
+      ) ? classTargetRaw : 'auto';
+      const classMergeRaw = config.classShorthandMerge;
+      const classShorthandMerge: 'auto' | 'concatenate' | 'classnames' = (
+        classMergeRaw === 'auto'
+        || classMergeRaw === 'concatenate'
+        || classMergeRaw === 'classnames'
+      ) ? classMergeRaw : 'auto';
+      const componentPathFromUppercaseClassShorthand = config.componentPathFromUppercaseClassShorthand !== false;
 
       const host = info.languageServiceHost;
       const originalGetSnapshot = host.getScriptSnapshot.bind(host);
@@ -65,6 +80,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       // Per-instance cache: stores PugDocument per file
       const docCache = new Map<string, PugDocument>();
       const fileExtraTypesState = new Map<string, boolean>();
+      const fileClassShorthandState = new Map<string, string>();
 
       function isTsOrTsxFile(fileName: string): boolean {
         const lower = fileName.toLowerCase();
@@ -78,6 +94,26 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         return STARTUPJS_OR_CSSXJS_RE.test(text);
       }
 
+      function resolveClassShorthandOptions(
+        text: string,
+      ): { classAttribute: 'className' | 'class' | 'styleName'; classMerge: 'concatenate' | 'classnames' } {
+        const startupDetected = STARTUPJS_OR_CSSXJS_RE.test(text);
+        const shouldUseStyleNameByAuto = injectCssxjsTypesMode === 'force'
+          || (injectCssxjsTypesMode === 'auto' && startupDetected);
+
+        const classAttribute: 'className' | 'class' | 'styleName' = (
+          classShorthandProperty === 'className'
+          || classShorthandProperty === 'class'
+          || classShorthandProperty === 'styleName'
+        ) ? classShorthandProperty : (shouldUseStyleNameByAuto ? 'styleName' : 'className');
+
+        const classMerge: 'concatenate' | 'classnames' = (
+          classShorthandMerge === 'concatenate' || classShorthandMerge === 'classnames'
+        ) ? classShorthandMerge : (classAttribute === 'styleName' ? 'classnames' : 'concatenate');
+
+        return { classAttribute, classMerge };
+      }
+
       host.getScriptSnapshot = (fileName: string) => {
         const original = originalGetSnapshot(fileName);
         if (!original) return original;
@@ -89,17 +125,29 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           const text = original.getText(0, original.getLength());
           const cached = docCache.get(fileName);
           const extraTypesEnabled = shouldInjectExtraReactAttributes(fileName, text);
+          const classOptions = resolveClassShorthandOptions(text);
+          const classState = `${classOptions.classAttribute}:${classOptions.classMerge}:${componentPathFromUppercaseClassShorthand ? '1' : '0'}`;
 
           // Return cached shadow if original text hasn't changed
           if (
             cached
             && cached.originalText === text
             && fileExtraTypesState.get(fileName) === extraTypesEnabled
+            && fileClassShorthandState.get(fileName) === classState
           ) {
             return tsModule.ScriptSnapshot.fromString(cached.shadowText);
           }
 
-          const doc = buildShadowDocument(text, fileName, (cached?.version ?? 0) + 1, tagFunction);
+          const doc = buildShadowDocument(
+            text,
+            fileName,
+            (cached?.version ?? 0) + 1,
+            tagFunction,
+            {
+              ...classOptions,
+              componentPathFromUppercaseClassShorthand,
+            },
+          );
 
           if (doc.regions.length > 0) {
             if (extraTypesEnabled) {
@@ -107,6 +155,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
             }
             docCache.set(fileName, doc);
             fileExtraTypesState.set(fileName, extraTypesEnabled);
+            fileClassShorthandState.set(fileName, classState);
             return tsModule.ScriptSnapshot.fromString(doc.shadowText);
           }
 
@@ -114,6 +163,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           if (cached) {
             docCache.delete(fileName);
             fileExtraTypesState.delete(fileName);
+            fileClassShorthandState.delete(fileName);
           }
           return original;
         } catch (e) {

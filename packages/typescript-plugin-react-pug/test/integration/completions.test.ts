@@ -294,6 +294,60 @@ describe('hover (getQuickInfoAtPosition) through real pipeline', () => {
     expect(quickInfo).toBeDefined();
     expect(quickInfo!.kind).toBe(ts.ScriptElementKind.constElement);
   });
+
+  it('hover on className works when shorthand class is also present', async () => {
+    const init = await loadPlugin();
+    const virtualFile = path.join(FIXTURES_DIR, '__virtual_hover_classname_shorthand.tsx');
+    const source = [
+      "import React from 'react';",
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const view = pug`',
+      "  h1.active(className='hello')",
+      '`;',
+      'export { view };',
+    ].join('\n');
+    const result = createLanguageServiceWithPlugin(
+      init,
+      [virtualFile, BUTTON_FILE, PLAIN_FILE],
+      FIXTURES_DIR,
+      new Map([[virtualFile, source]]),
+    );
+
+    const classNameIdx = source.indexOf('className');
+    expect(classNameIdx).toBeGreaterThan(-1);
+    const quickInfo = result.ls.getQuickInfoAtPosition(virtualFile, classNameIdx);
+    expect(quickInfo).toBeDefined();
+    const displayText = quickInfo!.displayParts!.map(p => p.text).join('');
+    expect(displayText).toContain('className');
+  });
+
+  it('hover on styleName works when shorthand class is also present', async () => {
+    const init = await loadPlugin();
+    const virtualFile = path.join(FIXTURES_DIR, '__virtual_hover_stylename_shorthand.tsx');
+    const source = [
+      "import React from 'react';",
+      'const startupMarker = "startupjs";',
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const active = { active: true };',
+      'const view = pug`',
+      '  h1.active(styleName=active)',
+      '`;',
+      'export { view };',
+    ].join('\n');
+    const result = createLanguageServiceWithPlugin(
+      init,
+      [virtualFile, BUTTON_FILE, PLAIN_FILE],
+      FIXTURES_DIR,
+      new Map([[virtualFile, source]]),
+    );
+
+    const styleNameIdx = source.indexOf('styleName');
+    expect(styleNameIdx).toBeGreaterThan(-1);
+    const quickInfo = result.ls.getQuickInfoAtPosition(virtualFile, styleNameIdx);
+    expect(quickInfo).toBeDefined();
+    const displayText = quickInfo!.displayParts!.map(p => p.text).join('');
+    expect(displayText).toContain('styleName');
+  });
 });
 
 describe('completions edge cases', () => {
