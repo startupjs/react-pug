@@ -26,7 +26,7 @@ export default observer(() => {
 
   const Stage = stages[$cat.getMyStage()]
 
-  return (<><Stack className="Screen" options={{
+  return (<><Stack styleName={["Screen"]} options={{
     headerTitle: renderTitle,
     headerRight: renderSettings
   }} /><Stage $cat={$cat} $event={$event} /></>)
@@ -38,7 +38,7 @@ const Profile = observer(({ $cat, $event }) => {
   const excludeNumber = $event.stage.get() !== STAGES.InProgress
   const profileEditFields = useFormFields(CAT_PROFILE_EDIT_FORM, excludeNumber ? { exclude: ['number'] } : {})
 
-  return (<><Div row={true} vAlign={'center'} gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}{$cat.getMyStage() === STAGES.Profile ? <Div className="hackSidePadding" /> : <Button variant={'text'} icon={faPen} onPress={() => $showEdit.set(true)}>{tablet ? 'Edit cat profile' : 'Edit'}</Button>}</Div><Modal title={'Edit cat profile'} $visible={$showEdit}><Form fields={profileEditFields} $value={$cat} /></Modal></>)
+  return (<><Div row={true} vAlign={'center'} gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}{$cat.getMyStage() === STAGES.Profile ? <Div styleName={["hackSidePadding"]} /> : <Button variant={'text'} icon={faPen} onPress={() => $showEdit.set(true)}>{tablet ? 'Edit cat profile' : 'Edit'}</Button>}</Div><Modal title={'Edit cat profile'} $visible={$showEdit}><Form fields={profileEditFields} $value={$cat} /></Modal></>)
   styl`
     .hackSidePadding
       width 1u

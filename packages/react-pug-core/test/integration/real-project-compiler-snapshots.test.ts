@@ -117,9 +117,6 @@ describe('real project fixtures compiler snapshots', () => {
 
       const shadowTransform = transformSourceFile(source, relativeFixture, {
         compileMode: 'languageService',
-        classAttribute: 'className',
-        classMerge: 'concatenate',
-        startupjsCssxjs: false,
       });
       expect(shadowTransform.code).toBe(shadowDoc.shadowText);
       const shadowMap = createTransformSourceMap(shadowTransform, relativeFixture);

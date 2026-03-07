@@ -3,6 +3,7 @@ import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDoc
 
 const SCHEME = 'pug-react-shadow';
 const TS_PLUGIN_NAME = '@startupjs/typescript-plugin-react-pug';
+const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
 
 let outputChannel: vscode.OutputChannel;
 
@@ -41,6 +42,28 @@ function readPluginConfig() {
     classShorthandProperty,
     classShorthandMerge,
   };
+}
+
+function resolveClassShorthandOptions(
+  sourceText: string,
+  config: ReturnType<typeof readPluginConfig>,
+): { classAttribute: 'className' | 'class' | 'styleName'; classMerge: 'concatenate' | 'classnames' } {
+  const startupDetected = STARTUPJS_OR_CSSXJS_RE.test(sourceText);
+  const shouldUseStyleNameByAuto = config.injectCssxjsTypes === 'force'
+    || (config.injectCssxjsTypes === 'auto' && startupDetected);
+
+  const classAttribute: 'className' | 'class' | 'styleName' = (
+    config.classShorthandProperty === 'className'
+    || config.classShorthandProperty === 'class'
+    || config.classShorthandProperty === 'styleName'
+  ) ? config.classShorthandProperty : (shouldUseStyleNameByAuto ? 'styleName' : 'className');
+
+  const classMerge: 'concatenate' | 'classnames' = (
+    config.classShorthandMerge === 'concatenate'
+    || config.classShorthandMerge === 'classnames'
+  ) ? config.classShorthandMerge : (classAttribute === 'styleName' ? 'classnames' : 'concatenate');
+
+  return { classAttribute, classMerge };
 }
 
 async function configureTsPluginFromSettings(): Promise<void> {
@@ -95,9 +118,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const doc = editor.document;
         const text = doc.getText();
-        const tagFunction = readPluginConfig().tagFunction;
+        const pluginConfig = readPluginConfig();
+        const tagFunction = pluginConfig.tagFunction;
+        const classOptions = resolveClassShorthandOptions(text, pluginConfig);
 
-        const shadow = buildShadowDocument(text, doc.fileName, 1, tagFunction);
+        const shadow = buildShadowDocument(text, doc.fileName, 1, tagFunction, classOptions);
 
         if (shadow.regions.length === 0) {
           vscode.window.showInformationMessage('No pug templates found in the current file');

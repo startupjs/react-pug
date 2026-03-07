@@ -124,6 +124,17 @@ describe('single pug region', () => {
     const doc = buildShadowDocument(text, 'test.tsx');
     expect(doc.regions[0].parseError).toBeNull();
   });
+
+  it('auto class strategy switches to styleName+classnames when startupjs marker is present', () => {
+    const text = [
+      'import { pug } from "startupjs";',
+      'const active = { active: true };',
+      'const v = pug`span.title(styleName=active)`;',
+    ].join('\n');
+    const doc = buildShadowDocument(text, 'test.tsx');
+    expect(doc.shadowText).toContain('styleName={["title", active]}');
+    expect(doc.shadowText).not.toContain('className="title"');
+  });
 });
 
 // ── Multiple regions ────────────────────────────────────────────
