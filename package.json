@@ -15,7 +15,6 @@
     "test:core": "vitest run packages/react-pug-core/test",
     "test:ts-plugin": "vitest run packages/typescript-plugin-react-pug/test",
     "test:vscode:unit": "vitest run packages/vscode-react-pug-tsx/test/unit",
-    "test:compilers": "vitest run packages/babel-plugin-react-pug/test packages/swc-plugin-react-pug/test packages/esbuild-plugin-react-pug/test packages/eslint-plugin-react-pug/test",
     "test:unit": "vitest run",
     "test": "npm run test:unit && npm run test:vscode",
     "deps:example": "node scripts/ensure-workspace-deps.mjs example",

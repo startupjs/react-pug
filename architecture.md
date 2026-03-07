@@ -279,13 +279,11 @@ Key scripts:
 - `npm run test:core`
 - `npm run test:ts-plugin`
 - `npm run test:vscode:unit`
-- `npm run test:compilers`
 - `npm run test:vscode`
 - `npm test` (unit + VS Code)
 
 CI jobs:
 
-- `compiler-integrations`: dedicated compiler adapter tests
 - `quality-gates`: typecheck, build, and full test flow (with xvfb for VS Code tests)
 
 ---

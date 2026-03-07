@@ -114,7 +114,6 @@ npm run typecheck
 npm run build
 npm run test:core
 npm run test:ts-plugin
-npm run test:compilers
 npm run test:vscode
 npm test
 ```
