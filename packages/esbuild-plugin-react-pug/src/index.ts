@@ -25,6 +25,7 @@ export interface EsbuildReactPugOptions {
   classShorthandProperty?: ClassAttributeOption;
   classShorthandMerge?: ClassMergeOption;
   startupjsCssxjs?: StartupjsCssxjsOption;
+  componentPathFromUppercaseClassShorthand?: boolean;
 }
 
 export interface EsbuildReactPugMetadata {
@@ -72,6 +73,7 @@ export function transformReactPugSourceForEsbuild(
     classAttribute: options.classShorthandProperty ?? 'auto',
     classMerge: options.classShorthandMerge ?? 'auto',
     startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
+    componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
   });
 
   return {

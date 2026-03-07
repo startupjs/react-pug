@@ -24,7 +24,7 @@ export default observer(() => {
     return <Profile $cat={$cat} $event={$event} />;
   }
   const Stage = stages[$cat.getMyStage()];
-  return <><Stack styleName={["Screen"]} options={{
+  return <><Stack.Screen options={{
       headerTitle: renderTitle,
       headerRight: renderSettings
     }} /><Stage $cat={$cat} $event={$event} /></>;

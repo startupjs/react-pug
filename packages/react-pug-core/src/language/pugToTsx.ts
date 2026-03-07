@@ -298,6 +298,7 @@ interface CompileContext {
   mode: CompileMode;
   classAttribute: ClassAttributeName;
   classMerge: ClassMergeMode;
+  componentPathFromUppercaseClassShorthand: boolean;
 }
 const compileContextStack: CompileContext[] = [];
 
@@ -323,6 +324,12 @@ function currentClassMerge(): ClassMergeMode {
   return compileContextStack.length > 0
     ? compileContextStack[compileContextStack.length - 1].classMerge
     : 'concatenate';
+}
+
+function currentComponentPathFromUppercaseClassShorthand(): boolean {
+  return compileContextStack.length > 0
+    ? compileContextStack[compileContextStack.length - 1].componentPathFromUppercaseClassShorthand
+    : true;
 }
 
 function createInterpolationMarker(index: number, length: number): string {
@@ -758,6 +765,7 @@ interface StaticClassShorthand {
   name: string;
   offset: number;
   sourceLength: number;
+  nameOffset: number;
 }
 
 function emitAttributeValueAsExpression(
@@ -859,16 +867,20 @@ function emitTag(
       // Shorthand class: val is like "'card'" (with quotes)
       const raw = attr.val;
       if (raw.startsWith("'") && raw.endsWith("'")) {
+        const classOffset = lineColToOffset(pugText, attr.line, attr.column);
         classNames.push({
           name: raw.slice(1, -1),
-          offset: lineColToOffset(pugText, attr.line, attr.column),
+          offset: classOffset,
           sourceLength: Math.max(1, raw.length),
+          nameOffset: classOffset + 1,
         });
       } else if (raw.startsWith('"') && raw.endsWith('"')) {
+        const classOffset = lineColToOffset(pugText, attr.line, attr.column);
         classNames.push({
           name: raw.slice(1, -1),
-          offset: lineColToOffset(pugText, attr.line, attr.column),
+          offset: classOffset,
           sourceLength: Math.max(1, raw.length),
+          nameOffset: classOffset + 1,
         });
       } else {
         // Dynamic class expression
@@ -888,6 +900,22 @@ function emitTag(
     }
   }
 
+  const componentPathFromUppercaseClassShorthand = currentComponentPathFromUppercaseClassShorthand();
+  const componentPathSegments: StaticClassShorthand[] = [];
+  if (componentPathFromUppercaseClassShorthand && /^[A-Z]/.test(node.name)) {
+    for (const classShorthand of classNames) {
+      if (!/^[A-Z]/.test(classShorthand.name)) break;
+      componentPathSegments.push(classShorthand);
+    }
+    if (componentPathSegments.length > 0) {
+      classNames.splice(0, componentPathSegments.length);
+    }
+  }
+
+  const resolvedTagName = componentPathSegments.length > 0
+    ? `${node.name}.${componentPathSegments.map((segment) => segment.name).join('.')}`
+    : node.name;
+
   // Check if tag name is synthetic (implicit div from shorthand)
   const isSyntheticDiv = node.name === 'div' && (classNames.length > 0 || idValue !== null)
     && node.column === (pugText.split('\n')[node.line - 1]?.indexOf('.') ?? -1) + 1;
@@ -898,6 +926,15 @@ function emitTag(
     emitter.emitSynthetic(node.name);
   } else {
     emitter.emitMapped(node.name, tagOffset, FULL_FEATURES);
+    for (const segment of componentPathSegments) {
+      emitter.emitSynthetic('.');
+      emitter.emitDerived(
+        segment.name,
+        segment.nameOffset,
+        Math.max(1, segment.name.length),
+        FULL_FEATURES,
+      );
+    }
   }
 
   // Emit shorthand classes according to current class strategy.
@@ -931,7 +968,7 @@ function emitTag(
   // Determine if tag has children
   const children = node.block?.nodes ?? [];
   const hasChildren = children.length > 0;
-  const isComponentTag = /^[A-Z]/.test(node.name);
+  const isComponentTag = /^[A-Z]/.test(resolvedTagName);
   const isVoid = !isComponentTag && VOID_ELEMENTS.has(node.name.toLowerCase());
 
   if (!hasChildren || isVoid) {
@@ -943,7 +980,7 @@ function emitTag(
     if (isSyntheticDiv) {
       emitter.emitSynthetic(node.name);
     } else {
-      emitter.emitSynthetic(node.name);
+      emitter.emitSynthetic(resolvedTagName);
     }
     emitter.emitSynthetic('>');
   }
@@ -1532,6 +1569,7 @@ export interface CompileOptions {
   mode?: CompileMode;
   classAttribute?: ClassAttributeName;
   classMerge?: ClassMergeMode;
+  componentPathFromUppercaseClassShorthand?: boolean;
 }
 
 function fallbackNullExpression(mode: CompileMode): string {
@@ -1546,6 +1584,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
   const mode = options.mode ?? 'languageService';
   const classAttribute = options.classAttribute ?? 'className';
   const classMerge = options.classMerge ?? 'concatenate';
+  const componentPathFromUppercaseClassShorthand = options.componentPathFromUppercaseClassShorthand ?? true;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const lex = require('@startupjs/pug-lexer');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1555,7 +1594,12 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
   const prepared = prepareTemplateInterpolations(pugText);
   const pugTextForParse = prepared.sanitizedText;
   interpolationContextStack.push(prepared.context);
-  compileContextStack.push({ mode, classAttribute, classMerge });
+  compileContextStack.push({
+    mode,
+    classAttribute,
+    classMerge,
+    componentPathFromUppercaseClassShorthand,
+  });
 
   try {
     let tokens: any[];

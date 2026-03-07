@@ -21,6 +21,7 @@ export interface BabelReactPugPluginOptions {
   classShorthandProperty?: ClassAttributeOption;
   classShorthandMerge?: ClassMergeOption;
   startupjsCssxjs?: StartupjsCssxjsOption;
+  componentPathFromUppercaseClassShorthand?: boolean;
 }
 
 export interface BabelReactPugMetadata {
@@ -44,6 +45,7 @@ export function transformReactPugSourceForBabel(
     classAttribute: options.classShorthandProperty ?? 'auto',
     classMerge: options.classShorthandMerge ?? 'auto',
     startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
+    componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
   });
 
   return {

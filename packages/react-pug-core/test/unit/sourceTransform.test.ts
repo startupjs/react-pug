@@ -115,4 +115,23 @@ describe('transformSourceFile', () => {
     expect(result.code).toContain('class="title"');
     expect(result.code).toContain('styleName={active}');
   });
+
+  it('treats leading uppercase shorthand segments as component path by default', () => {
+    const source = 'const view = pug`Modal.Header.active(onPress=handlePress)`;';
+    const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
+    expect(result.code).toContain('<Modal.Header');
+    expect(result.code).toContain('className="active"');
+    expect(result.code).not.toContain('className="Header active"');
+  });
+
+  it('can disable uppercase shorthand component-path behavior', () => {
+    const source = 'const view = pug`Modal.Header.active(onPress=handlePress)`;';
+    const result = transformSourceFile(source, 'file.tsx', {
+      compileMode: 'runtime',
+      componentPathFromUppercaseClassShorthand: false,
+    });
+    expect(result.code).toContain('<Modal');
+    expect(result.code).toContain('className="Header active"');
+    expect(result.code).not.toContain('<Modal.Header');
+  });
 });

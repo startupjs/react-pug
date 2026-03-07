@@ -71,6 +71,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         || classMergeRaw === 'concatenate'
         || classMergeRaw === 'classnames'
       ) ? classMergeRaw : 'auto';
+      const componentPathFromUppercaseClassShorthand = config.componentPathFromUppercaseClassShorthand !== false;
 
       const host = info.languageServiceHost;
       const originalGetSnapshot = host.getScriptSnapshot.bind(host);
@@ -125,7 +126,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           const cached = docCache.get(fileName);
           const extraTypesEnabled = shouldInjectExtraReactAttributes(fileName, text);
           const classOptions = resolveClassShorthandOptions(text);
-          const classState = `${classOptions.classAttribute}:${classOptions.classMerge}`;
+          const classState = `${classOptions.classAttribute}:${classOptions.classMerge}:${componentPathFromUppercaseClassShorthand ? '1' : '0'}`;
 
           // Return cached shadow if original text hasn't changed
           if (
@@ -142,7 +143,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
             fileName,
             (cached?.version ?? 0) + 1,
             tagFunction,
-            classOptions,
+            {
+              ...classOptions,
+              componentPathFromUppercaseClassShorthand,
+            },
           );
 
           if (doc.regions.length > 0) {

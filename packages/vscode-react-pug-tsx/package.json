@@ -89,6 +89,11 @@
             "Merge shorthand with explicit value using classnames-compatible arrays."
           ],
           "description": "Controls how shorthand classes are merged with an explicit class attribute value."
+        },
+        "pugReact.componentPathFromUppercaseClassShorthand": {
+          "type": "boolean",
+          "default": true,
+          "description": "When enabled, uppercase dot segments after a component name are treated as component path parts (for example Modal.Header.active => component Modal.Header with class .active)."
         }
       }
     },

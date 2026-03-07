@@ -31,6 +31,10 @@ function readPluginConfig() {
     || classShorthandMergeRaw === 'concatenate'
     || classShorthandMergeRaw === 'classnames'
   ) ? classShorthandMergeRaw : 'auto';
+  const componentPathFromUppercaseClassShorthand = config.get<boolean>(
+    'componentPathFromUppercaseClassShorthand',
+    true,
+  );
 
   return {
     enabled: config.get<boolean>('enabled', true),
@@ -41,6 +45,7 @@ function readPluginConfig() {
     injectCssxjsTypes,
     classShorthandProperty,
     classShorthandMerge,
+    componentPathFromUppercaseClassShorthand,
   };
 }
 
@@ -122,7 +127,10 @@ export function activate(context: vscode.ExtensionContext): void {
         const tagFunction = pluginConfig.tagFunction;
         const classOptions = resolveClassShorthandOptions(text, pluginConfig);
 
-        const shadow = buildShadowDocument(text, doc.fileName, 1, tagFunction, classOptions);
+        const shadow = buildShadowDocument(text, doc.fileName, 1, tagFunction, {
+          ...classOptions,
+          componentPathFromUppercaseClassShorthand: pluginConfig.componentPathFromUppercaseClassShorthand,
+        });
 
         if (shadow.regions.length === 0) {
           vscode.window.showInformationMessage('No pug templates found in the current file');

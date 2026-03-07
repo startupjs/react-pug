@@ -43,7 +43,8 @@ module.exports = {
       tagFunction: 'pug',
       classShorthandProperty: 'auto',
       classShorthandMerge: 'auto',
-      startupjsCssxjs: 'auto'
+      startupjsCssxjs: 'auto',
+      componentPathFromUppercaseClassShorthand: true
     }]
   ]
 }
@@ -100,6 +101,7 @@ export default [
 - `pugReact.injectCssxjsTypes`: `never | auto | force`
 - `pugReact.classShorthandProperty`: `auto | className | class | styleName`
 - `pugReact.classShorthandMerge`: `auto | concatenate | classnames`
+- `pugReact.componentPathFromUppercaseClassShorthand`: `boolean` (default `true`)
 
 Class shorthand behavior:
 

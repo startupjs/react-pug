@@ -13,7 +13,7 @@ var event_tabs_layout_default = observer(function TabLayout() {
   const { eventId } = useLocalSearchParams();
   const $event = useSub($.events[eventId]);
   if (!$event.get()) throw Error("No such event");
-  return <><Stack styleName={["Screen"]} options={{
+  return <><Stack.Screen options={{
     title: $event.name.get(),
     headerRight: () => renderEditEvent({ $event })
   }} /><Tabs title={$event.name.get()} screenOptions={{
@@ -22,18 +22,18 @@ var event_tabs_layout_default = observer(function TabLayout() {
     tabBarActiveBackgroundColor: "rgba(255, 255, 255, 0.5)",
     headerShown: false,
     headerTitle: $event.name.get()
-  }}><Tabs styleName={["Screen"]} name={"index"} options={{
+  }}><Tabs.Screen name={"index"} options={{
     title: "Dashboard",
     tabBarIcon: renderHomeIcon
-  }} /><Tabs styleName={["Screen"]} name={"-breed"} options={{
+  }} /><Tabs.Screen name={"-breed"} options={{
     href: null
-  }} /><Tabs styleName={["Screen"]} name={"domestic"} options={{
+  }} /><Tabs.Screen name={"domestic"} options={{
     title: "Domestic Cats",
     tabBarIcon: renderDomesticIcon
-  }} /><Tabs styleName={["Screen"]} name={"wild"} options={{
+  }} /><Tabs.Screen name={"wild"} options={{
     title: "Wild Cats",
     tabBarIcon: renderWildIcon
-  }} /><Tabs styleName={["Screen"]} name={"test"} options={{
+  }} /><Tabs.Screen name={"test"} options={{
     title: "Dev Only",
     tabBarIcon: renderTestIcon
   }} /></Tabs></>;

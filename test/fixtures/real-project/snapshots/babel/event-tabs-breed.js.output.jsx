@@ -76,7 +76,7 @@ const CatsList = observer(({
   return (() => {
     const __pugEachResult = [];
     for (const $cat of $cats) {
-      __pugEachResult.push(<Item key={$cat.getId()}><CatCard $cat={$cat} /><Item styleName={["Right"]}><Div vAlign={'center'} row={true} gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}<Button variant={'text'} icon={faPen} onPress={() => onEdit($cat)} tooltip={'Edit'} /><Link href={'/events/' + eventId + '/matches/' + $cat.getId()}><Button variant={'text'} icon={faHeart} tooltip={'Matches'} /></Link><Link href={'/cats/' + $cat.token.get()}><Button variant={'text'} icon={faLink} tooltip={'Cat profile link'}>Link</Button></Link></Div></Item></Item>);
+      __pugEachResult.push(<Item key={$cat.getId()}><CatCard $cat={$cat} /><Item.Right><Div vAlign={'center'} row={true} gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}<Button variant={'text'} icon={faPen} onPress={() => onEdit($cat)} tooltip={'Edit'} /><Link href={'/events/' + eventId + '/matches/' + $cat.getId()}><Button variant={'text'} icon={faHeart} tooltip={'Matches'} /></Link><Link href={'/cats/' + $cat.token.get()}><Button variant={'text'} icon={faLink} tooltip={'Cat profile link'}>Link</Button></Link></Div></Item.Right></Item>);
     }
     return __pugEachResult;
   })();

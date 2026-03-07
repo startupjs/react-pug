@@ -170,7 +170,7 @@
     "pug-tag-output-expression": {
       "patterns": [
         {
-          "begin": "(^\\s*)([A-Z][\\w$]*)(\\.[A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)*)?(\\s*=\\s*)",
+          "begin": "(^\\s*)([A-Z][\\w$]*(?:\\.[A-Z][\\w$]*)*)(\\.[A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)*)?(\\s*=\\s*)",
           "beginCaptures": {
             "2": {
               "name": "support.class.component.tsx"
@@ -282,7 +282,7 @@
     "pug-tag-line": {
       "patterns": [
         {
-          "match": "(^\\s*)([A-Z][\\w$]*)(?=\\s|$|[#.(=])",
+          "match": "(^\\s*)([A-Z][\\w$]*(?:\\.[A-Z][\\w$]*)*)(?=\\s|$|[#.(=])",
           "captures": {
             "2": {
               "name": "support.class.component.tsx"
@@ -310,7 +310,7 @@
           }
         },
         {
-          "match": "(^\\s*)([A-Z][\\w$]*)(\\.[A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)*)",
+          "match": "(^\\s*)([A-Z][\\w$]*(?:\\.[A-Z][\\w$]*)*)(\\.[A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)*)",
           "captures": {
             "2": {
               "name": "support.class.component.tsx"
@@ -340,7 +340,7 @@
           }
         },
         {
-          "match": "(^\\s*)([A-Z][\\w$]*)(#[A-Za-z_][\\w-]*)",
+          "match": "(^\\s*)([A-Z][\\w$]*(?:\\.[A-Z][\\w$]*)*)(#[A-Za-z_][\\w-]*)",
           "captures": {
             "2": {
               "name": "support.class.component.tsx"

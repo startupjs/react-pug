@@ -49,6 +49,18 @@ export interface SourceTransformOptions {
    * startupjs/cssxjs detection mode used by `auto` class strategy.
    */
   startupjsCssxjs?: StartupjsCssxjsOption;
+
+  /**
+   * When true, uppercase dot segments after a component name are treated as component path
+   * segments instead of shorthand classes.
+   *
+   * Example:
+   * - `Modal.Header.active` -> component `Modal.Header` + class `.active`
+   * - `Modal.icons.Header` -> component `Modal` + classes `.icons.Header`
+   *
+   * Defaults to true.
+   */
+  componentPathFromUppercaseClassShorthand?: boolean;
 }
 
 export interface SourceTransformResult {
@@ -109,6 +121,7 @@ export function transformSourceFile(
       mode: options.compileMode ?? 'languageService',
       classAttribute,
       classMerge,
+      componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
     },
   );
 

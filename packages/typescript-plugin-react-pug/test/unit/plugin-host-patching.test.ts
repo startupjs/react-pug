@@ -524,6 +524,27 @@ describe('pug-to-JSX transformation', () => {
     expect(text).toContain('styleName={"foo" + " " + (active)}');
   });
 
+  it('uppercase shorthand segments after component name become component path by default', async () => {
+    const { host } = await setupPlugin({
+      'app.tsx': 'const v = pug`\n  Modal.Header.active(onPress=handlePress)\n`',
+    });
+    const text = snapshotText(host.getScriptSnapshot('app.tsx'));
+    expect(text).toContain('<Modal.Header');
+    expect(text).toContain('className="active"');
+    expect(text).not.toContain('className="Header active"');
+  });
+
+  it('componentPathFromUppercaseClassShorthand=false keeps uppercase shorthand as classes', async () => {
+    const { host } = await setupPlugin(
+      { 'app.tsx': 'const v = pug`\n  Modal.Header.active(onPress=handlePress)\n`' },
+      { componentPathFromUppercaseClassShorthand: false },
+    );
+    const text = snapshotText(host.getScriptSnapshot('app.tsx'));
+    expect(text).toContain('<Modal');
+    expect(text).toContain('className="Header active"');
+    expect(text).not.toContain('<Modal.Header');
+  });
+
   it('transforms tag with attributes and text', async () => {
     const { host } = await setupPlugin({
       'app.tsx': 'const v = pug`\n  Button(onClick=handler) Click\n`',

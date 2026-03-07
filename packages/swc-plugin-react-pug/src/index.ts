@@ -22,6 +22,7 @@ export interface SwcReactPugOptions {
   classShorthandProperty?: ClassAttributeOption;
   classShorthandMerge?: ClassMergeOption;
   startupjsCssxjs?: StartupjsCssxjsOption;
+  componentPathFromUppercaseClassShorthand?: boolean;
 }
 
 export interface SwcReactPugMetadata {
@@ -50,6 +51,7 @@ export function transformReactPugSourceForSwc(
     classAttribute: options.classShorthandProperty ?? 'auto',
     classMerge: options.classShorthandMerge ?? 'auto',
     startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
+    componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
   });
 
   return {
@@ -88,6 +90,7 @@ export function transformWithSwcReactPug(
     classAttribute: options.classShorthandProperty ?? 'auto',
     classMerge: options.classShorthandMerge ?? 'auto',
     startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
+    componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
   });
   const transformed = {
     code: transformedCore.code,

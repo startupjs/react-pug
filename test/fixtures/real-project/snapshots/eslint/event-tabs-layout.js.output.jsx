@@ -19,7 +19,7 @@ export default observer(function TabLayout () {
   // NOTE:
   // headerShown -- Disable the static render of the header on web to prevent a hydration error in React Navigation v6.
   // tabBarStyle/order - Move the tab bar to the top on tablet+
-  return (<><Stack styleName={["Screen"]} options={{
+  return (<><Stack.Screen options={{
     title: $event.name.get(),
     headerRight: () => renderEditEvent({ $event })
   }} /><Tabs title={$event.name.get()} screenOptions={{
@@ -28,18 +28,18 @@ export default observer(function TabLayout () {
     tabBarActiveBackgroundColor: 'rgba(255, 255, 255, 0.5)',
     headerShown: false,
     headerTitle: $event.name.get()
-  }}><Tabs styleName={["Screen"]} name={'index'} options={{
+  }}><Tabs.Screen name={'index'} options={{
       title: 'Dashboard',
       tabBarIcon: renderHomeIcon
-    }} /><Tabs styleName={["Screen"]} name={'-breed'} options={{
+    }} /><Tabs.Screen name={'-breed'} options={{
       href: null
-    }} /><Tabs styleName={["Screen"]} name={'domestic'} options={{
+    }} /><Tabs.Screen name={'domestic'} options={{
       title: 'Domestic Cats',
       tabBarIcon: renderDomesticIcon
-    }} /><Tabs styleName={["Screen"]} name={'wild'} options={{
+    }} /><Tabs.Screen name={'wild'} options={{
       title: 'Wild Cats',
       tabBarIcon: renderWildIcon
-    }} /><Tabs styleName={["Screen"]} name={'test'} options={{
+    }} /><Tabs.Screen name={'test'} options={{
       title: 'Dev Only',
       tabBarIcon: renderTestIcon
     }} /></Tabs></>)

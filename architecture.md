@@ -182,12 +182,16 @@ Core compile options:
 - `classAttribute`: `auto | className | class | styleName`
 - `classMerge`: `auto | concatenate | classnames`
 - `startupjsCssxjs`: `auto | true | false`
+- `componentPathFromUppercaseClassShorthand`: `boolean` (default `true`)
 
 Default behavior:
 
 - `auto` => `className + concatenate`
 - if startupjs/cssxjs marker is detected and auto mode is active:
   - `styleName + classnames`
+- if `componentPathFromUppercaseClassShorthand` is enabled:
+  - leading uppercase dot-segments after a component are treated as component path
+  - first lowercase segment starts class shorthand mode for the rest of the chain
 
 `styleName + classnames` emit supports nested array/object forms.
 

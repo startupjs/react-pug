@@ -1193,3 +1193,29 @@ describe('class shorthand strategy', () => {
     expect(result.tsx).toContain('styleName={["title", "bold"]}');
   });
 });
+
+describe('component path from uppercase shorthand', () => {
+  it('treats leading uppercase shorthand segments as component path by default', () => {
+    const result = compilePugToTsx('Modal.Header.Right.icons.active(onPress=() => {})');
+    expect(result.tsx).toContain('<Modal.Header.Right');
+    expect(result.tsx).toContain('className="icons active"');
+    expect(result.tsx).toContain('onPress={() => {}}');
+    expect(result.tsx).not.toContain('className="Header Right icons active"');
+  });
+
+  it('stops component-path expansion at first lowercase shorthand segment', () => {
+    const result = compilePugToTsx('Modal.icons.active.Header.Right');
+    expect(result.tsx).toContain('<Modal');
+    expect(result.tsx).toContain('className="icons active Header Right"');
+    expect(result.tsx).not.toContain('<Modal.icons');
+  });
+
+  it('can disable uppercase shorthand component-path behavior via option', () => {
+    const result = compilePugToTsx('Modal.Header.Right.icons.active', {
+      componentPathFromUppercaseClassShorthand: false,
+    });
+    expect(result.tsx).toContain('<Modal');
+    expect(result.tsx).toContain('className="Header Right icons active"');
+    expect(result.tsx).not.toContain('<Modal.Header.Right');
+  });
+});

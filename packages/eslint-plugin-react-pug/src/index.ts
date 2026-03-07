@@ -13,6 +13,7 @@ export interface EslintReactPugProcessorOptions {
   classShorthandProperty?: ClassAttributeOption;
   classShorthandMerge?: ClassMergeOption;
   startupjsCssxjs?: StartupjsCssxjsOption;
+  componentPathFromUppercaseClassShorthand?: boolean;
 }
 
 interface EslintLintMessage {
@@ -75,6 +76,7 @@ export function createReactPugProcessor(
         classAttribute: options.classShorthandProperty ?? 'auto',
         classMerge: options.classShorthandMerge ?? 'auto',
         startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
+        componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
       });
       cache.set(filename, transformed);
       return [transformed.code];

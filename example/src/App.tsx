@@ -17,6 +17,10 @@ const initialTodos: Todo[] = [
   { id: 3, text: 'Check autocomplete on props', done: true },
 ];
 
+const Modal = {
+  Header: Button,
+};
+
 export default function App() {
   const [todos, setTodos] = useState<Todo[]>(initialTodos);
   const [showCompleted, setShowCompleted] = useState(true);
@@ -39,6 +43,7 @@ export default function App() {
         .toolbar
           Button(onClick=handleReset, label="Reset", variant="secondary")
           Button(onClick=() => setShowCompleted(!showCompleted), label=showCompleted ? "Hide Done" : "Show Done")
+          Modal.Header.active(onClick=handleReset, label="Reset From Modal.Header", variant="secondary")
 
         h3 Active (#{activeTodos.length})
         if activeTodos.length === 0
