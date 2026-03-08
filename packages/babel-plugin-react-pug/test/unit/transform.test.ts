@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { transformSync } from '@babel/core';
+import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping';
+import babelPluginTransformReactJsx from '@babel/plugin-transform-react-jsx';
 import babelPluginReactPug, {
   mapBabelGeneratedDiagnosticToOriginal,
   transformReactPugSourceForBabel,
@@ -11,6 +13,7 @@ import {
   COMPILER_STRESS_SOURCE_TSX,
   expectNoTsOnlyRuntimeSyntax,
 } from '../../../react-pug-core/test/fixtures/compiler-fixtures';
+import { lineColumnToOffset, offsetToLineColumn } from '../../../react-pug-core/src/language/diagnosticMapping';
 
 function transform(
   code: string,
@@ -34,6 +37,33 @@ function transform(
 
   if (!result?.code) throw new Error('Babel transform returned empty code');
   return result.code;
+}
+
+function expectSourceMapPointsToOriginal(
+  source: string,
+  generatedCode: string,
+  sourceMap: any,
+  generatedSnippet: string,
+  originalSnippet: string = generatedSnippet,
+): void {
+  const generatedOffset = generatedCode.indexOf(generatedSnippet);
+  expect(generatedOffset).toBeGreaterThanOrEqual(0);
+
+  const expectedOriginalOffset = source.indexOf(originalSnippet);
+  expect(expectedOriginalOffset).toBeGreaterThanOrEqual(0);
+
+  const generatedLc = offsetToLineColumn(generatedCode, generatedOffset);
+  const original = originalPositionFor(new TraceMap(sourceMap), {
+    line: generatedLc.line,
+    column: generatedLc.column - 1,
+  });
+
+  expect(original.source).toBeTruthy();
+  expect(original.line).not.toBeNull();
+  expect(original.column).not.toBeNull();
+
+  const actualOriginalOffset = lineColumnToOffset(source, original.line!, original.column! + 1);
+  expect(actualOriginalOffset).toBe(expectedOriginalOffset);
 }
 
 describe('babel-plugin-react-pug transform', () => {
@@ -162,7 +192,73 @@ describe('babel-plugin-react-pug transform', () => {
       plugins: [[babelPluginReactPug, { mode: 'runtime' }]],
     });
     expect(result?.map).toBeTruthy();
-    expect(result?.map?.sources).toContain('sourcemap-fixture.tsx');
+    expect(result?.map?.sources.some((source: string) => source.endsWith('sourcemap-fixture.tsx'))).toBe(true);
+  });
+
+  it('maps final babel output positions back to exact pug source offsets', () => {
+    const input = 'const view = pug`span= title.toUpperCase()`;';
+    const result = transformSync(input, {
+      filename: 'sourcemap-fixture.tsx',
+      configFile: false,
+      babelrc: false,
+      sourceMaps: true,
+      parserOpts: {
+        sourceType: 'module',
+        plugins: ['typescript', 'jsx'],
+      },
+      generatorOpts: {
+        compact: false,
+        comments: false,
+      },
+      plugins: [[babelPluginReactPug, { mode: 'runtime' }]],
+    });
+
+    expect(result?.code).toBeTruthy();
+    expect(result?.map).toBeTruthy();
+    expectSourceMapPointsToOriginal(
+      input,
+      result?.code ?? '',
+      result?.map,
+      'title.toUpperCase',
+    );
+  });
+
+  it('preserves mappings through a downstream JSX transform after react-pug', () => {
+    const input = [
+      'const title = "Hello";',
+      'const view = pug`',
+      '  if visible',
+      '    span= title.toUpperCase()',
+      '`;',
+    ].join('\n');
+
+    const result = transformSync(input, {
+      filename: 'chained-sourcemap-fixture.tsx',
+      configFile: false,
+      babelrc: false,
+      sourceMaps: true,
+      parserOpts: {
+        sourceType: 'module',
+        plugins: ['typescript', 'jsx'],
+      },
+      generatorOpts: {
+        compact: false,
+        comments: false,
+      },
+      plugins: [
+        [babelPluginReactPug, { mode: 'runtime' }],
+        [babelPluginTransformReactJsx, { runtime: 'classic' }],
+      ],
+    });
+
+    expect(result?.code).toContain('React.createElement');
+    expect(result?.map).toBeTruthy();
+    expectSourceMapPointsToOriginal(
+      input,
+      result?.code ?? '',
+      result?.map,
+      'title.toUpperCase',
+    );
   });
 
   it('stores transform metadata on babel file for downstream remapping', () => {
