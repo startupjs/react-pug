@@ -153,7 +153,7 @@ describe('real project fixtures compiler snapshots', () => {
           compact: false,
           comments: false,
         },
-        plugins: [[babelPluginReactPug, { mode: 'runtime' }]],
+        plugins: [[babelPluginReactPug, { mode: 'runtime', sourceMaps: 'detailed' }]],
       });
       expect(babelResult?.code).toBeTruthy();
       await expect(babelResult?.code ?? '').toMatchFileSnapshot(snapshotPath('babel', fileName, 'output.jsx'));

@@ -41,6 +41,7 @@ module.exports = {
   plugins: [
     ['@startupjs/babel-plugin-react-pug', {
       tagFunction: 'pug',
+      sourceMaps: 'basic',
       classShorthandProperty: 'auto',
       classShorthandMerge: 'auto',
       startupjsCssxjs: 'auto',
@@ -49,6 +50,11 @@ module.exports = {
   ]
 }
 ```
+
+Babel source map modes:
+
+- `sourceMaps: 'basic'` (default) keeps Babel on the simple AST replacement path and produces coarse mappings for transformed Pug regions.
+- `sourceMaps: 'detailed'` enables granular mappings back into Pug content by using Babel `parserOverride` plus an inline input source map. Use this when you care about devtools/debugger fidelity through later Babel transforms.
 
 ### SWC (programmatic)
 
@@ -120,6 +126,12 @@ npm run test:vscode
 npm test
 ```
 
+If you are working in an environment with `NODE_ENV=production`, install dev dependencies explicitly:
+
+```bash
+npm ci --include=dev
+```
+
 Useful:
 
 ```bash
@@ -155,6 +167,7 @@ node scripts/check-pug-types.mjs <project-dir>
 
 - VS Code extension currently targets desktop extension host (not web extension host).
 - During heavily malformed in-progress edits, temporary mapping can be approximate until syntax stabilizes.
+- Babel `sourceMaps: 'basic'` is compatibility-first and does not preserve fine-grained mappings within a Pug region. Use `sourceMaps: 'detailed'` when you need granular Babel source maps.
 
 ## Architecture
 

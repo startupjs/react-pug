@@ -66,6 +66,27 @@ function expectSourceMapPointsToOriginal(
   expect(actualOriginalOffset).toBe(expectedOriginalOffset);
 }
 
+function getOriginalOffsetFromSourceMap(
+  source: string,
+  generatedCode: string,
+  sourceMap: any,
+  generatedSnippet: string,
+): number {
+  const generatedOffset = generatedCode.indexOf(generatedSnippet);
+  expect(generatedOffset).toBeGreaterThanOrEqual(0);
+
+  const generatedLc = offsetToLineColumn(generatedCode, generatedOffset);
+  const original = originalPositionFor(new TraceMap(sourceMap), {
+    line: generatedLc.line,
+    column: generatedLc.column - 1,
+  });
+
+  expect(original.line).not.toBeNull();
+  expect(original.column).not.toBeNull();
+
+  return lineColumnToOffset(source, original.line!, original.column! + 1);
+}
+
 describe('babel-plugin-react-pug transform', () => {
   it('replaces pug tagged template with JSX expression', () => {
     const out = transform('const view = pug`Button(label=\"Save\")`;');
@@ -195,6 +216,38 @@ describe('babel-plugin-react-pug transform', () => {
     expect(result?.map?.sources.some((source: string) => source.endsWith('sourcemap-fixture.tsx'))).toBe(true);
   });
 
+  it('uses basic sourcemap mode by default', () => {
+    const input = 'const view = pug`span= title.toUpperCase()`;';
+    const result = transformSync(input, {
+      filename: 'basic-sourcemap-fixture.tsx',
+      configFile: false,
+      babelrc: false,
+      sourceMaps: true,
+      parserOpts: {
+        sourceType: 'module',
+        plugins: ['typescript', 'jsx'],
+      },
+      generatorOpts: {
+        compact: false,
+        comments: false,
+      },
+      plugins: [[babelPluginReactPug, { mode: 'runtime' }]],
+    });
+
+    const mappedOffset = getOriginalOffsetFromSourceMap(
+      input,
+      result?.code ?? '',
+      result?.map,
+      'title.toUpperCase',
+    );
+    const exactOffset = input.indexOf('title.toUpperCase');
+    const pugSectionStart = input.indexOf('span= title.toUpperCase()');
+
+    expect(mappedOffset).not.toBe(exactOffset);
+    expect(mappedOffset).toBeGreaterThanOrEqual(pugSectionStart);
+    expect(mappedOffset).toBeLessThan(exactOffset);
+  });
+
   it('maps final babel output positions back to exact pug source offsets', () => {
     const input = 'const view = pug`span= title.toUpperCase()`;';
     const result = transformSync(input, {
@@ -210,7 +263,7 @@ describe('babel-plugin-react-pug transform', () => {
         compact: false,
         comments: false,
       },
-      plugins: [[babelPluginReactPug, { mode: 'runtime' }]],
+      plugins: [[babelPluginReactPug, { mode: 'runtime', sourceMaps: 'detailed' }]],
     });
 
     expect(result?.code).toBeTruthy();
@@ -246,7 +299,7 @@ describe('babel-plugin-react-pug transform', () => {
         comments: false,
       },
       plugins: [
-        [babelPluginReactPug, { mode: 'runtime' }],
+        [babelPluginReactPug, { mode: 'runtime', sourceMaps: 'detailed' }],
         [babelPluginTransformReactJsx, { runtime: 'classic' }],
       ],
     });

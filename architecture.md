@@ -81,7 +81,9 @@ VS Code extension host package:
 Babel transform adapter:
 
 - rewrites `pug\`...\`` via `react-pug-core` runtime mode
-- reparses transformed source into Babel AST
+- supports `sourceMaps: 'basic' | 'detailed'`
+- `basic` mode reparses transformed source into Babel AST and replaces the current program body
+- `detailed` mode uses `parserOverride` plus an inline input source map so later Babel transforms can compose mappings back to original Pug offsets
 - stores transform metadata on Babel file for downstream remapping
 
 ### 3.5 `@startupjs/swc-plugin-react-pug`
@@ -235,9 +237,15 @@ Grammar is focused on rich highlighting while semantic correctness remains TS-pl
 
 ### Babel
 
-- transform source text with core runtime mode
-- parse transformed result with Babel parser
-- replace program body in current AST
+- `basic` mode:
+  - transform source text with core runtime mode
+  - parse transformed result with Babel parser
+  - replace program body in current AST
+- `detailed` mode:
+  - transform source text with core runtime mode
+  - attach the core source map as an inline input map
+  - parse transformed result via Babel `parserOverride`
+  - let later Babel plugins operate on the transformed AST while Babel composes the final source map chain
 
 ### SWC
 
@@ -272,6 +280,7 @@ Important coverage themes:
 - multi-region files
 - runtime TS-syntax safety for JS/JSX
 - source map generation in compiler flows
+- Babel source-map chaining through a downstream JSX transform
 - generated->original diagnostic mapping fidelity
 
 ---
@@ -296,4 +305,6 @@ CI jobs:
 
 - VS Code extension targets desktop extension host (no web extension host build).
 - Runtime transform equivalence is behavior-oriented, not intended to be byte-identical to legacy Babel plugins.
+- Babel `sourceMaps: 'basic'` is the compatibility-first default and only provides coarse region-level source maps.
+- Babel `sourceMaps: 'detailed'` provides granular maps, but does so by taking ownership of parsing via `parserOverride`, which is less composable with other parse-owning Babel plugins.
 - During very incomplete edits, temporary IntelliSense mapping may be approximate until syntax stabilizes.
