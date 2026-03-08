@@ -216,8 +216,12 @@ describe('babel-plugin-react-pug transform', () => {
     expect(result?.map?.sources.some((source: string) => source.endsWith('sourcemap-fixture.tsx'))).toBe(true);
   });
 
-  it('uses basic sourcemap mode by default', () => {
-    const input = 'const view = pug`span= title.toUpperCase()`;';
+  it('uses basic sourcemap mode by default and preserves exact mappings outside pug', () => {
+    const input = [
+      'const title = "Hello";',
+      'const view = pug`span= title.toUpperCase()`;',
+      'const afterValue = title.trim();',
+    ].join('\n');
     const result = transformSync(input, {
       filename: 'basic-sourcemap-fixture.tsx',
       configFile: false,
@@ -240,12 +244,18 @@ describe('babel-plugin-react-pug transform', () => {
       result?.map,
       'title.toUpperCase',
     );
-    const exactOffset = input.indexOf('title.toUpperCase');
-    const pugSectionStart = input.indexOf('span= title.toUpperCase()');
+    const exactPugOffset = input.indexOf('title.toUpperCase');
+    const afterOffset = getOriginalOffsetFromSourceMap(
+      input,
+      result?.code ?? '',
+      result?.map,
+      'title.trim',
+    );
+    const exactAfterOffset = input.indexOf('title.trim');
 
-    expect(mappedOffset).not.toBe(exactOffset);
-    expect(mappedOffset).toBeGreaterThanOrEqual(pugSectionStart);
-    expect(mappedOffset).toBeLessThan(exactOffset);
+    expect(mappedOffset).not.toBe(exactPugOffset);
+    expect(mappedOffset).toBeLessThan(exactPugOffset);
+    expect(afterOffset).toBe(exactAfterOffset);
   });
 
   it('maps final babel output positions back to exact pug source offsets', () => {

@@ -82,7 +82,7 @@ Babel transform adapter:
 
 - rewrites `pug\`...\`` via `react-pug-core` runtime mode
 - supports `sourceMaps: 'basic' | 'detailed'`
-- `basic` mode reparses transformed source into Babel AST and replaces the current program body
+- `basic` mode parses region-level replacement expressions and swaps only matched `pug` tagged-template expressions during `Program` traversal
 - `detailed` mode uses `parserOverride` plus an inline input source map so later Babel transforms can compose mappings back to original Pug offsets
 - stores transform metadata on Babel file for downstream remapping
 
@@ -239,8 +239,9 @@ Grammar is focused on rich highlighting while semantic correctness remains TS-pl
 
 - `basic` mode:
   - transform source text with core runtime mode
-  - parse transformed result with Babel parser
-  - replace program body in current AST
+  - parse each transformed Pug region as a replacement expression
+  - replace only the matched `pug` tagged-template expressions during `Program` traversal
+  - preserve normal Babel locations for surrounding non-Pug AST
 - `detailed` mode:
   - transform source text with core runtime mode
   - attach the core source map as an inline input map
@@ -305,6 +306,6 @@ CI jobs:
 
 - VS Code extension targets desktop extension host (no web extension host build).
 - Runtime transform equivalence is behavior-oriented, not intended to be byte-identical to legacy Babel plugins.
-- Babel `sourceMaps: 'basic'` is the compatibility-first default and only provides coarse region-level source maps.
+- Babel `sourceMaps: 'basic'` is the compatibility-first default and only provides coarse source maps within transformed Pug regions.
 - Babel `sourceMaps: 'detailed'` provides granular maps, but does so by taking ownership of parsing via `parserOverride`, which is less composable with other parse-owning Babel plugins.
 - During very incomplete edits, temporary IntelliSense mapping may be approximate until syntax stabilizes.

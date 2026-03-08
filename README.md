@@ -53,7 +53,7 @@ module.exports = {
 
 Babel source map modes:
 
-- `sourceMaps: 'basic'` (default) keeps Babel on the simple AST replacement path and produces coarse mappings for transformed Pug regions.
+- `sourceMaps: 'basic'` (default) keeps Babel on the simple AST replacement path, replaces only matched `pug` tagged-template expressions during `Program` traversal, and produces coarse mappings for transformed Pug regions while leaving surrounding JS/TS mappings Babel-native.
 - `sourceMaps: 'detailed'` enables granular mappings back into Pug content by using Babel `parserOverride` plus an inline input source map. Use this when you care about devtools/debugger fidelity through later Babel transforms.
 
 ### SWC (programmatic)
@@ -167,7 +167,7 @@ node scripts/check-pug-types.mjs <project-dir>
 
 - VS Code extension currently targets desktop extension host (not web extension host).
 - During heavily malformed in-progress edits, temporary mapping can be approximate until syntax stabilizes.
-- Babel `sourceMaps: 'basic'` is compatibility-first and does not preserve fine-grained mappings within a Pug region. Use `sourceMaps: 'detailed'` when you need granular Babel source maps.
+- Babel `sourceMaps: 'basic'` is compatibility-first and does not preserve fine-grained mappings within a transformed Pug region. Surrounding non-Pug JS/TS code keeps normal Babel mappings. Use `sourceMaps: 'detailed'` when you need granular Babel source maps inside Pug.
 
 ## Architecture
 

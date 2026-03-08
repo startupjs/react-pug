@@ -1,7 +1,7 @@
 import type { PluginObj, PluginPass } from '@babel/core';
-import { parse } from '@babel/parser';
+import { parseExpression } from '@babel/parser';
 import type { ParseResult } from '@babel/parser';
-import type { File, Program } from '@babel/types';
+import type { File, TaggedTemplateExpression } from '@babel/types';
 import {
   createTransformSourceMap,
   mapGeneratedDiagnosticToOriginal,
@@ -75,13 +75,12 @@ function buildTransformCacheKey(sourceText: string, fileName: string): string {
   return `${fileName}\0${sourceText}`;
 }
 
-function parseProgram(code: string): Program {
-  return parse(code, {
+function parseRuntimeExpression(code: string) {
+  return parseExpression(code, {
     sourceType: 'module',
     plugins: ['typescript', 'jsx', 'decorators-legacy'],
-    ranges: true,
     errorRecovery: false,
-  }).program;
+  });
 }
 
 export default function babelPluginReactPug(
@@ -126,9 +125,24 @@ export default function babelPluginReactPug(
         if (transformed.metadata.regions.length === 0) return;
 
         if (sourceMapsMode === 'basic') {
-          const nextProgram = parseProgram(transformed.code);
-          path.node.body = nextProgram.body;
-          path.node.directives = nextProgram.directives;
+          const taggedTemplates = new Map<string, any>();
+          path.traverse({
+            TaggedTemplateExpression(taggedPath: any) {
+              const node = taggedPath.node as TaggedTemplateExpression;
+              if (typeof node.start !== 'number' || typeof node.end !== 'number') return;
+              taggedTemplates.set(`${node.start}:${node.end}`, taggedPath);
+            },
+          });
+
+          const sortedRegions = [...transformed.metadata.regions]
+            .sort((a, b) => b.originalStart - a.originalStart);
+
+          for (const region of sortedRegions) {
+            const taggedPath = taggedTemplates.get(`${region.originalStart}:${region.originalEnd}`);
+            if (!taggedPath?.node) continue;
+            taggedPath.replaceWith(parseRuntimeExpression(region.tsxText));
+          }
+
           path.scope.crawl();
         }
 
