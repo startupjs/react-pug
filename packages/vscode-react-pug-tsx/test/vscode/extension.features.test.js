@@ -158,6 +158,63 @@ suite('Extension Host Features (example workspace)', () => {
     });
   });
 
+  test('show shadow tsx removes explicit pug import but keeps transformed App usable', async function () {
+    this.timeout(60000);
+    await vscode.window.showTextDocument(appDoc);
+
+    await captureTestStep('features-before-show-shadow-import-cleanup', {
+      file: appDoc.uri.fsPath,
+    });
+
+    await vscode.commands.executeCommand('pugReact.showShadowTsx');
+
+    const shadowDoc = await retry(async () => {
+      const doc = vscode.workspace.textDocuments.find((candidate) =>
+        candidate.uri.scheme === 'pug-react-shadow'
+        && candidate.uri.path.endsWith(`${appDoc.fileName}.shadow.tsx`),
+      );
+      return doc ?? null;
+    }, 30000, 250);
+
+    const shadowText = shadowDoc.getText();
+    assert.ok(
+      shadowText.includes('import React, { useState } from \'react\';'),
+      'Expected shadow TSX to keep normal TSX imports',
+    );
+    assert.ok(
+      shadowText.includes('import { Button } from \'./Button\';'),
+      'Expected shadow TSX to keep component imports used by generated JSX',
+    );
+    assert.ok(
+      !shadowText.includes('import { pug } from \'./helpers\';'),
+      'Expected shadow TSX to remove the explicit pug binding import',
+    );
+    assert.ok(
+      shadowText.includes('import \'./helpers\';'),
+      'Expected shadow TSX to preserve helper-module side effects after removing pug binding',
+    );
+    assert.ok(
+      !shadowText.includes('return pug`'),
+      'Expected shadow TSX to contain transformed JSX instead of pug template literals',
+    );
+    assert.ok(
+      shadowText.includes('<Card'),
+      'Expected shadow TSX to contain transformed App JSX component output',
+    );
+    assert.ok(
+      shadowText.includes('label={"Reset"}'),
+      'Expected shadow TSX to contain transformed App JSX props',
+    );
+
+    await captureTestStep('features-after-show-shadow-import-cleanup', {
+      shadowUri: shadowDoc.uri.toString(),
+      removedPugImport: !shadowText.includes('import { pug } from \'./helpers\';'),
+      preservedHelperSideEffectImport: shadowText.includes('import \'./helpers\';'),
+      containsCardJsx: shadowText.includes('<Card'),
+      containsResetProp: shadowText.includes('label={"Reset"}'),
+    });
+  });
+
   test('hover on merged className/styleName attrs still shows type info', async function () {
     const hoverDoc = await createTempDoc(
       '__vscode_test_hover_merged_class_attrs.tsx',

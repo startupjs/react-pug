@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from './Button';
 import { Card } from './Card';
-
-// Declare the pug tag function (provided at runtime by your bundler plugin)
-declare function pug(strings: TemplateStringsArray, ...values: any[]): React.ReactNode;
+import { pug } from './helpers';
 
 interface Todo {
   id: number;
