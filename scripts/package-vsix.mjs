@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -36,9 +36,15 @@ mkdirSync(resolve(tempExtDir, 'dist'), { recursive: true });
 mkdirSync(resolve(tempExtDir, 'syntaxes'), { recursive: true });
 mkdirSync(resolve(tempPluginDir, 'dist'), { recursive: true });
 
-copyFileSync(
-  resolve(extensionSrcDir, 'package.json'),
+const stagedExtensionPkg = {
+  ...extensionPkg,
+  scripts: {},
+};
+
+mkdirSync(tempExtDir, { recursive: true });
+writeFileSync(
   resolve(tempExtDir, 'package.json'),
+  `${JSON.stringify(stagedExtensionPkg, null, 2)}\n`,
 );
 copyFileSync(
   resolve(extensionSrcDir, 'LICENSE.md'),
