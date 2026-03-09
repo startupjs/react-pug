@@ -1,7 +1,9 @@
-import type { NodePath, PluginObj, PluginPass } from '@babel/core';
-import { parse } from '@babel/parser';
-import type { Program } from '@babel/types';
+import type { PluginObj, PluginPass } from '@babel/core';
+import { parseExpression } from '@babel/parser';
+import type { ParseResult } from '@babel/parser';
+import type { File, TaggedTemplateExpression } from '@babel/types';
 import {
+  createTransformSourceMap,
   mapGeneratedDiagnosticToOriginal,
   type ClassAttributeOption,
   type ClassMergeOption,
@@ -11,13 +13,16 @@ import {
   type OriginalDiagnosticLocation,
   type PugDocument,
   type PugRegion,
+  type TransformSourceMap,
 } from '@startupjs/react-pug-core';
 
 export type BabelPugCompileMode = 'runtime' | 'languageService';
+export type BabelPugSourceMapMode = 'basic' | 'detailed';
 
 export interface BabelReactPugPluginOptions {
   tagFunction?: string;
   mode?: BabelPugCompileMode;
+  sourceMaps?: BabelPugSourceMapMode;
   classShorthandProperty?: ClassAttributeOption;
   classShorthandMerge?: ClassMergeOption;
   startupjsCssxjs?: StartupjsCssxjsOption;
@@ -32,6 +37,7 @@ export interface BabelReactPugMetadata {
 export interface BabelReactPugTransformResult {
   code: string;
   metadata: BabelReactPugMetadata;
+  sourceMap: TransformSourceMap;
 }
 
 export function transformReactPugSourceForBabel(
@@ -54,6 +60,7 @@ export function transformReactPugSourceForBabel(
       document: transformed.document,
       regions: transformed.regions,
     },
+    sourceMap: createTransformSourceMap(transformed, fileName),
   };
 }
 
@@ -64,26 +71,43 @@ export function mapBabelGeneratedDiagnosticToOriginal(
   return mapGeneratedDiagnosticToOriginal(metadata.document, diagnostic);
 }
 
-function parseProgram(code: string) {
-  return parse(code, {
+function buildTransformCacheKey(sourceText: string, fileName: string): string {
+  return `${fileName}\0${sourceText}`;
+}
+
+function parseRuntimeExpression(code: string) {
+  return parseExpression(code, {
     sourceType: 'module',
     plugins: ['typescript', 'jsx', 'decorators-legacy'],
-    ranges: true,
     errorRecovery: false,
-  }).program;
+  });
 }
 
 export default function babelPluginReactPug(
   _api: { types: any },
   options: BabelReactPugPluginOptions = {},
-): PluginObj {
+): PluginObj & {
+  parserOverride?: (
+    sourceText: string,
+    parserOpts: { sourceFileName?: string; sourceFilename?: string },
+    parseWithBabel: (code: string, parserOpts: object) => ParseResult<File>,
+  ) => ParseResult<File>,
+} {
   const tagFunction = options.tagFunction ?? 'pug';
   const mode = options.mode ?? 'runtime';
+  const sourceMapsMode = options.sourceMaps ?? 'basic';
+  const transformCache = new Map<string, BabelReactPugTransformResult>();
 
-  return {
+  const plugin: PluginObj & {
+    parserOverride?: (
+      sourceText: string,
+      parserOpts: { sourceFileName?: string; sourceFilename?: string },
+      parseWithBabel: (code: string, parserOpts: object) => ParseResult<File>,
+    ) => ParseResult<File>,
+  } = {
     name: 'react-pug',
     visitor: {
-      Program(path: NodePath<Program>, state: PluginPass) {
+      Program(path: any, state: PluginPass) {
         const sourceText = state?.file?.code as string | undefined;
         if (!sourceText) return;
 
@@ -91,19 +115,65 @@ export default function babelPluginReactPug(
           ?? (state?.file?.opts?.filename as string | undefined)
           ?? 'file.tsx';
 
-        const transformed = transformReactPugSourceForBabel(sourceText, fileName, {
-          tagFunction,
-          mode,
-        });
-
+        const transformed = sourceMapsMode === 'detailed'
+          ? transformCache.get(buildTransformCacheKey(sourceText, fileName))
+          : transformReactPugSourceForBabel(sourceText, fileName, {
+            tagFunction,
+            mode,
+          });
+        if (!transformed) return;
         if (transformed.metadata.regions.length === 0) return;
 
-        const nextProgram = parseProgram(transformed.code);
-        path.node.body = nextProgram.body;
-        path.node.directives = nextProgram.directives;
+        if (sourceMapsMode === 'basic') {
+          const taggedTemplates = new Map<string, any>();
+          path.traverse({
+            TaggedTemplateExpression(taggedPath: any) {
+              const node = taggedPath.node as TaggedTemplateExpression;
+              if (typeof node.start !== 'number' || typeof node.end !== 'number') return;
+              taggedTemplates.set(`${node.start}:${node.end}`, taggedPath);
+            },
+          });
+
+          const sortedRegions = [...transformed.metadata.regions]
+            .sort((a, b) => b.originalStart - a.originalStart);
+
+          for (const region of sortedRegions) {
+            const taggedPath = taggedTemplates.get(`${region.originalStart}:${region.originalEnd}`);
+            if (!taggedPath?.node) continue;
+            taggedPath.replaceWith(parseRuntimeExpression(region.tsxText));
+          }
+
+          path.scope.crawl();
+        }
+
         (state.file.metadata as Record<string, unknown>).reactPug = transformed.metadata;
-        path.scope.crawl();
+        transformCache.delete(buildTransformCacheKey(sourceText, fileName));
       },
     },
   };
+
+  if (sourceMapsMode === 'detailed') {
+    plugin.parserOverride = (
+      sourceText: string,
+      parserOpts: { sourceFileName?: string; sourceFilename?: string },
+      parseWithBabel: (code: string, parserOpts: object) => ParseResult<File>,
+    ) => {
+      const fileName = parserOpts.sourceFileName ?? parserOpts.sourceFilename ?? 'file.tsx';
+      const transformed = transformReactPugSourceForBabel(sourceText, fileName, {
+        tagFunction,
+        mode,
+      });
+
+      transformCache.set(buildTransformCacheKey(sourceText, fileName), transformed);
+      if (transformed.metadata.regions.length === 0) {
+        return parseWithBabel(sourceText, parserOpts);
+      }
+
+      const inlineSourceMap = Buffer.from(JSON.stringify(transformed.sourceMap), 'utf8').toString('base64');
+      const codeWithMap = `${transformed.code}\n//# sourceMappingURL=data:application/json;base64,${inlineSourceMap}`;
+      return parseWithBabel(codeWithMap, parserOpts);
+    };
+  }
+
+  return plugin;
 }
