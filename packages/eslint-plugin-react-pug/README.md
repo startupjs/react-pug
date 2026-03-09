@@ -27,10 +27,13 @@ export default [
 Use `createReactPugProcessor(...)` when you need custom options:
 
 - `tagFunction`
+- `requirePugImport`
 - `classShorthandProperty`
 - `classShorthandMerge`
 - `startupjsCssxjs`
 - `componentPathFromUppercaseClassShorthand`
+
+Used `pug` import bindings are removed from the processor's transformed view automatically.
 
 ## Exports
 

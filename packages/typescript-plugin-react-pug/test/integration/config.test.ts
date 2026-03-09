@@ -296,6 +296,53 @@ describe('plugin with tagFunction config', () => {
   });
 });
 
+describe('plugin with requirePugImport config', () => {
+  it('reports a custom diagnostic when pug is used without import', async () => {
+    const init = await loadPlugin();
+    const file = path.join(FIXTURES_DIR, 'require-import-missing.tsx');
+    const virtualFiles = new Map<string, string>([
+      [file, 'const view = pug`Button(onClick=handler)`;\nconst handler = () => {};'],
+    ]);
+    const result = createLanguageServiceWithPlugin(
+      init,
+      [file, BUTTON_FILE],
+      FIXTURES_DIR,
+      { requirePugImport: true },
+      virtualFiles,
+    );
+
+    const diags = result.ls.getSemanticDiagnostics(file);
+    const pugImportDiag = diags.find(d => d.code === 99002);
+    expect(pugImportDiag).toBeDefined();
+    expect(pugImportDiag!.messageText).toBe('Missing import for tag function "pug"');
+  });
+
+  it('removes false unused-import diagnostics when pug is imported and used', async () => {
+    const init = await loadPlugin();
+    const file = path.join(FIXTURES_DIR, 'require-import-present.tsx');
+    const virtualFiles = new Map<string, string>([
+      [file, [
+        'import { pug } from "startupjs";',
+        'const handler = () => {};',
+        'const view = pug`Button(onClick=handler)`;',
+      ].join('\n')],
+    ]);
+    const result = createLanguageServiceWithPlugin(
+      init,
+      [file, BUTTON_FILE],
+      FIXTURES_DIR,
+      { requirePugImport: true },
+      virtualFiles,
+    );
+
+    const diags = result.ls.getSemanticDiagnostics(file);
+    expect(diags.find(d => d.code === 99002)).toBeUndefined();
+    expect(diags.find(
+      d => typeof d.messageText === 'string' && d.messageText.includes("'pug' is declared but its value is never read"),
+    )).toBeUndefined();
+  });
+});
+
 // ── class shorthand config ──────────────────────────────────────
 
 describe('plugin with class shorthand config', () => {

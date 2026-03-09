@@ -1,5 +1,5 @@
 import React from 'react'
-import { pug, observer, $, useSub, styl } from 'startupjs'
+import { observer, $, useSub, styl } from 'startupjs'     
 import { Alert, Span, Modal, Content, Button, Form, Div, Tag, useMedia, useFormFields } from 'startupjs-ui'
 import { useGlobalSearchParams, Stack } from 'expo-router'
 import { faPen } from '@fortawesome/free-solid-svg-icons/faPen'

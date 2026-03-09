@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { pug, styl, observer, useSub, $ } from "startupjs";
+import { styl, observer, useSub, $ } from "startupjs";
 import {
   Link,
   Item,

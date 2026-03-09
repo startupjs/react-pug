@@ -134,4 +134,43 @@ describe('transformSourceFile', () => {
     expect(result.code).toContain('className="Header active"');
     expect(result.code).not.toContain('<Modal.Header');
   });
+
+  it('removes a pug import binding and preserves side effects', () => {
+    const source = [
+      "import { pug } from 'startupjs';",
+      'const view = pug`span.title`;',
+    ].join('\n');
+    const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
+    expect(result.code).toContain("import 'startupjs';");
+    expect(result.code).not.toContain('{ pug }');
+  });
+
+  it('removes only the pug specifier from a mixed import', () => {
+    const source = [
+      "import { pug, observer } from 'startupjs';",
+      'const view = pug`span.title`;',
+    ].join('\n');
+    const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
+    expect(result.code).toContain("import { observer } from 'startupjs';");
+    expect(result.code).not.toContain('{ pug, observer }');
+  });
+
+  it('can preserve the pug import when requested', () => {
+    const source = [
+      "import { pug } from 'startupjs';",
+      'const view = pug`span.title`;',
+    ].join('\n');
+    const result = transformSourceFile(source, 'file.tsx', {
+      compileMode: 'runtime',
+      removeTagImport: false,
+    });
+    expect(result.code).toContain("import { pug } from 'startupjs';");
+  });
+
+  it('throws when requirePugImport is enabled and no import exists', () => {
+    expect(() => transformSourceFile('const view = pug`span.title`;', 'file.tsx', {
+      compileMode: 'runtime',
+      requirePugImport: true,
+    })).toThrow('Missing import for tag function "pug"');
+  });
 });

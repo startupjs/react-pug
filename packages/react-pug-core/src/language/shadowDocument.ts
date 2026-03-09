@@ -1,6 +1,7 @@
-import type { PugDocument, PugRegion } from './mapping';
-import { extractPugRegions } from './extractRegions';
+import type { MissingTagImportDiagnostic, PugDocument, PugRegion, TagImportCleanup } from './mapping';
+import { extractPugAnalysis } from './extractRegions';
 import { compilePugToTsx, type CompileOptions } from './pugToTsx';
+import { originalToShadow } from './positionMapping';
 
 const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
 
@@ -32,19 +33,33 @@ export function buildShadowDocument(
   uri: string,
   version: number = 1,
   tagName: string = 'pug',
-  compileOptions: CompileOptions = {},
+  compileOptions: CompileOptions & { requirePugImport?: boolean; removeTagImport?: boolean } = {},
 ): PugDocument {
   const resolvedCompileOptions = resolveCompileOptions(originalText, compileOptions);
-  const regions = extractPugRegions(originalText, uri, tagName);
+  const analysis = extractPugAnalysis(originalText, uri, tagName);
+  const regions = analysis.regions;
+  const removeTagImport = compileOptions.removeTagImport !== false;
+  const importCleanups = removeTagImport ? analysis.importCleanups : [];
+  const missingTagImport: MissingTagImportDiagnostic | null = (
+    compileOptions.requirePugImport && analysis.usesTagFunction && !analysis.hasTagImport
+  ) ? {
+    message: `Missing import for tag function "${tagName}"`,
+    start: analysis.regions[0]?.originalStart ?? 0,
+    length: Math.max(1, tagName.length),
+  } : null;
 
   if (regions.length === 0) {
     return {
       originalText,
       uri,
       regions: [],
+      importCleanups: [],
       shadowText: originalText,
       version,
       regionDeltas: [],
+      usesTagFunction: false,
+      hasTagImport: analysis.hasTagImport,
+      missingTagImport: null,
     };
   }
 
@@ -95,12 +110,37 @@ export function buildShadowDocument(
   // Copy remaining text after last region
   shadowText += originalText.slice(cursor);
 
-  return {
+  const document: PugDocument = {
     originalText,
     uri,
     regions,
+    importCleanups,
     shadowText,
     version,
     regionDeltas,
+    usesTagFunction: analysis.usesTagFunction,
+    hasTagImport: analysis.hasTagImport,
+    missingTagImport,
   };
+
+  if (importCleanups.length > 0) {
+    document.shadowText = applyImportCleanups(document, importCleanups);
+  }
+
+  return document;
+}
+
+function applyImportCleanups(doc: PugDocument, cleanups: TagImportCleanup[]): string {
+  if (cleanups.length === 0) return doc.shadowText;
+  const chars = doc.shadowText.split('');
+  for (const cleanup of cleanups) {
+    const shadowStart = originalToShadow(doc, cleanup.originalStart);
+    if (shadowStart == null) continue;
+    const shadowEnd = shadowStart + (cleanup.originalEnd - cleanup.originalStart);
+    for (let i = shadowStart; i < shadowEnd; i += 1) {
+      chars[i] = '';
+    }
+    chars[shadowStart] = cleanup.replacementText;
+  }
+  return chars.join('');
 }

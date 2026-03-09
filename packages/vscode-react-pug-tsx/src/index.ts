@@ -31,6 +31,7 @@ function readPluginConfig() {
     || classShorthandMergeRaw === 'concatenate'
     || classShorthandMergeRaw === 'classnames'
   ) ? classShorthandMergeRaw : 'auto';
+  const requirePugImport = config.get<boolean>('requirePugImport', false);
   const componentPathFromUppercaseClassShorthand = config.get<boolean>(
     'componentPathFromUppercaseClassShorthand',
     true,
@@ -45,6 +46,7 @@ function readPluginConfig() {
     injectCssxjsTypes,
     classShorthandProperty,
     classShorthandMerge,
+    requirePugImport,
     componentPathFromUppercaseClassShorthand,
   };
 }
@@ -129,6 +131,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const shadow = buildShadowDocument(text, doc.fileName, 1, tagFunction, {
           ...classOptions,
+          requirePugImport: pluginConfig.requirePugImport,
           componentPathFromUppercaseClassShorthand: pluginConfig.componentPathFromUppercaseClassShorthand,
         });
 

@@ -50,6 +50,7 @@ module.exports = {
     ['@startupjs/babel-plugin-react-pug', {
       tagFunction: 'pug',
       sourceMaps: 'basic',
+      requirePugImport: false,
       classShorthandProperty: 'auto',
       classShorthandMerge: 'auto',
       startupjsCssxjs: 'auto',
@@ -112,10 +113,16 @@ export default [
 - `pugReact.enabled`
 - `pugReact.diagnostics.enabled`
 - `pugReact.tagFunction`
+- `pugReact.requirePugImport`: `boolean` (default `false`)
 - `pugReact.injectCssxjsTypes`: `never | auto | force`
 - `pugReact.classShorthandProperty`: `auto | className | class | styleName`
 - `pugReact.classShorthandMerge`: `auto | concatenate | classnames`
 - `pugReact.componentPathFromUppercaseClassShorthand`: `boolean` (default `true`)
+
+Import handling:
+
+- used `pug` imports are removed automatically from transformed output and shadow documents
+- when `requirePugImport` is enabled, using the configured tag without an explicit import is treated as an error
 
 Class shorthand behavior:
 

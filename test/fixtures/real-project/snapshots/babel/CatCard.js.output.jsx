@@ -1,5 +1,5 @@
 import React from 'react';
-import { pug, styl, observer, useSub, $ } from 'startupjs';
+import { styl, observer, useSub, $ } from 'startupjs';
 import { Div, Span, Avatar, Link } from 'startupjs-ui';
 export default observer(({
   $cat,

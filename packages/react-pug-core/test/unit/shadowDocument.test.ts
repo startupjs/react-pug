@@ -135,6 +135,27 @@ describe('single pug region', () => {
     expect(doc.shadowText).toContain('styleName={["title", active]}');
     expect(doc.shadowText).not.toContain('className="title"');
   });
+
+  it('removes the pug import binding from shadow output', () => {
+    const text = [
+      'import { pug, observer } from "startupjs";',
+      'const v = pug`span.title`;',
+    ].join('\n');
+    const doc = buildShadowDocument(text, 'test.tsx');
+    expect(doc.shadowText).toContain('import { observer } from "startupjs";');
+    expect(doc.shadowText).not.toContain('{ pug, observer }');
+    expect(doc.importCleanups).toHaveLength(1);
+  });
+
+  it('reports a missing import diagnostic in shadow metadata when required', () => {
+    const text = 'const v = pug`span.title`;';
+    const doc = buildShadowDocument(text, 'test.tsx', 1, 'pug', { requirePugImport: true });
+    expect(doc.missingTagImport).toEqual({
+      message: 'Missing import for tag function "pug"',
+      start: text.indexOf('pug`'),
+      length: 'pug'.length,
+    });
+  });
 });
 
 // ── Multiple regions ────────────────────────────────────────────

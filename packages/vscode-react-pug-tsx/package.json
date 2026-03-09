@@ -95,6 +95,11 @@
           ],
           "description": "Controls how shorthand classes are merged with an explicit class attribute value."
         },
+        "pugReact.requirePugImport": {
+          "type": "boolean",
+          "default": false,
+          "description": "When enabled, files using the configured pug tag must explicitly import it."
+        },
         "pugReact.componentPathFromUppercaseClassShorthand": {
           "type": "boolean",
           "default": true,

@@ -31,6 +31,20 @@ npm i @startupjs/react-pug-core
 - `createTransformSourceMap(...)`
 - mapping helpers from `mapping`, `positionMapping`, and `diagnosticMapping`
 
+## Common Options
+
+Core transforms expose:
+
+- `tagFunction`: tagged template function name, default `pug`
+- `requirePugImport`: boolean, default `false`
+- `removeTagImport`: boolean, default `true`
+- `classShorthandProperty`: `auto | className | class | styleName`
+- `classShorthandMerge`: `auto | concatenate | classnames`
+- `startupjsCssxjs`: `never | auto | force`
+- `componentPathFromUppercaseClassShorthand`: boolean, default `true`
+
+When `removeTagImport` is enabled, used `pug` imports are removed from transformed/shadow output. If the removed specifier was the only runtime import from that module, the declaration is rewritten to a side-effect import.
+
 ## Intended Audience
 
 Most users should use one of the higher-level packages instead of consuming this package directly.

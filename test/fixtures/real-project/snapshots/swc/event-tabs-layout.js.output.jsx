@@ -1,6 +1,6 @@
 // import { Platform } from 'react-native'
 import React from 'react'
-import { pug, observer, styl, $, useSub } from 'startupjs'
+import { observer, styl, $, useSub } from 'startupjs'     
 import { useColors, Icon, Form, Modal, Button } from 'startupjs-ui'
 import { Tabs, useLocalSearchParams, Stack } from 'expo-router'
 import { faVenus as faWildBadge } from '@fortawesome/free-solid-svg-icons/faVenus'

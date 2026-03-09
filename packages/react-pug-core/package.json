@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@jridgewell/gen-mapping": "^0.3.13",
-    "@babel/parser": "^7.29.0",
+    "@babel/parser": "^7.0.0",
     "@startupjs/pug-lexer": "^4.1.0-1",
     "@volar/source-map": "^2.4.28",
     "pug-parser": "^6.0.0",

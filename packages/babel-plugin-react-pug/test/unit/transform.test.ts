@@ -194,6 +194,30 @@ describe('babel-plugin-react-pug transform', () => {
     expect(transformed.code).toContain('class={"title" + " " + (isActive)}');
   });
 
+  it('removes a used pug import in basic mode and preserves side effects', () => {
+    const out = transform([
+      'import { pug } from "startupjs";',
+      'const view = pug`span.title`;',
+    ].join('\n'));
+    expect(out).toContain('import "startupjs";');
+    expect(out).not.toContain('{ pug }');
+  });
+
+  it('removes only the pug specifier from mixed imports in basic mode', () => {
+    const out = transform([
+      'import { pug, observer } from "startupjs";',
+      'const view = pug`span.title`;',
+    ].join('\n'));
+    expect(out).toContain('import { observer } from "startupjs";');
+    expect(out).not.toContain('{ pug, observer }');
+  });
+
+  it('throws when requirePugImport is enabled and the tag is not imported', () => {
+    expect(() => transform('const view = pug`span.title`;', {
+      requirePugImport: true,
+    })).toThrow('Missing import for tag function "pug"');
+  });
+
   it('keeps JS/JSX runtime output free of TS-only syntax', () => {
     const out = transform(COMPILER_JS_RUNTIME_SOURCE, {}, 'fixture.jsx');
     expect(out).toContain('const __r = []');
@@ -284,6 +308,15 @@ describe('babel-plugin-react-pug transform', () => {
       result?.map,
       'title.toUpperCase',
     );
+  });
+
+  it('removes the pug import in detailed sourcemap mode too', () => {
+    const out = transform([
+      'import { pug } from "startupjs";',
+      'const view = pug`span.title`;',
+    ].join('\n'), { sourceMaps: 'detailed' });
+    expect(out).toContain('import "startupjs";');
+    expect(out).not.toContain('{ pug }');
   });
 
   it('preserves mappings through a downstream JSX transform after react-pug', () => {

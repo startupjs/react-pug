@@ -76,6 +76,23 @@ export interface PugToken {
   val?: string;
 }
 
+export interface TagImportCleanup {
+  /** Offset of the full import declaration in the original file */
+  originalStart: number;
+  originalEnd: number;
+  /** Fixed-length replacement text for the shadow/transformed output */
+  replacementText: string;
+}
+
+export interface MissingTagImportDiagnostic {
+  /** Human-readable message for the missing import condition */
+  message: string;
+  /** Original-file offset where the missing import should be reported */
+  start: number;
+  /** Diagnostic length in original-file coordinates */
+  length: number;
+}
+
 // ── PugRegion ───────────────────────────────────────────────────
 
 export interface PugRegion {
@@ -122,6 +139,9 @@ export interface PugDocument {
   /** Detected pug`` template literal regions */
   regions: PugRegion[];
 
+  /** Fixed-length import cleanup edits applied outside pug regions */
+  importCleanups: TagImportCleanup[];
+
   /** Shadow TSX text (original with pug regions replaced by generated TSX) */
   shadowText: string;
 
@@ -130,4 +150,13 @@ export interface PugDocument {
 
   /** Cumulative offset deltas for mapping positions outside pug regions */
   regionDeltas: number[];
+
+  /** Whether the configured tag function is used in this file */
+  usesTagFunction: boolean;
+
+  /** Whether the configured tag function is explicitly imported in this file */
+  hasTagImport: boolean;
+
+  /** Optional missing-import diagnostic metadata */
+  missingTagImport: MissingTagImportDiagnostic | null;
 }

@@ -10,6 +10,7 @@ import {
 
 export interface EslintReactPugProcessorOptions {
   tagFunction?: string;
+  requirePugImport?: boolean;
   classShorthandProperty?: ClassAttributeOption;
   classShorthandMerge?: ClassMergeOption;
   startupjsCssxjs?: StartupjsCssxjsOption;
@@ -73,6 +74,7 @@ export function createReactPugProcessor(
       const transformed = transformSourceFile(text, filename, {
         tagFunction: options.tagFunction ?? 'pug',
         compileMode: 'runtime',
+        requirePugImport: options.requirePugImport ?? false,
         classAttribute: options.classShorthandProperty ?? 'auto',
         classMerge: options.classShorthandMerge ?? 'auto',
         startupjsCssxjs: options.startupjsCssxjs ?? 'auto',

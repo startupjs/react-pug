@@ -71,6 +71,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         || classMergeRaw === 'concatenate'
         || classMergeRaw === 'classnames'
       ) ? classMergeRaw : 'auto';
+      const requirePugImport = config.requirePugImport === true;
       const componentPathFromUppercaseClassShorthand = config.componentPathFromUppercaseClassShorthand !== false;
 
       const host = info.languageServiceHost;
@@ -126,7 +127,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           const cached = docCache.get(fileName);
           const extraTypesEnabled = shouldInjectExtraReactAttributes(fileName, text);
           const classOptions = resolveClassShorthandOptions(text);
-          const classState = `${classOptions.classAttribute}:${classOptions.classMerge}:${componentPathFromUppercaseClassShorthand ? '1' : '0'}`;
+          const classState = `${classOptions.classAttribute}:${classOptions.classMerge}:${componentPathFromUppercaseClassShorthand ? '1' : '0'}:${requirePugImport ? '1' : '0'}`;
 
           // Return cached shadow if original text hasn't changed
           if (
@@ -146,6 +147,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
             {
               ...classOptions,
               componentPathFromUppercaseClassShorthand,
+              requirePugImport,
             },
           );
 
@@ -743,6 +745,17 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
         // Add pug parse error diagnostics for regions with parseError (if enabled)
         if (!diagnosticsEnabled) return mapped;
+        if (doc.missingTagImport) {
+          mapped.push({
+            file: undefined,
+            start: doc.missingTagImport.start,
+            length: doc.missingTagImport.length,
+            messageText: doc.missingTagImport.message,
+            category: tsModule.DiagnosticCategory.Error,
+            code: 99002,
+            source: 'pug-react',
+          } as unknown as T);
+        }
         for (const region of doc.regions) {
           if (region.parseError) {
             const err = region.parseError;

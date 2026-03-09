@@ -26,10 +26,13 @@ const result = transformWithSwcReactPug(sourceCode, fileName, {
 
 - `tagFunction`: tagged template function name, default `pug`
 - `mode`: `runtime | languageService`, default `runtime`
+- `requirePugImport`: boolean, default `false`
 - `classShorthandProperty`: `auto | className | class | styleName`
 - `classShorthandMerge`: `auto | concatenate | classnames`
 - `startupjsCssxjs`: `never | auto | force`
 - `componentPathFromUppercaseClassShorthand`: boolean, default `true`
+
+Used `pug` import bindings are removed from transformed output automatically.
 
 ## Exports
 

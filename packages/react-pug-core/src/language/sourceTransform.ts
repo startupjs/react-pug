@@ -61,6 +61,18 @@ export interface SourceTransformOptions {
    * Defaults to true.
    */
   componentPathFromUppercaseClassShorthand?: boolean;
+
+  /**
+   * When true, require the configured tag function to be imported in files that use it.
+   * Transform-based consumers throw; the language-service path exposes a diagnostic instead.
+   */
+  requirePugImport?: boolean;
+
+  /**
+   * Remove the configured tag-function import from transformed/shadow output once all tag usages
+   * have been compiled away. Enabled by default.
+   */
+  removeTagImport?: boolean;
 }
 
 export interface SourceTransformResult {
@@ -122,8 +134,14 @@ export function transformSourceFile(
       classAttribute,
       classMerge,
       componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
+      requirePugImport: options.requirePugImport ?? false,
+      removeTagImport: options.removeTagImport ?? true,
     },
   );
+
+  if (options.requirePugImport && document.usesTagFunction && !document.hasTagImport) {
+    throw new Error(`Missing import for tag function "${tagFunction}" in ${fileName}`);
+  }
 
   return {
     code: document.shadowText,

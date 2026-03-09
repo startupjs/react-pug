@@ -19,6 +19,7 @@ export type SwcPugCompileMode = 'runtime' | 'languageService';
 export interface SwcReactPugOptions {
   tagFunction?: string;
   mode?: SwcPugCompileMode;
+  requirePugImport?: boolean;
   classShorthandProperty?: ClassAttributeOption;
   classShorthandMerge?: ClassMergeOption;
   startupjsCssxjs?: StartupjsCssxjsOption;
@@ -48,6 +49,7 @@ export function transformReactPugSourceForSwc(
   const transformed = transformSourceFile(sourceText, fileName, {
     tagFunction: options.tagFunction ?? 'pug',
     compileMode: options.mode ?? 'runtime',
+    requirePugImport: options.requirePugImport ?? false,
     classAttribute: options.classShorthandProperty ?? 'auto',
     classMerge: options.classShorthandMerge ?? 'auto',
     startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
@@ -87,6 +89,7 @@ export function transformWithSwcReactPug(
   const transformedCore = transformSourceFile(sourceText, fileName, {
     tagFunction: options.tagFunction ?? 'pug',
     compileMode: options.mode ?? 'runtime',
+    requirePugImport: options.requirePugImport ?? false,
     classAttribute: options.classShorthandProperty ?? 'auto',
     classMerge: options.classShorthandMerge ?? 'auto',
     startupjsCssxjs: options.startupjsCssxjs ?? 'auto',

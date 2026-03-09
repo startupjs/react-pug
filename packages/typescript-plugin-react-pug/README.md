@@ -33,9 +33,12 @@ The plugin accepts the same core options exposed by the VS Code extension:
 - `enabled`
 - `diagnostics.enabled`
 - `tagFunction`
+- `requirePugImport`: boolean
 - `injectCssxjsTypes`: `never | auto | force`
 - `classShorthandProperty`: `auto | className | class | styleName`
 - `classShorthandMerge`: `auto | concatenate | classnames`
 - `componentPathFromUppercaseClassShorthand`: boolean
+
+When `requirePugImport` is enabled, the plugin reports an editor diagnostic if a file uses the configured tag without importing it explicitly. Used `pug` imports are removed from the shadow document to avoid false unused-import diagnostics.
 
 Published output is in `dist/`.

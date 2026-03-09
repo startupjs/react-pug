@@ -22,6 +22,7 @@ export interface EsbuildReactPugOptions {
   tagFunction?: string;
   include?: RegExp;
   exclude?: RegExp;
+  requirePugImport?: boolean;
   classShorthandProperty?: ClassAttributeOption;
   classShorthandMerge?: ClassMergeOption;
   startupjsCssxjs?: StartupjsCssxjsOption;
@@ -70,6 +71,7 @@ export function transformReactPugSourceForEsbuild(
   const transformed = transformSourceFile(sourceText, fileName, {
     tagFunction: options.tagFunction ?? 'pug',
     compileMode: 'runtime',
+    requirePugImport: options.requirePugImport ?? false,
     classAttribute: options.classShorthandProperty ?? 'auto',
     classMerge: options.classShorthandMerge ?? 'auto',
     startupjsCssxjs: options.startupjsCssxjs ?? 'auto',

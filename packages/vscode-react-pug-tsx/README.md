@@ -30,9 +30,12 @@ startupjs.vscode-react-pug-tsx
 - `pugReact.enabled`
 - `pugReact.diagnostics.enabled`
 - `pugReact.tagFunction`
+- `pugReact.requirePugImport`
 - `pugReact.injectCssxjsTypes`
 - `pugReact.classShorthandProperty`
 - `pugReact.classShorthandMerge`
 - `pugReact.componentPathFromUppercaseClassShorthand`
+
+The extension removes used `pug` imports from its shadow TSX view automatically, so importing `pug` from `startupjs`/`cssxjs` does not produce a false unused-import diagnostic. Enable `pugReact.requirePugImport` if you want explicit imports enforced in the editor.
 
 This npm package is the extension source/bundle package. End users normally install the VS Code extension, not the npm tarball directly.
