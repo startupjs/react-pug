@@ -7,7 +7,9 @@ Pug support for React in two parts:
 
 ## Install
 
-### VS Code extension (from this repo)
+### VS Code extension (build from this repo for now)
+
+For now, clone the monorepo and run the following commands from the repository root:
 
 ```bash
 npm ci
@@ -15,7 +17,13 @@ npm run package:vsix
 code --install-extension packages/vscode-react-pug-tsx/*.vsix
 ```
 
-Extension id:
+This builds the VSIX from the monorepo and installs it locally into VS Code.
+
+### VS Code Marketplace
+
+TODO: publish `startupjs.vscode-react-pug-tsx` to the VS Code Marketplace.
+
+After that, installation by extension id will also work:
 
 ```bash
 code --install-extension startupjs.vscode-react-pug-tsx

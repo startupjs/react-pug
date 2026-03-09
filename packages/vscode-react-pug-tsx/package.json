@@ -18,6 +18,11 @@
     "onLanguage:javascriptreact"
   ],
   "main": "./dist/client.js",
+  "scripts": {
+    "build": "rm -rf dist && node ../../esbuild.config.mjs extension",
+    "prepublishOnly": "npm run build",
+    "vscode:prepublish": "npm run build"
+  },
   "contributes": {
     "typescriptServerPlugins": [
       {
@@ -130,5 +135,7 @@
   "dependencies": {
     "@startupjs/typescript-plugin-react-pug": "^0.0.1"
   },
-  "private": true
+  "publishConfig": {
+    "access": "public"
+  }
 }

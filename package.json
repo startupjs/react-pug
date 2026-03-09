@@ -11,6 +11,7 @@
     "build:plugin": "node esbuild.config.mjs plugin",
     "package": "npm run check-types && npm run clean:dist && node esbuild.config.mjs --production",
     "package:vsix": "npm run package && node scripts/package-vsix.mjs",
+    "publish-alpha-patch": "npx lerna publish prerelease --preid alpha --dist-tag alpha",
     "watch": "node esbuild.config.mjs --watch",
     "test:core": "vitest run packages/react-pug-core/test",
     "test:ts-plugin": "vitest run packages/typescript-plugin-react-pug/test",
@@ -42,6 +43,7 @@
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.27.3",
     "eslint": "^9.39.3",
+    "lerna": "^9.0.5",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }

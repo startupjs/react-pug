@@ -2,8 +2,11 @@
   "name": "@startupjs/typescript-plugin-react-pug",
   "main": "./dist/plugin.js",
   "version": "0.0.1",
-  "files": [
-    "dist/**",
-    "package.json"
-  ]
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf dist && node ../../esbuild.config.mjs plugin",
+    "prepublishOnly": "npm run build"
+  }
 }

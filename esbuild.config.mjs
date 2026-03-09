@@ -1,8 +1,11 @@
 import * as esbuild from 'esbuild';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 const targetArg = process.argv.find((arg) => arg === 'extension' || arg === 'plugin');
+const scriptDir = dirname(fileURLToPath(import.meta.url));
 
 /** @type {esbuild.Plugin} */
 const esbuildProblemMatcherPlugin = {
@@ -42,13 +45,13 @@ const shared = {
 const allConfigs = {
   extension: {
     ...shared,
-    entryPoints: ['packages/vscode-react-pug-tsx/src/index.ts'],
-    outfile: 'packages/vscode-react-pug-tsx/dist/client.js',
+    entryPoints: [resolve(scriptDir, 'packages/vscode-react-pug-tsx/src/index.ts')],
+    outfile: resolve(scriptDir, 'packages/vscode-react-pug-tsx/dist/client.js'),
   },
   plugin: {
     ...shared,
-    entryPoints: ['packages/typescript-plugin-react-pug/src/index.ts'],
-    outfile: 'packages/typescript-plugin-react-pug/dist/plugin.js',
+    entryPoints: [resolve(scriptDir, 'packages/typescript-plugin-react-pug/src/index.ts')],
+    outfile: resolve(scriptDir, 'packages/typescript-plugin-react-pug/dist/plugin.js'),
   },
 };
 

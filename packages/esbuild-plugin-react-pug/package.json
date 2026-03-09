@@ -1,10 +1,19 @@
 {
   "name": "@startupjs/esbuild-plugin-react-pug",
-  "private": true,
   "version": "0.0.1",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "npm --prefix ../.. run build -w @startupjs/react-pug-core && rm -rf dist && tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build"
+  },
   "dependencies": {
-    "@startupjs/react-pug-core": "file:../react-pug-core"
+    "@startupjs/react-pug-core": "^0.0.1"
+  },
+  "peerDependencies": {
+    "esbuild": "*"
   }
 }

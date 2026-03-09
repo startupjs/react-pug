@@ -1,0 +1,9 @@
+/dist/
+!/dist/**
+src/
+test/
+.vscode-test.mjs
+tsconfig.build.json
+*.tsbuildinfo
+*.tgz
+*.vsix
