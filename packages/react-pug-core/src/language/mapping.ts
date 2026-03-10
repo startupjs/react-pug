@@ -158,7 +158,7 @@ export interface ShadowMappedRegion {
 
 export interface ShadowInsertion {
   /** Inserted shadow text that has no direct original slice */
-  kind: 'style-import' | 'style-call' | 'arrow-body-prefix' | 'arrow-body-suffix';
+  kind: 'style-import' | 'style-call' | 'arrow-body-prefix' | 'arrow-body-suffix' | 'statement-body-suffix';
   /** Original-file offset where the insertion occurs */
   originalOffset: number;
   /** Generated shadow span occupied by the insertion */

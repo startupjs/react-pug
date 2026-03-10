@@ -14,8 +14,7 @@ describe('eslint-plugin-react-pug processor', () => {
     const blocks = processor.preprocess(input, 'file.jsx');
 
     expect(blocks).toHaveLength(1);
-    expect(blocks[0]).toContain('<Button');
-    expect(blocks[0]).not.toContain('pug`');
+    expect(blocks[0]).toMatchInlineSnapshot(`"const view = (<Button label={"Save"} />);"`);
   });
 
   it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
@@ -26,7 +25,11 @@ describe('eslint-plugin-react-pug processor', () => {
       'const view = pug`span.title(styleName=active)`;',
     ].join('\n');
     const [code] = processor.preprocess(input, 'file.jsx');
-    expect(code).toContain('styleName={["title", active]}');
+    expect(code).toMatchInlineSnapshot(`
+      "import "startupjs";             
+      const active = { active: true };
+      const view = (<span styleName={["title", active]} />);"
+    `);
   });
 
   it('supports forcing class shorthand property and merge strategy', () => {
@@ -35,13 +38,13 @@ describe('eslint-plugin-react-pug processor', () => {
       classShorthandMerge: 'concatenate',
     });
     const [code] = processor.preprocess('const view = pug`span.title(class=isActive)`;', 'file.jsx');
-    expect(code).toContain('class={"title" + " " + (isActive)}');
+    expect(code).toMatchInlineSnapshot(`"const view = (<span class={"title" + " " + (isActive)} />);"`);
   });
 
   it('preprocess output for JS/JSX is runtime-safe and TS-free', () => {
     const processor = createReactPugProcessor();
     const [code] = processor.preprocess(COMPILER_JS_RUNTIME_SOURCE, 'file.jsx');
-    expect(code).toContain('const __r = []');
+    expect(code).toMatchInlineSnapshot(`"const view = ((() => {const __r = [];while (ready) {__r.push(<span>Ok</span>);}return __r;})());"`);
     expectNoTsOnlyRuntimeSyntax(code);
   });
 

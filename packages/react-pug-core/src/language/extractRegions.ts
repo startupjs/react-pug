@@ -1,6 +1,7 @@
 import { parse } from '@babel/parser';
 import type {
   File,
+  ArrowFunctionExpression,
   BlockStatement,
   ImportDeclaration,
   ImportDefaultSpecifier,
@@ -59,11 +60,12 @@ export interface ExtractedImportData {
 }
 
 export interface StyleScopeTarget {
-  kind: 'program' | 'block' | 'arrow-expression';
+  kind: 'program' | 'block' | 'arrow-expression' | 'statement-body';
   insertionOffset: number;
   statementIndent: string;
   closingIndent: string;
   expressionEnd?: number;
+  statementEnd?: number;
 }
 
 interface ExtractedTemplateData {
@@ -173,49 +175,8 @@ function findBlockInsertionOffset(block: BlockStatement): number {
   return Math.max(0, (block.end ?? 0) - 1);
 }
 
-function isFunctionNode(node: Node): boolean {
-  return node.type === 'FunctionDeclaration'
-    || node.type === 'FunctionExpression'
-    || node.type === 'ArrowFunctionExpression'
-    || node.type === 'ObjectMethod'
-    || node.type === 'ClassMethod'
-    || node.type === 'ClassPrivateMethod';
-}
-
-function getPropertyLikeName(key: any): string | null {
-  if (!key || typeof key !== 'object') return null;
-  if (key.type === 'Identifier') return key.name;
-  if (key.type === 'StringLiteral') return key.value;
-  if (key.type === 'PrivateName' && key.id?.type === 'Identifier') return key.id.name;
-  return null;
-}
-
-function getAssignedName(node: Node, parent: Node | null): string | null {
-  if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression') {
-    if (node.id?.name) return node.id.name;
-  }
-
-  if (node.type === 'ObjectMethod' || node.type === 'ClassMethod' || node.type === 'ClassPrivateMethod') {
-    return getPropertyLikeName((node as any).key);
-  }
-
-  if (!parent) return null;
-  if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') return parent.id.name;
-  if (parent.type === 'AssignmentExpression') {
-    const left: any = parent.left;
-    if (left?.type === 'Identifier') return left.name;
-    if (left?.type === 'MemberExpression' && !left.computed) return getPropertyLikeName(left.property);
-  }
-  if (parent.type === 'ObjectProperty') return getPropertyLikeName(parent.key);
-  return null;
-}
-
-function isUppercaseName(name: string | null): boolean {
-  return !!name && /^[A-Z]/.test(name);
-}
-
-function buildStyleScopeTarget(text: string, node: Node, parent: Node | null): StyleScopeTarget {
-  if (node.type === 'ArrowFunctionExpression' && node.body.type !== 'BlockStatement') {
+function buildArrowExpressionScopeTarget(text: string, node: ArrowFunctionExpression): StyleScopeTarget {
+  if (node.body.type !== 'BlockStatement') {
     const closingIndent = getLineIndent(text, node.start ?? node.body.start ?? 0);
     return {
       kind: 'arrow-expression',
@@ -226,8 +187,11 @@ function buildStyleScopeTarget(text: string, node: Node, parent: Node | null): S
     };
   }
 
-  const block = (node as any).body as BlockStatement;
-  const blockIndent = getLineIndent(text, block.start ?? node.start ?? 0);
+  throw new Error('Arrow expression scope target requires a non-block arrow body');
+}
+
+function buildBlockScopeTarget(text: string, block: BlockStatement): StyleScopeTarget {
+  const blockIndent = getLineIndent(text, block.start ?? 0);
   return {
     kind: 'block',
     insertionOffset: findBlockInsertionOffset(block),
@@ -236,14 +200,35 @@ function buildStyleScopeTarget(text: string, node: Node, parent: Node | null): S
   };
 }
 
-function chooseStyleScopeTarget(
-  functionStack: Array<{ name: string | null; target: StyleScopeTarget }>,
-  programTarget: StyleScopeTarget,
-): StyleScopeTarget {
-  for (let i = functionStack.length - 1; i >= 0; i -= 1) {
-    if (isUppercaseName(functionStack[i].name)) return functionStack[i].target;
+function buildStatementBodyScopeTarget(text: string, statement: Node, parent: Node): StyleScopeTarget {
+  const closingIndent = getLineIndent(text, parent.start ?? statement.start ?? 0);
+  return {
+    kind: 'statement-body',
+    insertionOffset: statement.start ?? 0,
+    statementIndent: `${closingIndent}  `,
+    closingIndent,
+    statementEnd: statement.end ?? statement.start ?? 0,
+  };
+}
+
+function shouldWrapStatementBody(parent: Node, key: string, child: Node): boolean {
+  if (child.type === 'BlockStatement') return false;
+
+  if (parent.type === 'IfStatement' && (key === 'consequent' || key === 'alternate')) return true;
+  if (
+    (parent.type === 'WhileStatement'
+      || parent.type === 'DoWhileStatement'
+      || parent.type === 'ForStatement'
+      || parent.type === 'ForInStatement'
+      || parent.type === 'ForOfStatement'
+      || parent.type === 'WithStatement'
+      || parent.type === 'LabeledStatement')
+    && key === 'body'
+  ) {
+    return true;
   }
-  return functionStack[0]?.target ?? programTarget;
+
+  return false;
 }
 
 function collectPugAnalysis(
@@ -251,17 +236,11 @@ function collectPugAnalysis(
   text: string,
   templates: ExtractedTemplateData[],
   imports: ExtractedImportData[],
-  programTarget: StyleScopeTarget,
+  scopeStack: StyleScopeTarget[],
   ancestors: Node[] = [],
-  functionStack: Array<{ name: string | null; target: StyleScopeTarget }> = [],
   tagName: string = 'pug',
 ): void {
   if (!node || typeof node !== 'object') return;
-
-  const parent = ancestors.length > 0 ? ancestors[ancestors.length - 1] : null;
-  const nextFunctionStack = isFunctionNode(node)
-    ? [...functionStack, { name: getAssignedName(node, parent), target: buildStyleScopeTarget(text, node, parent) }]
-    : functionStack;
 
   if (
     node.type === 'TaggedTemplateExpression' &&
@@ -270,7 +249,7 @@ function collectPugAnalysis(
   ) {
     templates.push({
       node,
-      styleScopeTarget: chooseStyleScopeTarget(nextFunctionStack, programTarget),
+      styleScopeTarget: scopeStack[scopeStack.length - 1],
     });
     // Do not recurse into this tagged template. Nested pug tags (e.g. inside ${...})
     // are handled by the parent pug region compiler to avoid overlapping regions.
@@ -319,11 +298,25 @@ function collectPugAnalysis(
     if (Array.isArray(child)) {
       for (const item of child) {
         if (item && typeof item === 'object' && typeof item.type === 'string') {
-          collectPugAnalysis(item, text, templates, imports, programTarget, [...ancestors, node], nextFunctionStack, tagName);
+          const nextScopeStack = item.type === 'BlockStatement'
+            ? [...scopeStack, buildBlockScopeTarget(text, item)]
+            : scopeStack;
+          collectPugAnalysis(item, text, templates, imports, nextScopeStack, [...ancestors, node], tagName);
         }
       }
     } else if (child && typeof child === 'object' && typeof child.type === 'string') {
-      collectPugAnalysis(child, text, templates, imports, programTarget, [...ancestors, node], nextFunctionStack, tagName);
+      const nextScopeStack = (
+        node.type === 'ArrowFunctionExpression'
+        && key === 'body'
+        && child.type !== 'BlockStatement'
+      )
+        ? [...scopeStack, buildArrowExpressionScopeTarget(text, node)]
+        : shouldWrapStatementBody(node, key, child)
+          ? [...scopeStack, buildStatementBodyScopeTarget(text, child, node)]
+        : (child.type === 'BlockStatement'
+          ? [...scopeStack, buildBlockScopeTarget(text, child)]
+          : scopeStack);
+      collectPugAnalysis(child, text, templates, imports, nextScopeStack, [...ancestors, node], tagName);
     }
   }
 }
@@ -421,7 +414,7 @@ export function extractPugAnalysis(
       statementIndent: '',
       closingIndent: '',
     };
-    collectPugAnalysis(ast, text, templateData, imports, programTarget, [], [], tagName);
+    collectPugAnalysis(ast, text, templateData, imports, [programTarget], [], tagName);
     templateData.sort((a, b) => (a.node.start ?? 0) - (b.node.start ?? 0));
     templates = templateData.map(entry => entry.node);
   } catch {

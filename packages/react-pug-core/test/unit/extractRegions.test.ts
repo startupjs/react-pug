@@ -259,7 +259,7 @@ describe('nested in TS constructs', () => {
 // ── Style scope/import analysis ────────────────────────────────
 
 describe('style scope and import analysis', () => {
-  it('targets the nearest uppercase-named function scope', () => {
+  it('targets the immediate enclosing arrow-expression scope', () => {
     const text = [
       "import { pug } from 'startupjs';",
       'function App() {',
@@ -274,20 +274,22 @@ describe('style scope and import analysis', () => {
     const analysis = extractPugAnalysis(text, 'app.tsx');
 
     expect(analysis.styleScopeTargets).toHaveLength(1);
-    expect(analysis.styleScopeTargets[0].kind).toBe('block');
-    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('const renderItem'));
+    expect(analysis.styleScopeTargets[0].kind).toBe('arrow-expression');
+    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('pug`'));
   });
 
-  it('falls back to the topmost walked function when no uppercase scope exists', () => {
+  it('targets the immediate enclosing block scope', () => {
     const text = [
       "import { pug } from 'startupjs';",
       'function renderPage() {',
-      '  return items.map(() => pug`',
-      '    .title Hello',
-      "    style(lang='styl')",
-      '      .title',
-      '        color red',
-      '  `);',
+      '  if (visible) {',
+      '    const view = pug`',
+      '      .title Hello',
+      "      style(lang='styl')",
+      '        .title',
+      '          color red',
+      '    `;',
+      '  }',
       '}',
     ].join('\n');
 
@@ -295,7 +297,26 @@ describe('style scope and import analysis', () => {
 
     expect(analysis.styleScopeTargets).toHaveLength(1);
     expect(analysis.styleScopeTargets[0].kind).toBe('block');
-    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('return items'));
+    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('const view'));
+  });
+
+  it('targets single-line statement bodies so they can be normalized into blocks', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'function App () {',
+      '  if (x) return pug`',
+      '    .title One',
+      '    style',
+      '      .one { color: red; }',
+      '  `',
+      '}',
+    ].join('\n');
+
+    const analysis = extractPugAnalysis(text, 'app.tsx');
+
+    expect(analysis.styleScopeTargets).toHaveLength(1);
+    expect(analysis.styleScopeTargets[0].kind).toBe('statement-body');
+    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('return pug`'));
   });
 
   it('tracks helper import source metadata from the pug import module', () => {

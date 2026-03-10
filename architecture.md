@@ -123,6 +123,9 @@ ESLint processor:
 It also computes:
 
 - the target scope for terminal `style` block injection
+  - nearest enclosing block scope, or `Program`
+  - expression-bodied arrows are treated as their own insertion target and rewritten to block bodies later
+  - single-line statement bodies such as `if (...) return ...` are treated as statement-body targets and normalized into blocks later
 - the module source of the matched `pug` import
 - existing `css` / `styl` / `sass` / `scss` imports from that same source
 - the insertion point for any new helper import
@@ -150,7 +153,7 @@ Supported constructs include:
 - text nodes and `|` lines
 - terminal `style` blocks using `css`, `styl`, `sass`, or `scss`
 
-Terminal `style` blocks are extracted before normal Pug parsing. The `style` node itself is not emitted as JSX. Instead, its dedented body is returned as a separate payload so the shadow/runtime transform can inject a helper call into the correct JS scope.
+Terminal `style` blocks are extracted before normal Pug parsing. The `style` node itself is not emitted as JSX. Instead, its dedented body is returned as a separate payload so the shadow/runtime transform can inject a helper call at the top of the immediate enclosing JS scope. For `Program`, that insertion point is after the last import or directive. When the nearest target is a single-line statement body, the transform first normalizes that body into a block and then inserts the helper call before the original statement.
 
 ### 4.3 Compile Modes
 

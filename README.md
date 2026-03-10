@@ -188,11 +188,12 @@ Behavior:
 - `style` defaults to `css`
 - supported langs: `css`, `styl`, `sass`, `scss`
 - the `style` block must be the last top-level node in the template
-- its content is moved to the top of the nearest matching scope as `css```, `styl```, `sass``` or `scss``` and keeps `${...}` interpolations intact
+- its content is moved to the top of the immediate enclosing scope as `css```, `styl```, `sass``` or `scss``` and keeps `${...}` interpolations intact
 - target scope selection:
-  - nearest enclosing uppercase-named function
-  - otherwise the topmost walked function before `Program`
-  - otherwise `Program`
+  - nearest enclosing block scope
+  - expression-bodied arrow functions are rewritten so the helper call can be inserted before the returned expression
+  - single-line `if` / `else` / loop statement bodies are normalized into blocks when needed so the helper call can be inserted before the original statement
+  - `Program` scope inserts right after the last import or directive
 - the helper import is added from the same module as the file's `pug` import unless it already exists
 
 ## Supported

@@ -163,11 +163,7 @@ describe('getScriptSnapshot patching', () => {
     const snapshot = host.getScriptSnapshot('app.tsx');
     const text = snapshotText(snapshot);
 
-    // Should NOT contain pug` anymore
-    expect(text).not.toContain('pug`');
-    // Should contain JSX
-    expect(text).toContain('<div>');
-    expect(text).toContain('Hello');
+    expect(text).toMatchInlineSnapshot(`"const v = (<div>Hello</div>)"`);
   });
 
   it('passes through unchanged for files without pug templates', async () => {
@@ -193,8 +189,11 @@ describe('getScriptSnapshot patching', () => {
     });
 
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('import React from "react"');
-    expect(text).toContain('export default v');
+    expect(text).toMatchInlineSnapshot(`
+      "import React from "react";
+      const v = (<div />);
+      export default v;"
+    `);
   });
 
   it('injects extra React attributes in auto mode when source contains "startupjs"', async () => {
@@ -414,8 +413,7 @@ describe('regex detection', () => {
       'app.tsx': 'const v = pug`div`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).not.toContain('pug`');
-    expect(text).toContain('<div');
+    expect(text).toMatchInlineSnapshot(`"const v = (<div />)"`);
   });
 
   it('finds multiple pug tagged templates in one file', async () => {
@@ -427,11 +425,10 @@ describe('regex detection', () => {
     });
 
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).not.toContain('pug`');
-    expect(text).toContain('<h1>');
-    expect(text).toContain('Header');
-    expect(text).toContain('<p>');
-    expect(text).toContain('Body');
+    expect(text).toMatchInlineSnapshot(`
+      "const a = (<h1>Header</h1>)
+      const b = (<p>Body</p>)"
+    `);
   });
 
   it('ignores non-pug tagged templates', async () => {
@@ -457,11 +454,7 @@ describe('regex detection', () => {
     });
 
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).not.toContain('pug`');
-    expect(text).toContain('className="card"');
-    expect(text).toContain('Button');
-    expect(text).toContain('onClick={handler}');
-    expect(text).toContain('Click');
+    expect(text).toMatchInlineSnapshot(`"const v = (<div className="card"><Button onClick={handler}>Click</Button><p>Some text</p></div>)"`);
   });
 
   it('handles empty pug template', async () => {
@@ -470,9 +463,7 @@ describe('regex detection', () => {
     });
 
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).not.toContain('pug`');
-    // Empty template should produce a null placeholder
-    expect(text).toContain('null');
+    expect(text).toMatchInlineSnapshot(`"const v = (null as any as JSX.Element)"`);
   });
 });
 
@@ -484,7 +475,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n  .foo\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('<div className="foo" />');
+    expect(text).toMatchInlineSnapshot(`"const v = (<div className="foo" />)"`);
   });
 
   it('class shorthand can target class via config', async () => {
@@ -493,8 +484,7 @@ describe('pug-to-JSX transformation', () => {
       { classShorthandProperty: 'class' },
     );
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('<div class="foo" />');
-    expect(text).not.toContain('className=');
+    expect(text).toMatchInlineSnapshot(`"const v = (<div class="foo" />)"`);
   });
 
   it('class shorthand auto-switches to styleName+classnames when startupjs marker is present and inject auto', async () => {
@@ -507,7 +497,36 @@ describe('pug-to-JSX transformation', () => {
       ].join('\n'),
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('styleName={["foo", active]}');
+    expect(text).toMatchInlineSnapshot(`
+      "import "startupjs";             
+      const v = (<span styleName={["foo", active]} />);
+
+      /* [pug-react] startupjs/cssxjs extra react attributes */
+      // extra props for cssxjs \`:part\` and \`styleName\` features
+      import 'react'
+
+      type __PugReactSimpleValue = string | number | boolean | null | undefined | bigint | symbol
+      type __PugReactFlagObject = Record<string, __PugReactSimpleValue>
+
+      // part: string OR array of (string | flag-object)
+      type __PugReactPartProp = string | Array<string | __PugReactFlagObject>
+
+      // styleName: classnames-compatible value (string/object or nested arrays)
+      type __PugReactStyleNameLeaf = undefined | string | __PugReactFlagObject
+      type __PugReactStyleNameProp = __PugReactStyleNameLeaf | Array<__PugReactStyleNameProp>
+
+      declare module 'react' {
+        // For ANY React component (<MyComp ... />)
+        // JSX.IntrinsicAttributes extends React.Attributes
+        interface Attributes {
+          /** [cssxjs] Name this element to be styleable from outside with \`:part(name)\` */
+          part?: __PugReactPartProp
+          /** [cssxjs] Class name(s) for styling the component. Supports classnames-like syntax */
+          styleName?: __PugReactStyleNameProp
+        }
+      }
+      "
+    `);
   });
 
   it('class shorthand merge can be forced to concatenate', async () => {
@@ -521,7 +540,7 @@ describe('pug-to-JSX transformation', () => {
       },
     );
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('styleName={"foo" + " " + (active)}');
+    expect(text).toMatchInlineSnapshot(`"const v = (<span styleName={"foo" + " " + (active)} />)"`);
   });
 
   it('uppercase shorthand segments after component name become component path by default', async () => {
@@ -529,9 +548,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n  Modal.Header.active(onPress=handlePress)\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('<Modal.Header');
-    expect(text).toContain('className="active"');
-    expect(text).not.toContain('className="Header active"');
+    expect(text).toMatchInlineSnapshot(`"const v = (<Modal.Header className="active" onPress={handlePress} />)"`);
   });
 
   it('componentPathFromUppercaseClassShorthand=false keeps uppercase shorthand as classes', async () => {
@@ -540,9 +557,7 @@ describe('pug-to-JSX transformation', () => {
       { componentPathFromUppercaseClassShorthand: false },
     );
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('<Modal');
-    expect(text).toContain('className="Header active"');
-    expect(text).not.toContain('<Modal.Header');
+    expect(text).toMatchInlineSnapshot(`"const v = (<Modal className="Header active" onPress={handlePress} />)"`);
   });
 
   it('transforms tag with attributes and text', async () => {
@@ -550,9 +565,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n  Button(onClick=handler) Click\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('<Button');
-    expect(text).toContain('onClick={handler}');
-    expect(text).toContain('>Click</Button>');
+    expect(text).toMatchInlineSnapshot(`"const v = (<Button onClick={handler}>Click</Button>)"`);
   });
 
   it('transforms tag with text: p Hello', async () => {
@@ -560,7 +573,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n  p Hello world\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('<p>Hello world</p>');
+    expect(text).toMatchInlineSnapshot(`"const v = (<p>Hello world</p>)"`);
   });
 
   it('transforms bare tag: div', async () => {
@@ -568,7 +581,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n  div\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('<div />');
+    expect(text).toMatchInlineSnapshot(`"const v = (<div />)"`);
   });
 
   it('wraps multiple lines in a fragment', async () => {
@@ -576,10 +589,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n  div\n  span\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('<>');
-    expect(text).toContain('</>');
-    expect(text).toContain('<div />');
-    expect(text).toContain('<span />');
+    expect(text).toMatchInlineSnapshot(`"const v = (<><div /><span /></>)"`);
   });
 
   it('single line does not wrap in fragment', async () => {
@@ -587,8 +597,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n  div\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).not.toContain('<>');
-    expect(text).not.toContain('</>');
+    expect(text).toMatchInlineSnapshot(`"const v = (<div />)"`);
   });
 
   it('transforms tag with multiple attributes', async () => {
@@ -596,8 +605,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n  Button(onClick=handler, label="Hi")\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('onClick={handler}');
-    expect(text).toContain('label={"Hi"}');
+    expect(text).toMatchInlineSnapshot(`"const v = (<Button onClick={handler} label={"Hi"} />)"`);
   });
 
   it('empty content produces null placeholder', async () => {
@@ -605,8 +613,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toContain('null');
-    expect(text).toContain('JSX.Element');
+    expect(text).toMatchInlineSnapshot(`"const v = (null as any as JSX.Element)"`);
   });
 });
 
@@ -627,9 +634,7 @@ describe('edge cases', () => {
       'whitespace-pug.tsx': 'const v = pug`   \n   \n   `',
     });
     const text = snapshotText(host.getScriptSnapshot('whitespace-pug.tsx'));
-    // Whitespace-only lines are filtered out, treated as empty -> null placeholder
-    expect(text).not.toContain('pug`');
-    expect(text).toContain('null');
+    expect(text).toMatchInlineSnapshot(`"const v = (null as any as JSX.Element)"`);
   });
 
   it('handles large file with pug template', async () => {

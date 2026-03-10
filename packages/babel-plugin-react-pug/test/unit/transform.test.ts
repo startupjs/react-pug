@@ -90,9 +90,7 @@ function getOriginalOffsetFromSourceMap(
 describe('babel-plugin-react-pug transform', () => {
   it('replaces pug tagged template with JSX expression', () => {
     const out = transform('const view = pug`Button(label=\"Save\")`;');
-    expect(out).not.toContain('pug`');
-    expect(out).toContain('<Button');
-    expect(out).toContain('label');
+    expect(out).toMatchInlineSnapshot(`"const view = <Button label={"Save"} />;"`);
   });
 
   it('supports interpolated expressions in attributes', () => {
@@ -100,8 +98,10 @@ describe('babel-plugin-react-pug transform', () => {
       'const activeTodos = [1, 2, 3];',
       'const view = pug`Button(count=${activeTodos.length})`;',
     ].join('\n'));
-    expect(out).toContain('activeTodos.length');
-    expect(out).toContain('count');
+    expect(out).toMatchInlineSnapshot(`
+      "const activeTodos = [1, 2, 3];
+      const view = <Button count={activeTodos.length} />;"
+    `);
   });
 
   it('supports conditional and each control flow', () => {
@@ -112,10 +112,15 @@ describe('babel-plugin-react-pug transform', () => {
       '      span= todo.text',
       '`;',
     ].join('\n'));
-    expect(out).toContain('show');
-    expect(out).toContain('todos');
-    expect(out).toContain('for (const todo of todos)');
-    expect(out).toContain('todo.text');
+    expect(out).toMatchInlineSnapshot(`
+      "const view = show ? (() => {
+        const __pugEachResult = [];
+        for (const todo of todos) {
+          __pugEachResult.push(<span>{todo.text}</span>);
+        }
+        return __pugEachResult;
+      })() : null;"
+    `);
   });
 
   it('supports while loops in runtime mode without TS-only syntax', () => {
@@ -125,9 +130,15 @@ describe('babel-plugin-react-pug transform', () => {
       '    span Ok',
       '`;',
     ].join('\n'));
-    expect(out).toContain('while (ready)');
-    expect(out).toContain('const __r = []');
-    expect(out).not.toContain('JSX.Element[]');
+    expect(out).toMatchInlineSnapshot(`
+      "const view = (() => {
+        const __r = [];
+        while (ready) {
+          __r.push(<span>Ok</span>);
+        }
+        return __r;
+      })();"
+    `);
   });
 
   it('supports unbuffered code lines', () => {
@@ -143,9 +154,10 @@ describe('babel-plugin-react-pug transform', () => {
 
   it('supports nested pug templates inside ${} interpolation', () => {
     const out = transform(COMPILER_NESTED_INTERPOLATION_SOURCE);
-    expect(out).toContain('<Button');
-    expect(out).toContain('<span');
-    expect(out).toContain('submitDescription');
+    expect(out).toMatchInlineSnapshot(`
+      "const submitDescription = "send form";
+      const view = <Button label={"Submit"} tooltip={<div className="tooltip"><span className="tooltip-text">Click me!{submitDescription}</span><Button label={"info"} onClick={true}><Icon name={"faCoffee"} /></Button></div>} />;"
+    `);
   });
 
   it('supports text nodes piped with |', () => {
@@ -165,15 +177,15 @@ describe('babel-plugin-react-pug transform', () => {
       'const a = pug`span One`;',
       'const b = pug`Button(label=\"Two\")`;',
     ].join('\n'));
-    expect(out).toContain('<span');
-    expect(out).toContain('<Button');
-    expect(out).not.toContain('pug`');
+    expect(out).toMatchInlineSnapshot(`
+      "const a = <span>One</span>;
+      const b = <Button label={"Two"} />;"
+    `);
   });
 
   it('respects custom tagFunction option', () => {
     const out = transform('const view = html`span One`;', { tagFunction: 'html' });
-    expect(out).toContain('<span');
-    expect(out).not.toContain('html`');
+    expect(out).toMatchInlineSnapshot(`"const view = <span>One</span>;"`);
   });
 
   it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
@@ -182,7 +194,13 @@ describe('babel-plugin-react-pug transform', () => {
       'const active = { active: true };',
       'const view = pug`span.title(styleName=active)`;',
     ].join('\n'));
-    expect(out).toContain('styleName={["title", active]}');
+    expect(out).toMatchInlineSnapshot(`
+      "import "startupjs";
+      const active = {
+        active: true
+      };
+      const view = <span styleName={["title", active]} />;"
+    `);
   });
 
   it('allows forcing class shorthand property and merge strategy', () => {
@@ -191,7 +209,7 @@ describe('babel-plugin-react-pug transform', () => {
       'fixture.tsx',
       { classShorthandProperty: 'class', classShorthandMerge: 'concatenate', mode: 'runtime' },
     );
-    expect(transformed.code).toContain('class={"title" + " " + (isActive)}');
+    expect(transformed.code).toMatchInlineSnapshot(`"const view = (<span class={"title" + " " + (isActive)} />);"`);
   });
 
   it('removes a used pug import in basic mode and preserves side effects', () => {
@@ -199,8 +217,10 @@ describe('babel-plugin-react-pug transform', () => {
       'import { pug } from "startupjs";',
       'const view = pug`span.title`;',
     ].join('\n'));
-    expect(out).toContain('import "startupjs";');
-    expect(out).not.toContain('{ pug }');
+    expect(out).toMatchInlineSnapshot(`
+      "import "startupjs";
+      const view = <span styleName={["title"]} />;"
+    `);
   });
 
   it('removes only the pug specifier from mixed imports in basic mode', () => {
@@ -208,8 +228,10 @@ describe('babel-plugin-react-pug transform', () => {
       'import { pug, observer } from "startupjs";',
       'const view = pug`span.title`;',
     ].join('\n'));
-    expect(out).toContain('import { observer } from "startupjs";');
-    expect(out).not.toContain('{ pug, observer }');
+    expect(out).toMatchInlineSnapshot(`
+      "import { observer } from "startupjs";
+      const view = <span styleName={["title"]} />;"
+    `);
   });
 
   it('throws when requirePugImport is enabled and the tag is not imported', () => {

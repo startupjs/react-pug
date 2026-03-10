@@ -163,7 +163,7 @@ function buildStyleInsertions(
     let text = '';
     const mappedRegions: Array<Omit<ShadowMappedRegion, 'shadowStart' | 'shadowEnd'>> = [];
 
-    if (target.kind === 'arrow-expression') {
+    if (target.kind === 'arrow-expression' || target.kind === 'statement-body') {
       text += '{\n';
     } else if (target.insertionOffset > 0) {
       const prevChar = originalText[target.insertionOffset - 1];
@@ -200,6 +200,22 @@ function buildStyleInsertions(
         kind: 'arrow-body-suffix',
         originalOffset: target.expressionEnd ?? target.insertionOffset,
         text: `;\n${target.closingIndent}}`,
+        mappedRegions: [],
+        priority: 2,
+      });
+    } else if (target.kind === 'statement-body') {
+      text += target.statementIndent;
+      insertions.push({
+        kind: 'style-call',
+        originalOffset: target.insertionOffset,
+        text,
+        mappedRegions,
+        priority: 0,
+      });
+      insertions.push({
+        kind: 'statement-body-suffix',
+        originalOffset: target.statementEnd ?? target.insertionOffset,
+        text: `\n${target.closingIndent}}`,
         mappedRegions: [],
         priority: 2,
       });

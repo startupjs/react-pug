@@ -81,10 +81,14 @@ describe('Spike: TS plugin host patching', () => {
     expect(snapshot).toBeDefined();
     const text = snapshot!.getText(0, snapshot!.getLength());
 
-    // Shadow content should NOT contain pug` -- it should be replaced with JSX
-    expect(text).not.toContain('pug`');
-    // Should contain JSX elements from the transformation
-    expect(text).toContain('<Button');
+    expect(text).toMatchInlineSnapshot(`
+      "import { Button } from './Button';
+
+      const handler = () => console.log('clicked');
+
+      const view = (<Button onClick={handler} label={"Hello"}>Click me</Button>)
+      "
+    `);
   });
 
   it('passes through files without pug templates unmodified', () => {

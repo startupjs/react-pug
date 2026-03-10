@@ -161,32 +161,40 @@ describe('single pug region', () => {
 // ── Terminal style blocks ──────────────────────────────────────
 
 describe('terminal style blocks in shadow document', () => {
-  it('moves a style block to the top of the nearest uppercase function', () => {
+  it('moves a style block to the top of the immediate enclosing block scope', () => {
     const text = [
       "import { pug, observer } from 'startupjs';",
       'function App() {',
-      '  return pug`',
-      '    .title Hello',
-      "    style(lang='styl')",
-      '      .title',
-      '        color red',
-      '  `;',
+      '  if (visible) {',
+      '    const view = pug`',
+      '      .title Hello',
+      "      style(lang='styl')",
+      '        .title',
+      '          color red',
+      '    `;',
+      '  }',
       '}',
     ].join('\n');
 
     const doc = buildShadowDocument(text, 'app.tsx');
 
-    expect(doc.shadowText).toContain("import {observer,styl} from 'startupjs';");
-    expect(doc.shadowText).not.toContain("import { styl } from 'startupjs';");
-    expect(doc.shadowText).toContain('function App() {');
-    expect(doc.shadowText).toContain('  styl`');
-    expect(doc.shadowText).toContain('    .title');
-    expect(doc.shadowText).toContain('      color red');
-    expect(doc.shadowText.indexOf('  styl`')).toBeLessThan(doc.shadowText.indexOf('return '));
-    expect(doc.shadowText).not.toContain('<style');
+    expect(doc.shadowText).toMatchInlineSnapshot(`
+      "import {observer,styl} from 'startupjs';  
+      function App() {
+        if (visible) {
+          
+          styl\`
+            .title
+              color red
+
+          \`;
+      const view = (<div styleName={["title"]}>Hello</div>);
+        }
+      }"
+    `);
   });
 
-  it('converts uppercase arrow-expression bodies into block bodies when inserting styles', () => {
+  it('converts immediate arrow-expression bodies into block bodies when inserting styles', () => {
     const text = [
       "import { pug } from 'startupjs';",
       'const App = () => pug`',
@@ -198,10 +206,56 @@ describe('terminal style blocks in shadow document', () => {
 
     const doc = buildShadowDocument(text, 'app.tsx');
 
-    expect(doc.shadowText).toContain('const App = () => {');
-    expect(doc.shadowText).toContain('  css`');
-    expect(doc.shadowText).toContain('  return ');
-    expect(doc.shadowText).toContain('\n};');
+    expect(doc.shadowText).toMatchInlineSnapshot(`
+      "import { css } from 'startupjs';
+      const App = () => {
+        css\`
+          .title { color: red; }
+
+        \`;
+        return (<div styleName={["title"]}>Hello</div>);
+      };"
+    `);
+  });
+
+  it('normalizes single-line if/else return bodies into blocks before inserting styles', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'function App () {',
+      '  if (x) return pug`',
+      '    .title One',
+      '    style',
+      '      .one { color: red; }',
+      '  `',
+      '  else return pug`',
+      '    .title Two',
+      '    style',
+      '      .two { color: blue; }',
+      '  `',
+      '}',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.shadowText).toMatchInlineSnapshot(`
+      "import { css } from 'startupjs';
+      function App () {
+        if (x) {
+          css\`
+            .one { color: red; }
+
+          \`;
+          return (<div styleName={["title"]}>One</div>)
+        }
+        else {
+          css\`
+            .two { color: blue; }
+
+          \`;
+          return (<div styleName={["title"]}>Two</div>)
+        }
+      }"
+    `);
   });
 
   it('falls back to program scope when no function scope exists', () => {
