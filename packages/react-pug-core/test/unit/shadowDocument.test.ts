@@ -158,6 +158,84 @@ describe('single pug region', () => {
   });
 });
 
+// ── Terminal style blocks ──────────────────────────────────────
+
+describe('terminal style blocks in shadow document', () => {
+  it('moves a style block to the top of the nearest uppercase function', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'function App() {',
+      '  return pug`',
+      '    .title Hello',
+      "    style(lang='styl')",
+      '      .title',
+      '        color red',
+      '  `;',
+      '}',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.shadowText).toContain("import { styl } from 'startupjs';");
+    expect(doc.shadowText).toContain("import 'startupjs';");
+    expect(doc.shadowText).toContain('function App() {');
+    expect(doc.shadowText).toContain('  styl`');
+    expect(doc.shadowText).toContain('    .title');
+    expect(doc.shadowText).toContain('      color red');
+    expect(doc.shadowText.indexOf('  styl`')).toBeLessThan(doc.shadowText.indexOf('return '));
+    expect(doc.shadowText).not.toContain('<style');
+  });
+
+  it('converts uppercase arrow-expression bodies into block bodies when inserting styles', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'const App = () => pug`',
+      '  .title Hello',
+      '  style',
+      '    .title { color: red; }',
+      '`;',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.shadowText).toContain('const App = () => {');
+    expect(doc.shadowText).toContain('  css`');
+    expect(doc.shadowText).toContain('  return ');
+    expect(doc.shadowText).toContain('\n};');
+  });
+
+  it('falls back to program scope when no function scope exists', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'export const view = pug`',
+      '  .title Hello',
+      '  style',
+      '    .title { color: red; }',
+      '`;',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.shadowText).toContain("import { css } from 'startupjs';");
+    expect(doc.shadowText.indexOf('css`')).toBeLessThan(doc.shadowText.indexOf('export const view'));
+  });
+
+  it('keeps a transformError and placeholder output when style blocks need pug import metadata', () => {
+    const text = [
+      'const view = pug`',
+      '  .title Hello',
+      '  style',
+      '    .title { color: red; }',
+      '`;',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.regions[0].transformError?.code).toBe('missing-pug-import-for-style');
+    expect(doc.regions[0].tsxText).toContain('null');
+  });
+});
+
 // ── Multiple regions ────────────────────────────────────────────
 
 describe('multiple pug regions', () => {

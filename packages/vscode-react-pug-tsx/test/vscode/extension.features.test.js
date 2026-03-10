@@ -781,6 +781,154 @@ suite('Extension Host Features (example workspace)', () => {
     });
   });
 
+  test('textmate highlighting switches pug style blocks into embedded css scopes', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_highlight.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const tone = "red";',
+        'const view = pug`',
+        '  .title Hello',
+        '  style',
+        '    .title {',
+        '      color: ${tone};',
+        '    }',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('color:');
+    assert.ok(idx > 0, 'Could not find color declaration inside style block');
+    const pos = doc.positionAt(idx);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    const syntaxTokens = await retry(async () => {
+      const result = await vscode.commands.executeCommand('_workbench.captureSyntaxTokens', doc.uri);
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    }, 45000, 500);
+
+    const colorToken = syntaxTokens.find((token) => typeof token?.c === 'string' && token.c.includes('color'));
+    const interpolationBeginToken = syntaxTokens.find((token) => typeof token?.c === 'string' && token.c.includes('${'));
+    const interpolationEndToken = syntaxTokens.find((token) => typeof token?.c === 'string' && token.c.includes('}'));
+    const colorScopes = typeof colorToken?.t === 'string' ? colorToken.t : '';
+    const interpolationBeginScopes = typeof interpolationBeginToken?.t === 'string' ? interpolationBeginToken.t : '';
+    const interpolationEndScopes = typeof interpolationEndToken?.t === 'string' ? interpolationEndToken.t : '';
+
+    assert.ok(
+      /source\.css/.test(colorScopes),
+      `Expected style block token to carry CSS scope, got ${stringifySmall(colorScopes, 240)}`,
+    );
+    assert.ok(
+      /meta\.var\.expr\.tsx/.test(`${interpolationBeginScopes} ${interpolationEndScopes}`),
+      `Expected \${} interpolation inside style block to keep embedded TS expression scopes, got ${stringifySmall({ interpolationBeginScopes, interpolationEndScopes }, 240)}`,
+    );
+  });
+
+  test('completion inside pug style block includes CSS language suggestions', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_completion.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const view = pug`',
+        '  .title Hello',
+        '  style',
+        '    .title {',
+        '      col',
+        '    }',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('col');
+    assert.ok(idx > 0, 'Could not find CSS completion anchor inside style block');
+    const pos = doc.positionAt(idx + 'col'.length);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        doc.uri,
+        pos,
+      );
+      return result && Array.isArray(result.items) && result.items.length > 0 ? result : null;
+    });
+
+    const labels = completions.items.map((item) => labelText(item.label));
+    assert.ok(
+      labels.includes('color'),
+      `Expected CSS completion inside pug style block to include color. Top labels: ${labels.slice(0, 30).join(', ')}`,
+    );
+  });
+
+  test('show shadow tsx moves pug style blocks into helper calls', async function () {
+    this.timeout(60000);
+    const helperUri = vscode.Uri.file(path.join(workspaceRoot, 'src', '__vscode_style_helpers.ts'));
+    await vscode.workspace.fs.writeFile(helperUri, Buffer.from([
+      'export function pug(strings: TemplateStringsArray, ...values: any[]): any {',
+      '  return { strings, values };',
+      '}',
+      'export function css(strings: TemplateStringsArray, ...values: any[]): any {',
+      '  return { strings, values };',
+      '}',
+    ].join('\n'), 'utf8'));
+    tempUris.push(helperUri);
+
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_shadow.tsx',
+      [
+        "import { pug } from './__vscode_style_helpers';",
+        'function App() {',
+        '  return pug`',
+        '    .title Hello',
+        '    style',
+        '      .title {',
+        '        color: red;',
+        '      }',
+        '  `;',
+        '}',
+        'export { App };',
+      ].join('\n'),
+    );
+
+    await vscode.window.showTextDocument(doc);
+    await vscode.commands.executeCommand('pugReact.showShadowTsx');
+
+    const shadowDoc = await retry(async () => {
+      const candidate = vscode.workspace.textDocuments.find((openDoc) =>
+        openDoc.uri.scheme === 'pug-react-shadow'
+        && openDoc.uri.path.endsWith(`${doc.fileName}.shadow.tsx`),
+      );
+      return candidate ?? null;
+    }, 30000, 250);
+
+    const shadowText = shadowDoc.getText();
+    const hasCssImport = /import\s*\{\s*css\s*\}\s*from\s*['"]\.\/__vscode_style_helpers['"]/.test(shadowText);
+    assert.ok(
+      hasCssImport || shadowText.includes('import "./__vscode_style_helpers";'),
+      `Expected shadow document to preserve helper-module imports for style block, got ${stringifySmall(shadowText, 500)}`,
+    );
+    assert.ok(
+      shadowText.includes('  css`'),
+      'Expected shadow document to move style block into css helper call at function top',
+    );
+    assert.ok(
+      shadowText.indexOf('  css`') < shadowText.indexOf('return '),
+      'Expected moved style helper call to appear before the return statement',
+    );
+    assert.ok(
+      !shadowText.includes('<style'),
+      'Expected shadow document to strip the original style tag from generated JSX',
+    );
+  });
+
   test('uppercase shorthand segments can form component path with class tail for highlight + IntelliSense', async function () {
     this.timeout(60000);
     const content = [

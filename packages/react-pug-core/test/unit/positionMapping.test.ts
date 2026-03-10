@@ -617,4 +617,27 @@ describe('edge cases', () => {
       }
     }
   });
+
+  it('maps style body positions to the injected helper call', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'function App() {',
+      '  return pug`',
+      '    .title Hello',
+      '    style',
+      '      .title {',
+      '        color: red;',
+      '      }',
+      '  `;',
+      '}',
+    ].join('\n');
+    const doc = makeDoc(text);
+
+    const originalOffset = text.indexOf('color: red;');
+    const shadowOffset = originalToShadow(doc, originalOffset);
+
+    expect(shadowOffset).not.toBeNull();
+    expect(doc.shadowText.slice(shadowOffset!, shadowOffset! + 'color: red;'.length)).toBe('color: red;');
+    expect(shadowToOriginal(doc, shadowOffset!)).toBe(originalOffset);
+  });
 });

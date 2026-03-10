@@ -1,9 +1,45 @@
-import type { MissingTagImportDiagnostic, PugDocument, PugRegion, TagImportCleanup } from './mapping';
-import { extractPugAnalysis } from './extractRegions';
+import type {
+  CodeMapping,
+  ExtractedStyleBlock,
+  MissingTagImportDiagnostic,
+  PugDocument,
+  PugRegion,
+  ShadowCopySegment,
+  ShadowInsertion,
+  ShadowMappedRegion,
+  StyleTagLang,
+  TagImportCleanup,
+} from './mapping';
+import { FULL_FEATURES } from './mapping';
+import { extractPugAnalysis, type StyleScopeTarget } from './extractRegions';
 import { compilePugToTsx, type CompileOptions } from './pugToTsx';
 import { originalToShadow } from './positionMapping';
 
 const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
+
+interface PendingReplacement {
+  kind: 'replace';
+  originalStart: number;
+  originalEnd: number;
+  text: string;
+  regionIndex: number;
+  mappedRegion: Omit<ShadowMappedRegion, 'shadowStart' | 'shadowEnd'> | null;
+}
+
+interface PendingInsertion {
+  kind: ShadowInsertion['kind'];
+  originalOffset: number;
+  text: string;
+  mappedRegions: Array<Omit<ShadowMappedRegion, 'shadowStart' | 'shadowEnd'>>;
+  priority: number;
+}
+
+interface StyleCallPlan {
+  regionIndex: number;
+  helper: StyleTagLang;
+  styleBlock: ExtractedStyleBlock;
+  target: StyleScopeTarget;
+}
 
 function resolveCompileOptions(
   originalText: string,
@@ -20,13 +56,185 @@ function resolveCompileOptions(
   };
 }
 
+function fallbackNullExpression(mode: CompileOptions['mode']): string {
+  return mode === 'runtime' ? 'null' : '(null as any as JSX.Element)';
+}
+
+function countLeadingWhitespace(line: string): number {
+  return line.match(/^[ \t]*/)?.[0].length ?? 0;
+}
+
+function makeMissingStyleImportError(styleBlock: ExtractedStyleBlock) {
+  return {
+    code: 'missing-pug-import-for-style' as const,
+    message: 'style blocks require importing pug so the matching style helper can be resolved',
+    line: styleBlock.line,
+    column: styleBlock.column,
+    offset: styleBlock.tagOffset,
+  };
+}
+
+function buildStyleCallText(
+  region: PugRegion,
+  styleBlock: ExtractedStyleBlock,
+  helper: StyleTagLang,
+  statementIndent: string,
+): { text: string; mappedRegion: Omit<ShadowMappedRegion, 'shadowStart' | 'shadowEnd'> } {
+  const bodyRaw = region.pugText.slice(styleBlock.contentStart, styleBlock.contentEnd);
+  const rawLines = bodyRaw.split('\n');
+  const generatedBodyIndent = `${statementIndent}  `;
+  let text = `${statementIndent}${helper}\`\n`;
+  let generatedOffset = text.length;
+  let sourceLineStart = styleBlock.contentStart;
+  const mappings: CodeMapping[] = [];
+
+  for (let i = 0; i < rawLines.length; i += 1) {
+    const rawLine = rawLines[i];
+    const isBlank = rawLine.trim().length === 0;
+    const indentToRemove = isBlank ? rawLine.length : Math.min(styleBlock.commonIndent, countLeadingWhitespace(rawLine));
+    const dedented = isBlank ? '' : rawLine.slice(indentToRemove);
+    const generatedLine = dedented.length > 0 ? `${generatedBodyIndent}${dedented}` : '';
+
+    if (dedented.length > 0) {
+      mappings.push({
+        sourceOffsets: [sourceLineStart + indentToRemove],
+        generatedOffsets: [generatedOffset + generatedBodyIndent.length],
+        lengths: [dedented.length],
+        data: FULL_FEATURES,
+      });
+    }
+
+    text += generatedLine;
+    generatedOffset += generatedLine.length;
+
+    if (i < rawLines.length - 1 || bodyRaw.endsWith('\n')) {
+      text += '\n';
+      generatedOffset += 1;
+    }
+
+    sourceLineStart += rawLine.length + 1;
+  }
+
+  if (!text.endsWith('\n')) {
+    text += '\n';
+    generatedOffset += 1;
+  }
+
+  text += `${statementIndent}\`;\n`;
+
+  return {
+    text,
+    mappedRegion: {
+      kind: 'style',
+      regionIndex: -1,
+      sourceStart: styleBlock.contentStart,
+      sourceEnd: styleBlock.contentEnd,
+      mappings,
+    },
+  };
+}
+
+function groupKeyForTarget(target: StyleScopeTarget): string {
+  return `${target.kind}:${target.insertionOffset}:${target.expressionEnd ?? -1}`;
+}
+
+function buildStyleInsertions(
+  originalText: string,
+  regions: PugRegion[],
+  plans: StyleCallPlan[],
+): PendingInsertion[] {
+  const grouped = new Map<string, { target: StyleScopeTarget; plans: StyleCallPlan[] }>();
+  for (const plan of plans) {
+    const key = groupKeyForTarget(plan.target);
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.plans.push(plan);
+    } else {
+      grouped.set(key, { target: plan.target, plans: [plan] });
+    }
+  }
+
+  const insertions: PendingInsertion[] = [];
+  for (const { target, plans: targetPlans } of grouped.values()) {
+    let text = '';
+    const mappedRegions: Array<Omit<ShadowMappedRegion, 'shadowStart' | 'shadowEnd'>> = [];
+
+    if (target.kind === 'arrow-expression') {
+      text += '{\n';
+    } else if (target.insertionOffset > 0) {
+      const prevChar = originalText[target.insertionOffset - 1];
+      if (prevChar !== '\n' && prevChar !== '\r') text += '\n';
+    }
+
+    for (const plan of targetPlans) {
+      const built = buildStyleCallText(regions[plan.regionIndex], plan.styleBlock, plan.helper, target.statementIndent);
+      mappedRegions.push({
+        ...built.mappedRegion,
+        regionIndex: plan.regionIndex,
+      });
+      const mappedRegion = mappedRegions[mappedRegions.length - 1];
+      const offsetBefore = text.length;
+      text += built.text;
+      mappedRegion.sourceStart = built.mappedRegion.sourceStart;
+      mappedRegion.sourceEnd = built.mappedRegion.sourceEnd;
+      mappedRegion.mappings = built.mappedRegion.mappings.map((mapping) => ({
+        ...mapping,
+        generatedOffsets: mapping.generatedOffsets.map((offset) => offset + offsetBefore),
+      }));
+    }
+
+    if (target.kind === 'arrow-expression') {
+      text += `${target.statementIndent}return `;
+      insertions.push({
+        kind: 'style-call',
+        originalOffset: target.insertionOffset,
+        text,
+        mappedRegions,
+        priority: 0,
+      });
+      insertions.push({
+        kind: 'arrow-body-suffix',
+        originalOffset: target.expressionEnd ?? target.insertionOffset,
+        text: `;\n${target.closingIndent}}`,
+        mappedRegions: [],
+        priority: 2,
+      });
+    } else {
+      insertions.push({
+        kind: 'style-call',
+        originalOffset: target.insertionOffset,
+        text,
+        mappedRegions,
+        priority: 1,
+      });
+    }
+  }
+
+  return insertions;
+}
+
+function applyImportCleanups(doc: PugDocument, cleanups: TagImportCleanup[]): string {
+  if (cleanups.length === 0) return doc.shadowText;
+  const chars = doc.shadowText.split('');
+  for (const cleanup of cleanups) {
+    const shadowStart = originalToShadow(doc, cleanup.originalStart);
+    if (shadowStart == null) continue;
+    const shadowEnd = shadowStart + (cleanup.originalEnd - cleanup.originalStart);
+    for (let i = shadowStart; i < shadowEnd; i += 1) {
+      chars[i] = '';
+    }
+    chars[shadowStart] = cleanup.replacementText;
+  }
+  return chars.join('');
+}
+
 /**
  * Build a shadow document from source text.
  *
  * 1. Extract pug regions using @babel/parser
  * 2. Compile each region's pug text to TSX
- * 3. Replace each pug`...` span in the original text with generated TSX
- * 4. Compute regionDeltas for O(log n) position mapping outside regions
+ * 3. Insert extracted style blocks at their target scope tops
+ * 4. Replace each pug`...` span in the original text with generated TSX
  */
 export function buildShadowDocument(
   originalText: string,
@@ -54,6 +262,14 @@ export function buildShadowDocument(
       uri,
       regions: [],
       importCleanups: [],
+      copySegments: [{
+        originalStart: 0,
+        originalEnd: originalText.length,
+        shadowStart: 0,
+        shadowEnd: originalText.length,
+      }],
+      mappedRegions: [],
+      insertions: [],
       shadowText: originalText,
       version,
       regionDeltas: [],
@@ -63,58 +279,171 @@ export function buildShadowDocument(
     };
   }
 
-  // Compile each region and populate shadow fields
-  for (const region of regions) {
-    if (region.parseError != null) {
-      // Region already has an extraction-time error -- use placeholder
-      region.tsxText = resolvedCompileOptions.mode === 'runtime'
-        ? 'null'
-        : '(null as any as JSX.Element)';
-      region.mappings = [];
-      region.lexerTokens = [];
-    } else {
-      const compiled = compilePugToTsx(region.pugText, resolvedCompileOptions);
-      region.tsxText = compiled.tsx;
-      region.mappings = compiled.mappings;
-      region.lexerTokens = compiled.lexerTokens;
-      region.parseError = compiled.parseError;
+  const stylePlans: StyleCallPlan[] = [];
+  const requiredHelpers = new Set<StyleTagLang>();
+
+  for (let i = 0; i < regions.length; i += 1) {
+    const region = regions[i];
+    const compiled = compilePugToTsx(region.pugText, resolvedCompileOptions);
+    region.tsxText = compiled.tsx;
+    region.mappings = compiled.mappings;
+    region.lexerTokens = compiled.lexerTokens;
+    region.parseError = compiled.parseError;
+    region.transformError = compiled.transformError;
+    region.styleBlock = compiled.styleBlock;
+
+    if (region.styleBlock && region.transformError == null) {
+      if (!analysis.tagImportSource) {
+        region.transformError = makeMissingStyleImportError(region.styleBlock);
+        region.tsxText = fallbackNullExpression(resolvedCompileOptions.mode);
+        region.mappings = [];
+        region.lexerTokens = [];
+      } else {
+        stylePlans.push({
+          regionIndex: i,
+          helper: region.styleBlock.lang,
+          styleBlock: region.styleBlock,
+          target: analysis.styleScopeTargets[i],
+        });
+        requiredHelpers.add(region.styleBlock.lang);
+      }
     }
   }
 
-  // Build shadow text by replacing each pug`...` span with TSX
-  // Regions are sorted by originalStart (extractPugRegions guarantees this)
+  const pendingInsertions: PendingInsertion[] = [];
+  if (analysis.tagImportSourceText && analysis.helperImportInsertionOffset != null) {
+    for (const helper of [...requiredHelpers].sort()) {
+      if (analysis.existingStyleImports.has(helper)) continue;
+      pendingInsertions.push({
+        kind: 'style-import',
+        originalOffset: analysis.helperImportInsertionOffset,
+        text: `import { ${helper} } from ${analysis.tagImportSourceText};\n`,
+        mappedRegions: [],
+        priority: -1,
+      });
+    }
+  }
+  pendingInsertions.push(...buildStyleInsertions(originalText, regions, stylePlans));
+
+  const pendingReplacements: PendingReplacement[] = regions.map((region, regionIndex) => ({
+    kind: 'replace',
+    originalStart: region.originalStart,
+    originalEnd: region.originalEnd,
+    text: region.tsxText,
+    regionIndex,
+    mappedRegion: region.mappings.length > 0
+      ? {
+        kind: 'pug',
+        regionIndex,
+        sourceStart: 0,
+        sourceEnd: region.pugText.length,
+        mappings: region.mappings,
+      }
+      : null,
+  }));
+
+  const edits = [
+    ...pendingInsertions.map((insertion) => ({
+      sortStart: insertion.originalOffset,
+      priority: insertion.priority,
+      edit: insertion,
+    })),
+    ...pendingReplacements.map((replacement) => ({
+      sortStart: replacement.originalStart,
+      priority: 1,
+      edit: replacement,
+    })),
+  ].sort((a, b) => {
+    if (a.sortStart !== b.sortStart) return a.sortStart - b.sortStart;
+    return a.priority - b.priority;
+  });
+
   let shadowText = '';
   let cursor = 0;
-  let cumulativeDelta = 0;
-  const regionDeltas: number[] = [];
+  const copySegments: ShadowCopySegment[] = [];
+  const mappedRegions: ShadowMappedRegion[] = [];
+  const insertions: ShadowInsertion[] = [];
 
-  for (const region of regions) {
-    // Copy text before this region unchanged
-    shadowText += originalText.slice(cursor, region.originalStart);
+  for (const { edit } of edits) {
+    if ('originalStart' in edit) {
+      if (cursor < edit.originalStart) {
+        const shadowStart = shadowText.length;
+        const copied = originalText.slice(cursor, edit.originalStart);
+        shadowText += copied;
+        copySegments.push({
+          originalStart: cursor,
+          originalEnd: edit.originalStart,
+          shadowStart,
+          shadowEnd: shadowText.length,
+        });
+      }
 
-    // Record cumulative delta BEFORE this region
-    regionDeltas.push(cumulativeDelta);
+      const shadowStart = shadowText.length;
+      edit.text && (shadowText += edit.text);
+      regions[edit.regionIndex].shadowStart = shadowStart;
+      regions[edit.regionIndex].shadowEnd = shadowText.length;
+      if (edit.mappedRegion) {
+        mappedRegions.push({
+          ...edit.mappedRegion,
+          shadowStart,
+          shadowEnd: shadowText.length,
+        });
+      }
+      cursor = edit.originalEnd;
+      continue;
+    }
 
-    // Compute shadow position for this region
-    region.shadowStart = region.originalStart + cumulativeDelta;
-    shadowText += region.tsxText;
-    region.shadowEnd = region.shadowStart + region.tsxText.length;
+    if (cursor < edit.originalOffset) {
+      const shadowStart = shadowText.length;
+      const copied = originalText.slice(cursor, edit.originalOffset);
+      shadowText += copied;
+      copySegments.push({
+        originalStart: cursor,
+        originalEnd: edit.originalOffset,
+        shadowStart,
+        shadowEnd: shadowText.length,
+      });
+      cursor = edit.originalOffset;
+    }
 
-    // Update delta: difference between TSX length and original pug`...` length
-    const originalLength = region.originalEnd - region.originalStart;
-    cumulativeDelta += region.tsxText.length - originalLength;
-
-    cursor = region.originalEnd;
+    const shadowStart = shadowText.length;
+    shadowText += edit.text;
+    insertions.push({
+      kind: edit.kind,
+      originalOffset: edit.originalOffset,
+      shadowStart,
+      shadowEnd: shadowText.length,
+    });
+    for (const mappedRegion of edit.mappedRegions) {
+      mappedRegions.push({
+        ...mappedRegion,
+        shadowStart: shadowStart,
+        shadowEnd: shadowStart + edit.text.length,
+      });
+    }
   }
 
-  // Copy remaining text after last region
-  shadowText += originalText.slice(cursor);
+  if (cursor < originalText.length) {
+    const shadowStart = shadowText.length;
+    shadowText += originalText.slice(cursor);
+    copySegments.push({
+      originalStart: cursor,
+      originalEnd: originalText.length,
+      shadowStart,
+      shadowEnd: shadowText.length,
+    });
+  }
+
+  const regionDeltas = regions.map(region => region.shadowStart - region.originalStart);
 
   const document: PugDocument = {
     originalText,
     uri,
     regions,
     importCleanups,
+    copySegments,
+    mappedRegions,
+    insertions,
     shadowText,
     version,
     regionDeltas,
@@ -128,19 +457,4 @@ export function buildShadowDocument(
   }
 
   return document;
-}
-
-function applyImportCleanups(doc: PugDocument, cleanups: TagImportCleanup[]): string {
-  if (cleanups.length === 0) return doc.shadowText;
-  const chars = doc.shadowText.split('');
-  for (const cleanup of cleanups) {
-    const shadowStart = originalToShadow(doc, cleanup.originalStart);
-    if (shadowStart == null) continue;
-    const shadowEnd = shadowStart + (cleanup.originalEnd - cleanup.originalStart);
-    for (let i = shadowStart; i < shadowEnd; i += 1) {
-      chars[i] = '';
-    }
-    chars[shadowStart] = cleanup.replacementText;
-  }
-  return chars.join('');
 }

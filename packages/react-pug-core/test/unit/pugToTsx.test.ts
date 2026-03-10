@@ -329,6 +329,90 @@ describe('empty template', () => {
   });
 });
 
+// ── Terminal style blocks ───────────────────────────────────────
+
+describe('terminal style blocks', () => {
+  it('extracts a terminal style block with default css lang', () => {
+    const pug = [
+      '.title Hello',
+      'style',
+      '  .title {',
+      '    color: red;',
+      '  }',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug);
+
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toContain('className="title"');
+    expect(result.tsx).not.toContain('<style');
+    expect(result.styleBlock).toEqual({
+      lang: 'css',
+      content: [
+        '.title {',
+        '  color: red;',
+        '}',
+      ].join('\n'),
+      tagOffset: pug.indexOf('style'),
+      contentStart: pug.indexOf('  .title {'),
+      contentEnd: pug.length,
+      commonIndent: 2,
+      line: 2,
+      column: 1,
+    });
+  });
+
+  it('extracts styl lang and preserves ${} interpolation verbatim', () => {
+    const pug = [
+      '.title Hello',
+      "style(lang='styl')",
+      '  .title',
+      '    color ${tone}',
+      '    font monospace',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug);
+
+    expect(result.transformError).toBeNull();
+    expect(result.styleBlock?.lang).toBe('styl');
+    expect(result.styleBlock?.content).toBe([
+      '.title',
+      '  color ${tone}',
+      '  font monospace',
+    ].join('\n'));
+  });
+
+  it('returns transformError when style tag is not last', () => {
+    const pug = [
+      '.title Hello',
+      'style',
+      '  .title',
+      '    color red',
+      '.footer Bye',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug);
+
+    expect(result.transformError?.code).toBe('style-tag-must-be-last');
+    expect(result.tsx).toContain('null');
+    expect(result.styleBlock).toBeNull();
+  });
+
+  it('returns transformError for unsupported style lang', () => {
+    const pug = [
+      '.title Hello',
+      "style(lang='less')",
+      '  .title {}',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug);
+
+    expect(result.transformError?.code).toBe('unsupported-style-lang');
+    expect(result.styleBlock).toBeNull();
+  });
+});
+
 // ── Error handling ───────────────────────────────────────────────
 
 describe('error handling', () => {

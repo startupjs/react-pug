@@ -1,15 +1,17 @@
 import { parse } from '@babel/parser';
 import type {
   File,
+  BlockStatement,
   ImportDeclaration,
   ImportDefaultSpecifier,
   ImportNamespaceSpecifier,
   ImportSpecifier,
   Node,
+  Program,
   StringLiteral,
   TaggedTemplateExpression,
 } from '@babel/types';
-import type { PugRegion, TagImportCleanup } from './mapping';
+import type { PugRegion, StyleTagLang, TagImportCleanup } from './mapping';
 
 /** Strip the common leading whitespace from all non-empty lines, returning the stripped text and indent amount */
 function stripCommonIndent(text: string): { stripped: string; indent: number } {
@@ -47,7 +49,25 @@ function getPluginsForFile(filename: string): any[] {
 
 /** Walk the AST and collect TaggedTemplateExpression nodes where tag matches tagName */
 interface ExtractedImportData {
-  cleanup: TagImportCleanup;
+  declaration: ImportDeclaration;
+  source: string;
+  sourceText: string;
+  cleanup: TagImportCleanup | null;
+  hasMatchedTag: boolean;
+  helperImports: Set<StyleTagLang>;
+}
+
+export interface StyleScopeTarget {
+  kind: 'program' | 'block' | 'arrow-expression';
+  insertionOffset: number;
+  statementIndent: string;
+  closingIndent: string;
+  expressionEnd?: number;
+}
+
+interface ExtractedTemplateData {
+  node: TaggedTemplateExpression;
+  styleScopeTarget: StyleScopeTarget;
 }
 
 export interface ExtractPugAnalysisResult {
@@ -55,6 +75,11 @@ export interface ExtractPugAnalysisResult {
   importCleanups: TagImportCleanup[];
   usesTagFunction: boolean;
   hasTagImport: boolean;
+  tagImportSource: string | null;
+  tagImportSourceText: string | null;
+  helperImportInsertionOffset: number | null;
+  existingStyleImports: Set<StyleTagLang>;
+  styleScopeTargets: StyleScopeTarget[];
 }
 
 function getNodeText(text: string, node: { start?: number | null; end?: number | null }): string {
@@ -106,21 +131,145 @@ function buildImportCleanup(
   };
 }
 
+function getLineStartOffset(text: string, offset: number): number {
+  const lineBreak = text.lastIndexOf('\n', Math.max(0, offset - 1));
+  return lineBreak < 0 ? 0 : lineBreak + 1;
+}
+
+function getLineIndent(text: string, offset: number): string {
+  const lineStart = getLineStartOffset(text, offset);
+  const line = text.slice(lineStart, text.indexOf('\n', lineStart) >= 0 ? text.indexOf('\n', lineStart) : text.length);
+  return line.match(/^[ \t]*/) ? line.match(/^[ \t]*/)![0] : '';
+}
+
+function getOffsetAfterTrailingLineBreak(text: string, offset: number): number {
+  if (text[offset] === '\r' && text[offset + 1] === '\n') return offset + 2;
+  if (text[offset] === '\n' || text[offset] === '\r') return offset + 1;
+  return offset;
+}
+
+function isDirectiveStatement(node: Node): boolean {
+  return node.type === 'ExpressionStatement' && typeof (node as any).directive === 'string';
+}
+
+function findProgramInsertionOffset(text: string, program: Program): number {
+  const body = program.body;
+  let lastLeading: Node | null = null;
+  for (const statement of body) {
+    if (statement.type === 'ImportDeclaration' || isDirectiveStatement(statement)) {
+      lastLeading = statement;
+      continue;
+    }
+    return statement.start ?? 0;
+  }
+  return lastLeading ? getOffsetAfterTrailingLineBreak(text, lastLeading.end ?? 0) : 0;
+}
+
+function findBlockInsertionOffset(block: BlockStatement): number {
+  const firstNonDirective = block.body.find(statement => !isDirectiveStatement(statement));
+  if (firstNonDirective) return firstNonDirective.start ?? ((block.start ?? 0) + 1);
+  return Math.max(0, (block.end ?? 0) - 1);
+}
+
+function isFunctionNode(node: Node): boolean {
+  return node.type === 'FunctionDeclaration'
+    || node.type === 'FunctionExpression'
+    || node.type === 'ArrowFunctionExpression'
+    || node.type === 'ObjectMethod'
+    || node.type === 'ClassMethod'
+    || node.type === 'ClassPrivateMethod';
+}
+
+function getPropertyLikeName(key: any): string | null {
+  if (!key || typeof key !== 'object') return null;
+  if (key.type === 'Identifier') return key.name;
+  if (key.type === 'StringLiteral') return key.value;
+  if (key.type === 'PrivateName' && key.id?.type === 'Identifier') return key.id.name;
+  return null;
+}
+
+function getAssignedName(node: Node, parent: Node | null): string | null {
+  if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression') {
+    if (node.id?.name) return node.id.name;
+  }
+
+  if (node.type === 'ObjectMethod' || node.type === 'ClassMethod' || node.type === 'ClassPrivateMethod') {
+    return getPropertyLikeName((node as any).key);
+  }
+
+  if (!parent) return null;
+  if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') return parent.id.name;
+  if (parent.type === 'AssignmentExpression') {
+    const left: any = parent.left;
+    if (left?.type === 'Identifier') return left.name;
+    if (left?.type === 'MemberExpression' && !left.computed) return getPropertyLikeName(left.property);
+  }
+  if (parent.type === 'ObjectProperty') return getPropertyLikeName(parent.key);
+  return null;
+}
+
+function isUppercaseName(name: string | null): boolean {
+  return !!name && /^[A-Z]/.test(name);
+}
+
+function buildStyleScopeTarget(text: string, node: Node, parent: Node | null): StyleScopeTarget {
+  if (node.type === 'ArrowFunctionExpression' && node.body.type !== 'BlockStatement') {
+    const closingIndent = getLineIndent(text, node.start ?? node.body.start ?? 0);
+    return {
+      kind: 'arrow-expression',
+      insertionOffset: node.body.start ?? 0,
+      statementIndent: `${closingIndent}  `,
+      closingIndent,
+      expressionEnd: node.body.end ?? 0,
+    };
+  }
+
+  const block = (node as any).body as BlockStatement;
+  const blockIndent = getLineIndent(text, block.start ?? node.start ?? 0);
+  return {
+    kind: 'block',
+    insertionOffset: findBlockInsertionOffset(block),
+    statementIndent: `${blockIndent}  `,
+    closingIndent: blockIndent,
+  };
+}
+
+function chooseStyleScopeTarget(
+  functionStack: Array<{ name: string | null; target: StyleScopeTarget }>,
+  programTarget: StyleScopeTarget,
+): StyleScopeTarget {
+  for (let i = functionStack.length - 1; i >= 0; i -= 1) {
+    if (isUppercaseName(functionStack[i].name)) return functionStack[i].target;
+  }
+  return functionStack[0]?.target ?? programTarget;
+}
+
 function collectPugAnalysis(
   node: Node,
   text: string,
-  templates: TaggedTemplateExpression[],
+  templates: ExtractedTemplateData[],
   imports: ExtractedImportData[],
+  programTarget: StyleScopeTarget,
+  ancestors: Node[] = [],
+  functionStack: Array<{ name: string | null; target: StyleScopeTarget }> = [],
   tagName: string = 'pug',
 ): void {
   if (!node || typeof node !== 'object') return;
+
+  const parent = ancestors.length > 0 ? ancestors[ancestors.length - 1] : null;
+  const nextFunctionStack = isFunctionNode(node)
+    ? [...functionStack, { name: getAssignedName(node, parent), target: buildStyleScopeTarget(text, node, parent) }]
+    : functionStack;
 
   if (
     node.type === 'TaggedTemplateExpression' &&
     node.tag.type === 'Identifier' &&
     node.tag.name === tagName
   ) {
-    templates.push(node);
+    templates.push({
+      node,
+      styleScopeTarget: chooseStyleScopeTarget(nextFunctionStack, programTarget),
+    });
     // Do not recurse into this tagged template. Nested pug tags (e.g. inside ${...})
     // are handled by the parent pug region compiler to avoid overlapping regions.
     return;
@@ -138,11 +287,27 @@ function collectPugAnalysis(
       return false;
     }) as Array<ImportSpecifier | ImportDefaultSpecifier | ImportNamespaceSpecifier>;
 
-    if (matchedSpecifiers.length > 0) {
-      imports.push({
-        cleanup: buildImportCleanup(text, declaration, matchedSpecifiers),
-      });
+    const helperImports = new Set<StyleTagLang>();
+    for (const specifier of declaration.specifiers) {
+      if (specifier.type !== 'ImportSpecifier' || specifier.imported.type !== 'Identifier') continue;
+      if (specifier.local.name !== specifier.imported.name) continue;
+      if (specifier.imported.name === 'css'
+        || specifier.imported.name === 'styl'
+        || specifier.imported.name === 'sass'
+        || specifier.imported.name === 'scss'
+      ) {
+        helperImports.add(specifier.imported.name);
+      }
     }
+
+    imports.push({
+      declaration,
+      source: String(declaration.source.value),
+      sourceText: getNodeText(text, declaration.source as StringLiteral),
+      cleanup: matchedSpecifiers.length > 0 ? buildImportCleanup(text, declaration, matchedSpecifiers) : null,
+      hasMatchedTag: matchedSpecifiers.length > 0,
+      helperImports,
+    });
   }
 
   for (const key of Object.keys(node)) {
@@ -151,11 +316,11 @@ function collectPugAnalysis(
     if (Array.isArray(child)) {
       for (const item of child) {
         if (item && typeof item === 'object' && typeof item.type === 'string') {
-          collectPugAnalysis(item, text, templates, imports, tagName);
+          collectPugAnalysis(item, text, templates, imports, programTarget, [...ancestors, node], nextFunctionStack, tagName);
         }
       }
     } else if (child && typeof child === 'object' && typeof child.type === 'string') {
-      collectPugAnalysis(child, text, templates, imports, tagName);
+      collectPugAnalysis(child, text, templates, imports, programTarget, [...ancestors, node], nextFunctionStack, tagName);
     }
   }
 }
@@ -197,6 +362,8 @@ function extractWithRegex(text: string, tagName: string = 'pug'): PugRegion[] {
       mappings: [],
       lexerTokens: [],
       parseError: null,
+      transformError: null,
+      styleBlock: null,
     });
   }
 
@@ -223,11 +390,17 @@ export function extractPugAnalysis(
       importCleanups: [],
       usesTagFunction: false,
       hasTagImport: false,
+      tagImportSource: null,
+      tagImportSourceText: null,
+      helperImportInsertionOffset: null,
+      existingStyleImports: new Set(),
+      styleScopeTargets: [],
     };
   }
 
   let templates: TaggedTemplateExpression[];
   let imports: ExtractedImportData[];
+  let templateData: ExtractedTemplateData[];
   try {
     const ast = parse(text, {
       sourceType: 'module',
@@ -236,8 +409,17 @@ export function extractPugAnalysis(
       ranges: true,
     }) as File;
     templates = [];
+    templateData = [];
     imports = [];
-    collectPugAnalysis(ast, text, templates, imports, tagName);
+    const programTarget: StyleScopeTarget = {
+      kind: 'program',
+      insertionOffset: findProgramInsertionOffset(text, ast.program),
+      statementIndent: '',
+      closingIndent: '',
+    };
+    collectPugAnalysis(ast, text, templateData, imports, programTarget, [], [], tagName);
+    templateData.sort((a, b) => (a.node.start ?? 0) - (b.node.start ?? 0));
+    templates = templateData.map(entry => entry.node);
   } catch {
     // @babel/parser failed -- fall back to regex
     const regions = extractWithRegex(text, tagName);
@@ -246,20 +428,33 @@ export function extractPugAnalysis(
       importCleanups: [],
       usesTagFunction: regions.length > 0,
       hasTagImport: false,
+      tagImportSource: null,
+      tagImportSourceText: null,
+      helperImportInsertionOffset: null,
+      existingStyleImports: new Set(),
+      styleScopeTargets: regions.map(() => ({
+        kind: 'program',
+        insertionOffset: 0,
+        statementIndent: '',
+        closingIndent: '',
+      })),
     };
   }
 
   if (templates.length === 0) {
+    const tagImportEntries = imports.filter(entry => entry.hasMatchedTag);
     return {
       regions: [],
       importCleanups: [],
       usesTagFunction: false,
-      hasTagImport: imports.length > 0,
+      hasTagImport: tagImportEntries.length > 0,
+      tagImportSource: null,
+      tagImportSourceText: null,
+      helperImportInsertionOffset: null,
+      existingStyleImports: new Set(),
+      styleScopeTargets: [],
     };
   }
-
-  // Sort by offset
-  templates.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
 
   const regions: PugRegion[] = [];
 
@@ -290,15 +485,36 @@ export function extractPugAnalysis(
       mappings: [],
       lexerTokens: [],
       parseError: null,
+      transformError: null,
+      styleBlock: null,
     };
 
     regions.push(region);
   }
 
+  const tagImportEntries = imports.filter(entry => entry.hasMatchedTag);
+  const tagImportSource = tagImportEntries[0]?.source ?? null;
+  const tagImportSourceText = tagImportEntries[0]?.sourceText ?? null;
+  const sameSourceImports = tagImportSource == null
+    ? []
+    : imports.filter(entry => entry.source === tagImportSource);
+  const existingStyleImports = new Set<StyleTagLang>();
+  for (const entry of sameSourceImports) {
+    for (const helper of entry.helperImports) existingStyleImports.add(helper);
+  }
+  const helperImportInsertionOffset = sameSourceImports.length > 0
+    ? getOffsetAfterTrailingLineBreak(text, sameSourceImports[sameSourceImports.length - 1].declaration.end ?? 0)
+    : null;
+
   return {
     regions,
-    importCleanups: imports.map(entry => entry.cleanup),
+    importCleanups: tagImportEntries.flatMap(entry => entry.cleanup ? [entry.cleanup] : []),
     usesTagFunction: regions.length > 0,
-    hasTagImport: imports.length > 0,
+    hasTagImport: tagImportEntries.length > 0,
+    tagImportSource,
+    tagImportSourceText,
+    helperImportInsertionOffset,
+    existingStyleImports,
+    styleScopeTargets: templateData.map(entry => entry.styleScopeTarget),
   };
 }

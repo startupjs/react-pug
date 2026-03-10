@@ -64,6 +64,45 @@ export interface PugParseError {
   offset: number;
 }
 
+export type StyleTagLang = 'css' | 'styl' | 'sass' | 'scss';
+export type PugTransformErrorCode =
+  | 'style-tag-must-be-last'
+  | 'unsupported-style-lang'
+  | 'invalid-style-attrs'
+  | 'missing-pug-import-for-style';
+
+export interface PugTransformError {
+  /** Stable machine-readable error code */
+  code: PugTransformErrorCode;
+  /** Error message from react-pug transform validation */
+  message: string;
+  /** Line number (1-based) within the pug region text */
+  line: number;
+  /** Column number (1-based) within the pug region text */
+  column: number;
+  /** Byte offset within the pug region text */
+  offset: number;
+}
+
+export interface ExtractedStyleBlock {
+  /** Helper function to call at the destination scope */
+  lang: StyleTagLang;
+  /** Style content with common body indentation removed */
+  content: string;
+  /** Offset of the style tag line within the pug region text */
+  tagOffset: number;
+  /** Offset of the style body start within the pug region text */
+  contentStart: number;
+  /** Offset of the style body end within the pug region text */
+  contentEnd: number;
+  /** Number of characters stripped from each non-empty style body line */
+  commonIndent: number;
+  /** Line number (1-based) of the style tag within the pug region text */
+  line: number;
+  /** Column number (1-based) of the style tag within the pug region text */
+  column: number;
+}
+
 // ── PugToken ────────────────────────────────────────────────────
 
 /** Minimal pug lexer token shape (retained for sub-expression position resolution) */
@@ -91,6 +130,40 @@ export interface MissingTagImportDiagnostic {
   start: number;
   /** Diagnostic length in original-file coordinates */
   length: number;
+}
+
+export interface ShadowCopySegment {
+  /** Original-file slice copied through unchanged */
+  originalStart: number;
+  originalEnd: number;
+  /** Corresponding shadow-file slice */
+  shadowStart: number;
+  shadowEnd: number;
+}
+
+export interface ShadowMappedRegion {
+  /** Generated region kind */
+  kind: 'pug' | 'style';
+  /** Region index whose stripped pug text is used as the mapping source space */
+  regionIndex: number;
+  /** Source span in stripped pug-text coordinates */
+  sourceStart: number;
+  sourceEnd: number;
+  /** Corresponding shadow-file generated span */
+  shadowStart: number;
+  shadowEnd: number;
+  /** Volar-compatible source mappings for this generated span */
+  mappings: CodeMapping[];
+}
+
+export interface ShadowInsertion {
+  /** Inserted shadow text that has no direct original slice */
+  kind: 'style-import' | 'style-call' | 'arrow-body-prefix' | 'arrow-body-suffix';
+  /** Original-file offset where the insertion occurs */
+  originalOffset: number;
+  /** Generated shadow span occupied by the insertion */
+  shadowStart: number;
+  shadowEnd: number;
 }
 
 // ── PugRegion ───────────────────────────────────────────────────
@@ -125,6 +198,12 @@ export interface PugRegion {
 
   /** Pug parse error, if any (null = parsed successfully) */
   parseError: PugParseError | null;
+
+  /** Transform validation error, if any */
+  transformError: PugTransformError | null;
+
+  /** Extracted terminal style block, if present */
+  styleBlock: ExtractedStyleBlock | null;
 }
 
 // ── PugDocument ─────────────────────────────────────────────────
@@ -141,6 +220,15 @@ export interface PugDocument {
 
   /** Fixed-length import cleanup edits applied outside pug regions */
   importCleanups: TagImportCleanup[];
+
+  /** Original-text slices copied through unchanged */
+  copySegments: ShadowCopySegment[];
+
+  /** Generated shadow spans with custom source mappings */
+  mappedRegions: ShadowMappedRegion[];
+
+  /** Synthetic insertions applied outside copied source text */
+  insertions: ShadowInsertion[];
 
   /** Shadow TSX text (original with pug regions replaced by generated TSX) */
   shadowText: string;

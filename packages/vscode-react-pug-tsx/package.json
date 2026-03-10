@@ -132,7 +132,11 @@
         ],
         "embeddedLanguages": {
           "source.pug": "jade",
-          "text.pug": "jade"
+          "text.pug": "jade",
+          "source.css": "css",
+          "source.css.scss": "scss",
+          "source.css.sass": "sass",
+          "source.stylus": "stylus"
         }
       }
     ]

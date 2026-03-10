@@ -50,11 +50,11 @@ function normalizeMapSources(map: any): any {
   };
 }
 
-function isGeneratedOffsetInsidePugRegion(
+function isGeneratedOffsetInsideMappedPugSpan(
   transformed: ReturnType<typeof transformSourceFile>,
   generatedOffset: number,
 ): boolean {
-  return transformed.regions.some(
+  return transformed.document.mappedRegions.some(
     region => generatedOffset >= region.shadowStart && generatedOffset < region.shadowEnd,
   );
 }
@@ -173,7 +173,7 @@ describe('real project fixtures compiler snapshots', () => {
         mapping => {
           const generatedOffset = lineColumnToOffset(swcPreTransform.code, mapping.generatedLine, mapping.generatedColumn + 1);
           return (
-          isGeneratedOffsetInsidePugRegion(runtimeTransform, generatedOffset)
+          isGeneratedOffsetInsideMappedPugSpan(runtimeTransform, generatedOffset)
             ? runtimeTransform.mapGeneratedOffsetToOriginal(generatedOffset)
             : null
           );
@@ -224,7 +224,7 @@ describe('real project fixtures compiler snapshots', () => {
         mapping => {
           const generatedOffset = lineColumnToOffset(shadowTransform.code, mapping.generatedLine, mapping.generatedColumn + 1);
           return (
-          isGeneratedOffsetInsidePugRegion(shadowTransform, generatedOffset)
+          isGeneratedOffsetInsideMappedPugSpan(shadowTransform, generatedOffset)
             ? shadowTransform.mapGeneratedOffsetToOriginal(generatedOffset)
             : null
           );

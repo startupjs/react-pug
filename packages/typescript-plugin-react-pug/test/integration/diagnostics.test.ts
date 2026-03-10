@@ -149,6 +149,36 @@ describe('pug parse error diagnostic spans', () => {
   });
 });
 
+describe('pug transform error diagnostics', () => {
+  it('reports style transform errors at the original pug location', async () => {
+    const init = await loadPlugin();
+    const errorFile = path.join(FIXTURES_DIR, 'diag-style-error.tsx');
+    const errorText = [
+      'const view = pug`',
+      '  .title Hello',
+      '  style',
+      '    .title { color: red; }',
+      '`;',
+    ].join('\n');
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(errorFile, errorText);
+
+    const result = createLanguageServiceWithPlugin(
+      init, [errorFile, BUTTON_FILE], FIXTURES_DIR, {}, virtualFiles,
+    );
+
+    const diags = result.ls.getSemanticDiagnostics(errorFile);
+    const pugDiag = diags.find(
+      d => typeof d.messageText === 'string' && d.messageText.includes('Pug transform error'),
+    );
+    expect(pugDiag).toBeDefined();
+    expect(pugDiag!.code).toBe(99003);
+    expect(pugDiag!.source).toBe('pug-react');
+    expect(pugDiag!.start).toBe(errorText.indexOf('style'));
+    expect(pugDiag!.length).toBeGreaterThan(1);
+  });
+});
+
 // ── SUPPRESSED_DIAG_CODES filtering ──────────────────────────────
 
 describe('suppressed diagnostic codes inside pug regions', () => {

@@ -143,6 +143,12 @@ export function transformSourceFile(
     throw new Error(`Missing import for tag function "${tagFunction}" in ${fileName}`);
   }
 
+  const transformErrorRegion = document.regions.find(region => region.transformError != null);
+  if (transformErrorRegion?.transformError) {
+    const error = transformErrorRegion.transformError;
+    throw new Error(`${error.message} in ${fileName}:${error.line}:${error.column}`);
+  }
+
   return {
     code: document.shadowText,
     document,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { pug, styl, observer, useSub, $ } from 'startupjs'
+import { pug, observer, useSub, $ } from 'startupjs'
 import {
   Link, Item, ScrollView, Form, useFormProps, Alert,
   Content, Tag, Br, Button, Modal, Div, confirm,
@@ -143,12 +143,11 @@ const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
         CatCard($cat=$cat small)
     else
       Alert(variant='info') No cats with selected breed yet
-  `
-  styl`
-    .item
-      border-radius 1u
-      &.selected
-        // FIXME: We can't use color var(--color-text-success-strong) here
-        background-color var(--color-text-success-strong)
+    style(lang='styl')
+      .item
+        border-radius 1u
+        &.selected
+          // FIXME: We can't use color var(--color-text-success-strong) here
+          background-color var(--color-text-success-strong)
   `
 })
