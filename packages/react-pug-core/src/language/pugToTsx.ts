@@ -651,18 +651,31 @@ function extractTerminalStyleBlock(pugText: string): {
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (isBlankLine(line)) continue;
-    if (countIndent(line) !== 0) continue;
-    topLevelIndices.push(i);
 
+    const indent = countIndent(line);
     const matched = matchStyleTagLine(line.trim());
+
     if (matched) {
+      if (indent !== 0) {
+        return {
+          pugTextWithoutStyle: pugText,
+          styleBlock: null,
+          transformError: {
+            code: 'style-tag-must-be-last',
+            message: 'style tag must be at the highest level and the last top-level node in a pug template',
+            line: i + 1,
+            column: indent + 1,
+            offset: lineStarts[i] + indent,
+          },
+        };
+      }
       if (styleIndex >= 0) {
         return {
           pugTextWithoutStyle: pugText,
           styleBlock: null,
           transformError: {
             code: 'style-tag-must-be-last',
-            message: 'style tag may appear at most once and must be the last top-level node',
+            message: 'style tag must be at the highest level and the last top-level node in a pug template',
             line: i + 1,
             column: 1,
             offset: lineStarts[i],
@@ -671,6 +684,12 @@ function extractTerminalStyleBlock(pugText: string): {
       }
       styleIndex = i;
       styleAttrs = matched.attrText;
+      topLevelIndices.push(i);
+      continue;
+    }
+
+    if (indent === 0) {
+      topLevelIndices.push(i);
     }
   }
 
@@ -689,7 +708,7 @@ function extractTerminalStyleBlock(pugText: string): {
       styleBlock: null,
       transformError: {
         code: 'style-tag-must-be-last',
-        message: 'style tag must be the last top-level node in a pug template',
+        message: 'style tag must be at the highest level and the last top-level node in a pug template',
         line: styleIndex + 1,
         column: 1,
         offset: lineStarts[styleIndex],

@@ -51,12 +51,10 @@ describe('build pipeline', () => {
 
   it('client.js does not bundle vscode internals (marked external)', () => {
     const content = readFileSync(resolve(extensionDistDir, 'client.js'), 'utf-8');
-    // vscode is marked external in esbuild config. Currently the extension stub
-    // only uses console.log so the vscode import is tree-shaken away entirely.
-    // The key assertion is that no vscode internal code is inlined in the bundle.
-    // We verify by checking that typical vscode namespace patterns are absent.
-    expect(content).not.toContain('createDiagnosticCollection');
-    expect(content).not.toContain('vscode.languages');
+    // vscode must remain an external dependency in the bundle. The emitted code
+    // may still reference properties such as vscode.languages, but the bundle
+    // should resolve the module through require("vscode") instead of inlining it.
+    expect(content).toContain('require("vscode")');
   });
 
   it('plugin.js contains plugin logic', () => {

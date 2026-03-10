@@ -399,6 +399,26 @@ describe('terminal style blocks', () => {
     expect(result.styleBlock).toBeNull();
   });
 
+  it('returns transformError when style tag is nested instead of top-level', () => {
+    const pug = [
+      '.wrapper',
+      '  style',
+      '    .title { color: red; }',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug);
+
+    expect(result.transformError).toMatchObject({
+      code: 'style-tag-must-be-last',
+      message: 'style tag must be at the highest level and the last top-level node in a pug template',
+      line: 2,
+      column: 3,
+      offset: pug.indexOf('style'),
+    });
+    expect(result.tsx).toContain('null');
+    expect(result.styleBlock).toBeNull();
+  });
+
   it('returns transformError for unsupported style lang', () => {
     const pug = [
       '.title Hello',

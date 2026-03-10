@@ -813,7 +813,9 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
             const errorStart = regionOffsetToOriginalOffset(doc, region, err.offset);
             const textAfterError = doc.originalText.slice(errorStart);
             const nlIdx = textAfterError.indexOf('\n');
-            const errorLength = Math.max(1, nlIdx >= 0 ? nlIdx : Math.min(textAfterError.length, 20));
+            const errorLength = err.code === 'style-tag-must-be-last'
+              ? 'style'.length
+              : Math.max(1, nlIdx >= 0 ? nlIdx : Math.min(textAfterError.length, 20));
 
             mapped.push({
               file: undefined,

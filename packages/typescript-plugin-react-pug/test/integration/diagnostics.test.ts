@@ -177,6 +177,33 @@ describe('pug transform error diagnostics', () => {
     expect(pugDiag!.start).toBe(errorText.indexOf('style'));
     expect(pugDiag!.length).toBeGreaterThan(1);
   });
+
+  it('reports nested style transform errors on the style keyword itself', async () => {
+    const init = await loadPlugin();
+    const errorFile = path.join(FIXTURES_DIR, 'diag-style-nested-error.tsx');
+    const errorText = [
+      'const view = pug`',
+      '  .wrapper',
+      '    style',
+      '      .title { color: red; }',
+      '`;',
+    ].join('\n');
+    const virtualFiles = new Map<string, string>();
+    virtualFiles.set(errorFile, errorText);
+
+    const result = createLanguageServiceWithPlugin(
+      init, [errorFile, BUTTON_FILE], FIXTURES_DIR, {}, virtualFiles,
+    );
+
+    const diags = result.ls.getSemanticDiagnostics(errorFile);
+    const pugDiag = diags.find(
+      d => typeof d.messageText === 'string' && d.messageText.includes('highest level'),
+    );
+    expect(pugDiag).toBeDefined();
+    expect(pugDiag!.code).toBe(99003);
+    expect(pugDiag!.start).toBe(errorText.indexOf('style'));
+    expect(pugDiag!.length).toBe('style'.length);
+  });
 });
 
 // ── SUPPRESSED_DIAG_CODES filtering ──────────────────────────────
