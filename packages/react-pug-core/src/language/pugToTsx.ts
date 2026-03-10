@@ -1240,9 +1240,8 @@ function emitAttribute(
   emitter.emitSynthetic(' ');
   emitter.emitMapped(attr.name, attrOffset, FULL_FEATURES);
 
-  // Boolean attribute: disabled -> disabled={true}
+  // Boolean attribute: disabled -> disabled
   if (attr.val === true) {
-    emitter.emitSynthetic('={true}');
     return;
   }
 

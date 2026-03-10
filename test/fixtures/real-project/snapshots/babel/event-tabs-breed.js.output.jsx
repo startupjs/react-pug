@@ -52,11 +52,11 @@ export default observer(({
     await $selected.del();
     cancel();
   }
-  return <><ScrollView full={true}><Content full={true} pure={true}><CatsList eventId={eventId} onEdit={showEdit} breed={breed} /></Content></ScrollView><Content padding={1}><Button onPress={showCreate}>Add new {breed}</Button></Content><Modal title={$mode.get() === 'new' ? 'Create cat' : 'Edit cat'} $visible={$showModal} onDismiss={cancel}>{(() => {
+  return <><ScrollView full><Content full pure><CatsList eventId={eventId} onEdit={showEdit} breed={breed} /></Content></ScrollView><Content padding={1}><Button onPress={showCreate}>Add new {breed}</Button></Content><Modal title={$mode.get() === 'new' ? 'Create cat' : 'Edit cat'} $visible={$showModal} onDismiss={cancel}>{(() => {
         const oppositeBreed = $selected?.breed.get() && ($selected.breed.get() === 'domestic' ? 'wild' : 'domestic');
         return <><Form key={$selected?.getId() || 'NEW'} $fields={$fields} $value={$selected} oppositeBreed={oppositeBreed} eventId={eventId} customInputs={{
             likes: SelectLikesInput
-          }} validate={validate} /><Br />{$mode.get() === 'new' ? <Div align={'right'} row={true}><Button onPress={cancel}>Cancel</Button><Button disabled={validate.hasErrors} pushed={true} variant={'flat'} color={'primary'} onPress={create}>Create</Button></Div> : $mode.get() === 'edit' ? <Div align={'right'} row={true}><Button color={'error'} onPress={deleteCat}>Delete</Button></Div> : null}</>;
+          }} validate={validate} /><Br />{$mode.get() === 'new' ? <Div align={'right'} row><Button onPress={cancel}>Cancel</Button><Button disabled={validate.hasErrors} pushed variant={'flat'} color={'primary'} onPress={create}>Create</Button></Div> : $mode.get() === 'edit' ? <Div align={'right'} row><Button color={'error'} onPress={deleteCat}>Delete</Button></Div> : null}</>;
       })()}</Modal></>;
 });
 const CatsList = observer(({
@@ -76,7 +76,7 @@ const CatsList = observer(({
   return (() => {
     const __pugEachResult = [];
     for (const $cat of $cats) {
-      __pugEachResult.push(<Item key={$cat.getId()}><CatCard $cat={$cat} /><Item.Right><Div vAlign={'center'} row={true} gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}<Button variant={'text'} icon={faPen} onPress={() => onEdit($cat)} tooltip={'Edit'} /><Link href={'/events/' + eventId + '/matches/' + $cat.getId()}><Button variant={'text'} icon={faHeart} tooltip={'Matches'} /></Link><Link href={'/cats/' + $cat.token.get()}><Button variant={'text'} icon={faLink} tooltip={'Cat profile link'}>Link</Button></Link></Div></Item.Right></Item>);
+      __pugEachResult.push(<Item key={$cat.getId()}><CatCard $cat={$cat} /><Item.Right><Div vAlign={'center'} row gap={1}>{!hasContact($cat) ? <Tag color={'error'}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={'error'}>No photo</Tag> : null}<Button variant={'text'} icon={faPen} onPress={() => onEdit($cat)} tooltip={'Edit'} /><Link href={'/events/' + eventId + '/matches/' + $cat.getId()}><Button variant={'text'} icon={faHeart} tooltip={'Matches'} /></Link><Link href={'/cats/' + $cat.token.get()}><Button variant={'text'} icon={faLink} tooltip={'Cat profile link'}>Link</Button></Link></Div></Item.Right></Item>);
     }
     return __pugEachResult;
   })();
@@ -125,7 +125,7 @@ const SelectLikes = observer(({
         const catId = $cat.getId();
         return <Item styleName={["item", {
           selected: $likes[catId].get()
-        }]} key={catId} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small={true} /></Item>;
+        }]} key={catId} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small /></Item>;
       })());
     }
     return __pugEachResult.length ? __pugEachResult : <Alert variant={'info'}>No cats with selected breed yet</Alert>;
