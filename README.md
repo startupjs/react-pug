@@ -19,7 +19,11 @@ code --install-extension packages/vscode-react-pug-tsx/*.vsix
 
 This builds the VSIX from the monorepo and installs it locally into VS Code.
 
-For embedded Stylus highlighting/completion inside `style(lang='styl')` blocks, also install the VS Code extension `sysoev.language-stylus`.
+For embedded editor support inside `style(...)` blocks:
+
+- `css` and `scss` work with built-in VS Code support
+- `styl` requires the VS Code extension `sysoev.language-stylus`
+- `sass` requires the VS Code extension `Syler.sass-indented`, since built-in VS Code CSS support does not handle indented Sass syntax
 
 ### VS Code Marketplace
 
@@ -206,7 +210,7 @@ Behavior:
 - control flow: `if`, `else if`, `else`, `each`, `while`, `case/when`
 - unbuffered code: `- ...`
 - text nodes and `|` piped text
-- terminal `style` blocks with embedded CSS/Stylus/Sass/SCSS editor support
+- terminal `style` blocks with embedded CSS/SCSS editor support, plus Stylus/Sass when the corresponding VS Code language extension is installed
 
 ## Known Limitations
 
@@ -214,6 +218,7 @@ Behavior:
 - During heavily malformed in-progress edits, temporary mapping can be approximate until syntax stabilizes.
 - Babel `sourceMaps: 'basic'` is compatibility-first and does not preserve fine-grained mappings within a transformed Pug region. Surrounding non-Pug JS/TS code keeps normal Babel mappings. Use `sourceMaps: 'detailed'` when you need granular Babel source maps inside Pug.
 - Embedded Stylus editor IntelliSense depends on the external VS Code Stylus extension being installed.
+- Embedded Sass editor IntelliSense/highlighting depends on the VS Code extension `Syler.sass-indented` being installed. Built-in VS Code CSS support handles `css` and `scss`, but not indented `sass`.
 
 ## Architecture
 
