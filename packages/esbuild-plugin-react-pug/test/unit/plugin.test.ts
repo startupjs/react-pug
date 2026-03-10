@@ -29,8 +29,7 @@ describe('esbuild-plugin-react-pug', () => {
       'fixture.tsx',
     );
 
-    expect(transformed.code).not.toContain('pug`');
-    expect(transformed.code).toContain('<Button');
+    expect(transformed.code).toMatchInlineSnapshot(`"const view = (<Button label={"Save"} />);"`);
   });
 
   it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
@@ -39,7 +38,11 @@ describe('esbuild-plugin-react-pug', () => {
       'const active = { active: true };',
       'const view = pug`span.title(styleName=active)`;',
     ].join('\n'), 'fixture.tsx');
-    expect(transformed.code).toContain('styleName={["title", active]}');
+    expect(transformed.code).toMatchInlineSnapshot(`
+      "import "startupjs";             
+      const active = { active: true };
+      const view = (<span styleName={["title", active]} />);"
+    `);
   });
 
   it('allows forcing class shorthand property and merge strategy', () => {
@@ -48,12 +51,12 @@ describe('esbuild-plugin-react-pug', () => {
       'fixture.tsx',
       { classShorthandProperty: 'class', classShorthandMerge: 'concatenate' },
     );
-    expect(transformed.code).toContain('class={"title" + " " + (isActive)}');
+    expect(transformed.code).toMatchInlineSnapshot(`"const view = (<span class={"title" + " " + (isActive)} />);"`);
   });
 
   it('keeps JS/JSX runtime output free of TS-only syntax', () => {
     const transformed = transformReactPugSourceForEsbuild(COMPILER_JS_RUNTIME_SOURCE, 'fixture.jsx');
-    expect(transformed.code).toContain('const __r = []');
+    expect(transformed.code).toMatchInlineSnapshot(`"const view = ((() => {const __r = [];while (ready) {__r.push(<span>Ok</span>);}return __r;})());"`);
     expectNoTsOnlyRuntimeSyntax(transformed.code);
   });
 

@@ -190,8 +190,8 @@ suite('Extension Host Features (example workspace)', () => {
       'Expected shadow TSX to remove the explicit pug binding import',
     );
     assert.ok(
-      shadowText.includes('import \'./helpers\';'),
-      'Expected shadow TSX to preserve helper-module side effects after removing pug binding',
+      shadowText.includes('import { css } from \'./helpers\';'),
+      'Expected shadow TSX to replace the pug import with the injected css helper import',
     );
     assert.ok(
       !shadowText.includes('return pug`'),
@@ -209,7 +209,7 @@ suite('Extension Host Features (example workspace)', () => {
     await captureTestStep('features-after-show-shadow-import-cleanup', {
       shadowUri: shadowDoc.uri.toString(),
       removedPugImport: !shadowText.includes('import { pug } from \'./helpers\';'),
-      preservedHelperSideEffectImport: shadowText.includes('import \'./helpers\';'),
+      injectedStyleHelperImport: shadowText.includes('import { css } from \'./helpers\';'),
       containsCardJsx: shadowText.includes('<Card'),
       containsResetProp: shadowText.includes('label={"Reset"}'),
     });
@@ -781,6 +781,653 @@ suite('Extension Host Features (example workspace)', () => {
     });
   });
 
+  test('textmate highlighting switches pug style blocks into embedded css scopes', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_highlight.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const tone = "red";',
+        'const view = pug`',
+        '  .title Hello',
+        '  style',
+        '    .title {',
+        '      color: ${tone};',
+        '    }',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('color:');
+    assert.ok(idx > 0, 'Could not find color declaration inside style block');
+    const pos = doc.positionAt(idx);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    const syntaxTokens = await retry(async () => {
+      const result = await vscode.commands.executeCommand('_workbench.captureSyntaxTokens', doc.uri);
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    }, 45000, 500);
+
+    const colorToken = syntaxTokens.find((token) => typeof token?.c === 'string' && token.c.includes('color'));
+    const interpolationBeginToken = syntaxTokens.find((token) => typeof token?.c === 'string' && token.c.includes('${'));
+    const interpolationEndToken = syntaxTokens.find((token) => typeof token?.c === 'string' && token.c.includes('}'));
+    const colorScopes = typeof colorToken?.t === 'string' ? colorToken.t : '';
+    const interpolationBeginScopes = typeof interpolationBeginToken?.t === 'string' ? interpolationBeginToken.t : '';
+    const interpolationEndScopes = typeof interpolationEndToken?.t === 'string' ? interpolationEndToken.t : '';
+
+    assert.ok(
+      /source\.css/.test(colorScopes),
+      `Expected style block token to carry CSS scope, got ${stringifySmall(colorScopes, 240)}`,
+    );
+    assert.ok(
+      /meta\.var\.expr\.tsx/.test(`${interpolationBeginScopes} ${interpolationEndScopes}`),
+      `Expected \${} interpolation inside style block to keep embedded TS expression scopes, got ${stringifySmall({ interpolationBeginScopes, interpolationEndScopes }, 240)}`,
+    );
+  });
+
+  test('completion inside pug style block includes CSS language suggestions', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_completion.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const view = pug`',
+        '  .title Hello',
+        '  style',
+        '    .title {',
+        '      col',
+        '    }',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('col');
+    assert.ok(idx > 0, 'Could not find CSS completion anchor inside style block');
+    const pos = doc.positionAt(idx + 'col'.length);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        doc.uri,
+        pos,
+      );
+      return result && Array.isArray(result.items) && result.items.length > 0 ? result : null;
+    });
+
+    const labels = completions.items.map((item) => labelText(item.label));
+    assert.ok(
+      labels.includes('color'),
+      `Expected CSS completion inside pug style block to include color. Top labels: ${labels.slice(0, 30).join(', ')}`,
+    );
+  });
+
+  test('completion inside pug style block suggests CSS property values', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_value_completion.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const view = pug`',
+        '  .title Hello',
+        '  style',
+        '    .title {',
+        '      font-weight: b',
+        '    }',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('font-weight: b');
+    assert.ok(idx > 0, 'Could not find CSS value completion anchor inside style block');
+    const pos = doc.positionAt(idx + 'font-weight: b'.length);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        doc.uri,
+        pos,
+      );
+      if (!result || !Array.isArray(result.items) || result.items.length === 0) return null;
+      const labels = result.items.map((item) => labelText(item.label));
+      return labels.includes('bold') ? result : null;
+    });
+
+    const labels = completions.items.map((item) => labelText(item.label));
+    assert.ok(
+      labels.includes('bold'),
+      `Expected CSS value completion inside pug style block to include bold. Top labels: ${labels.slice(0, 30).join(', ')}`,
+    );
+  });
+
+  test('completion inside pug style block suggests CSS property values when a trailing semicolon already exists', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_value_completion_with_semicolon.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const view = pug`',
+        '  .title Hello',
+        '  style',
+        '    .title {',
+        '      font-weight: bo;',
+        '    }',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('font-weight: bo;');
+    assert.ok(idx > 0, 'Could not find CSS value completion anchor with trailing semicolon inside style block');
+    const pos = doc.positionAt(idx + 'font-weight: bo'.length);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        doc.uri,
+        pos,
+      );
+      if (!result || !Array.isArray(result.items) || result.items.length === 0) return null;
+      const labels = result.items.map((item) => labelText(item.label));
+      return labels.includes('bold') ? result : null;
+    });
+
+    const labels = completions.items.map((item) => labelText(item.label));
+    assert.ok(
+      labels.includes('bold'),
+      `Expected CSS value completion with trailing semicolon to include bold. Top labels: ${labels.slice(0, 30).join(', ')}`,
+    );
+  });
+
+  test('plain css completion suggests property values when a trailing semicolon already exists', async function () {
+    this.timeout(60000);
+    const doc = await vscode.workspace.openTextDocument({
+      language: 'css',
+      content: [
+        '.title {',
+        '  font-weight: bo;',
+        '}',
+      ].join('\n'),
+    });
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('font-weight: bo;');
+    assert.ok(idx > 0, 'Could not find plain CSS trailing-semicolon completion anchor');
+    const pos = doc.positionAt(idx + 'font-weight: bo'.length);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    const completions = await retry(async () => {
+      const result = await vscode.commands.executeCommand(
+        'vscode.executeCompletionItemProvider',
+        doc.uri,
+        pos,
+      );
+      if (!result || !Array.isArray(result.items) || result.items.length === 0) return null;
+      const labels = result.items.map((item) => labelText(item.label));
+      return labels.includes('bold') ? result : null;
+    });
+
+    const labels = completions.items.map((item) => labelText(item.label));
+    assert.ok(
+      labels.includes('bold'),
+      `Expected plain CSS trailing-semicolon completion to include bold. Top labels: ${labels.slice(0, 30).join(', ')}`,
+    );
+  });
+
+  test('example app style block exposes CSS completions in real VS Code', async function () {
+    this.timeout(60000);
+    const editor = await vscode.window.showTextDocument(appDoc);
+    const anchor = 'border-radius: 6px;\n';
+    const anchorIdx = appDoc.getText().indexOf(anchor);
+    assert.ok(anchorIdx > 0, 'Could not find example App style block insertion anchor');
+    const insertOffset = anchorIdx + anchor.length;
+    const insertPos = appDoc.positionAt(insertOffset);
+    const insertedText = '        background-col\n';
+
+    await editor.edit((editBuilder) => {
+      editBuilder.insert(insertPos, insertedText);
+    });
+
+    try {
+      const pos = appDoc.positionAt(insertOffset + '        background-col'.length);
+      editor.selection = new vscode.Selection(pos, pos);
+      editor.revealRange(new vscode.Range(pos, pos));
+
+      const completions = await retry(async () => {
+        const result = await vscode.commands.executeCommand(
+          'vscode.executeCompletionItemProvider',
+          appDoc.uri,
+          pos,
+        );
+        if (!result || !Array.isArray(result.items) || result.items.length === 0) return null;
+        const labels = result.items.map((item) => labelText(item.label));
+        return labels.includes('background-color') ? result : null;
+      });
+      const labels = completions.items.map((item) => labelText(item.label));
+      assert.ok(
+        labels.includes('background-color'),
+        `Expected example App style-block completions to include background-color. Top labels: ${labels.slice(0, 30).join(', ')}`,
+      );
+
+      await captureTestStep('features-example-app-before-style-ui-completion', {
+        file: appDoc.uri.fsPath,
+        position: { line: pos.line + 1, character: pos.character + 1 },
+      });
+      await vscode.commands.executeCommand('editor.action.triggerSuggest');
+      await wait(900);
+      await captureTestStep('features-example-app-style-ui-suggest-visible', {
+        command: 'editor.action.triggerSuggest',
+        position: { line: pos.line + 1, character: pos.character + 1 },
+      });
+      const beforeText = appDoc.getText();
+      await vscode.commands.executeCommand('acceptSelectedSuggestion');
+      await wait(350);
+      await captureTestStep('features-example-app-after-style-ui-completion', {
+        accepted: true,
+      });
+
+      const afterText = appDoc.getText();
+      assert.notStrictEqual(afterText, beforeText, 'Expected example App style-block suggestion to modify the document');
+      assert.ok(
+        afterText.includes('background-color'),
+        `Expected example App style-block suggestion to restore background-color, got ${stringifySmall(afterText, 400)}`,
+      );
+    } finally {
+      await editor.edit((editBuilder) => {
+        const currentText = appDoc.getText();
+        const insertedIdx = currentText.indexOf('        background-color\n', insertOffset - 2);
+        if (insertedIdx >= 0) {
+          editBuilder.delete(new vscode.Range(
+            appDoc.positionAt(insertedIdx),
+            appDoc.positionAt(insertedIdx + '        background-color\n'.length),
+          ));
+          return;
+        }
+        const truncatedIdx = currentText.indexOf(insertedText, insertOffset - 2);
+        if (truncatedIdx >= 0) {
+          editBuilder.delete(new vscode.Range(
+            appDoc.positionAt(truncatedIdx),
+            appDoc.positionAt(truncatedIdx + insertedText.length),
+          ));
+        }
+      });
+    }
+  });
+
+  test('typing-time completion inside pug style block can be accepted through the editor UI', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_ui_completion.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'declare function css(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const view = pug`',
+        '  .title Hello',
+        '  style',
+        '    .title {',
+        '      background-col',
+        '    }',
+        '`;',
+        'export { view, css };',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('background-col');
+    assert.ok(idx > 0, 'Could not find UI completion anchor inside style block');
+    const pos = doc.positionAt(idx + 'background-col'.length);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    await captureTestStep('features-before-style-ui-completion', {
+      file: doc.uri.fsPath,
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+
+    const beforeText = doc.getText();
+    await vscode.commands.executeCommand('editor.action.triggerSuggest');
+    await wait(600);
+    await captureTestStep('features-style-ui-suggest-visible', {
+      command: 'editor.action.triggerSuggest',
+    });
+    await vscode.commands.executeCommand('acceptSelectedSuggestion');
+    await wait(250);
+
+    const afterText = doc.getText();
+    assert.notStrictEqual(afterText, beforeText, 'Expected style-block suggestion acceptance to change the document');
+    assert.ok(
+      afterText.includes('background-color'),
+      `Expected accepted style completion to produce background-color, got ${stringifySmall(afterText, 300)}`,
+    );
+
+    await captureTestStep('features-after-style-ui-completion', {
+      insertedBackgroundColor: afterText.includes('background-color'),
+    });
+  });
+
+  test('typing-time CSS value completions inside pug style block can be accepted through the editor UI', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_value_ui_completion.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'declare function css(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const view = pug`',
+        '  .title Hello',
+        '  style',
+        '    .title {',
+        '      font-weight: bo',
+        '    }',
+        '`;',
+        'export { view, css };',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('font-weight: bo');
+    assert.ok(idx > 0, 'Could not find UI CSS value completion anchor inside style block');
+    const pos = doc.positionAt(idx + 'font-weight: bo'.length);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    await captureTestStep('features-before-style-value-ui-completion', {
+      file: doc.uri.fsPath,
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+
+    const beforeText = doc.getText();
+    await vscode.commands.executeCommand('editor.action.triggerSuggest');
+    await wait(700);
+    await captureTestStep('features-style-value-ui-suggest-visible', {
+      command: 'editor.action.triggerSuggest',
+    });
+    await vscode.commands.executeCommand('acceptSelectedSuggestion');
+    await wait(250);
+
+    const afterText = doc.getText();
+    assert.notStrictEqual(afterText, beforeText, 'Expected style-block CSS value suggestion acceptance to change the document');
+    assert.ok(
+      afterText.includes('font-weight: bold'),
+      `Expected accepted style value completion to produce font-weight: bold, got ${stringifySmall(afterText, 300)}`,
+    );
+
+    await captureTestStep('features-after-style-value-ui-completion', {
+      insertedBold: afterText.includes('font-weight: bold'),
+    });
+  });
+
+  test('auto-triggered CSS value completions inside pug style block work while typing and do not open temp tabs', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_value_auto_completion.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const view = pug`',
+        '  .title Hello',
+        '  style',
+        '    .title {',
+        '      font-weight: ',
+        '    }',
+        '`;',
+        'export { view };',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const idx = text.indexOf('font-weight: ');
+    assert.ok(idx > 0, 'Could not find auto CSS value completion anchor inside style block');
+    const pos = doc.positionAt(idx + 'font-weight: '.length);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    await captureTestStep('features-before-style-value-auto-completion', {
+      file: doc.uri.fsPath,
+      position: { line: pos.line + 1, character: pos.character + 1 },
+    });
+
+      await vscode.commands.executeCommand('type', { text: 'b' });
+      await wait(350);
+      await vscode.commands.executeCommand('type', { text: 'o' });
+      await wait(900);
+      await captureTestStep('features-style-value-auto-suggest-visible', {
+        typed: 'bo',
+      });
+    await vscode.commands.executeCommand('acceptSelectedSuggestion');
+    await wait(250);
+
+    const afterText = doc.getText();
+      assert.ok(
+        afterText.includes('font-weight: bold'),
+        `Expected auto-triggered style value completion to produce font-weight: bold, got ${stringifySmall(afterText, 300)}`,
+      );
+
+    const visibleSchemes = vscode.window.visibleTextEditors.map((visibleEditor) => visibleEditor.document.uri.scheme);
+    assert.ok(
+      !visibleSchemes.includes('untitled'),
+      `Expected no untitled temp tabs to be visible during style completion, got ${visibleSchemes.join(', ')}`,
+    );
+    assert.ok(
+      !visibleSchemes.includes('pug-react-style'),
+      `Expected no pug-react-style temp tabs to be visible during style completion, got ${visibleSchemes.join(', ')}`,
+    );
+  });
+
+  test('example app auto-triggered CSS value completions work while typing and do not open temp tabs', async function () {
+    this.timeout(60000);
+    const editor = await vscode.window.showTextDocument(appDoc);
+    const anchor = '        border-radius: 6px;\n';
+    const anchorIdx = appDoc.getText().indexOf(anchor);
+    assert.ok(anchorIdx > 0, 'Could not find example App style block value insertion anchor');
+    const insertOffset = anchorIdx + anchor.length;
+    const insertPos = appDoc.positionAt(insertOffset);
+    const insertedText = '        font-weight: \n';
+
+    await editor.edit((editBuilder) => {
+      editBuilder.insert(insertPos, insertedText);
+    });
+
+    try {
+      const pos = appDoc.positionAt(insertOffset + '        font-weight: '.length);
+      editor.selection = new vscode.Selection(pos, pos);
+      editor.revealRange(new vscode.Range(pos, pos));
+
+      await captureTestStep('features-example-app-before-style-value-auto-completion', {
+        file: appDoc.uri.fsPath,
+        position: { line: pos.line + 1, character: pos.character + 1 },
+      });
+
+      await vscode.commands.executeCommand('type', { text: 'b' });
+      await wait(350);
+      await vscode.commands.executeCommand('type', { text: 'o' });
+      await wait(1000);
+      await captureTestStep('features-example-app-style-value-auto-suggest-visible', {
+        typed: 'bo',
+      });
+      await vscode.commands.executeCommand('acceptSelectedSuggestion');
+      await wait(300);
+
+      const afterText = appDoc.getText();
+      assert.ok(
+        afterText.includes('font-weight: bold'),
+        `Expected example App auto-triggered style value completion to produce font-weight: bold, got ${stringifySmall(afterText, 400)}`,
+      );
+
+      const visibleSchemes = vscode.window.visibleTextEditors.map((visibleEditor) => visibleEditor.document.uri.scheme);
+      assert.ok(
+        !visibleSchemes.includes('untitled'),
+        `Expected no untitled temp tabs to be visible during example App style completion, got ${visibleSchemes.join(', ')}`,
+      );
+      assert.ok(
+        !visibleSchemes.includes('pug-react-style'),
+        `Expected no pug-react-style temp tabs to be visible during example App style completion, got ${visibleSchemes.join(', ')}`,
+      );
+    } finally {
+      await editor.edit((editBuilder) => {
+        const currentText = appDoc.getText();
+        const insertedIdx = currentText.indexOf('        font-weight: bold\n', insertOffset - 2);
+        if (insertedIdx >= 0) {
+          editBuilder.delete(new vscode.Range(
+            appDoc.positionAt(insertedIdx),
+            appDoc.positionAt(insertedIdx + '        font-weight: bold\n'.length),
+          ));
+          return;
+        }
+        const typedIdx = currentText.indexOf('        font-weight: b\n', insertOffset - 2);
+        if (typedIdx >= 0) {
+          editBuilder.delete(new vscode.Range(
+            appDoc.positionAt(typedIdx),
+            appDoc.positionAt(typedIdx + '        font-weight: b\n'.length),
+          ));
+          return;
+        }
+        const partialIdx = currentText.indexOf('        font-weight: bo\n', insertOffset - 2);
+        if (partialIdx >= 0) {
+          editBuilder.delete(new vscode.Range(
+            appDoc.positionAt(partialIdx),
+            appDoc.positionAt(partialIdx + '        font-weight: bo\n'.length),
+          ));
+          return;
+        }
+        const rawIdx = currentText.indexOf(insertedText, insertOffset - 2);
+        if (rawIdx >= 0) {
+          editBuilder.delete(new vscode.Range(
+            appDoc.positionAt(rawIdx),
+            appDoc.positionAt(rawIdx + insertedText.length),
+          ));
+        }
+      });
+    }
+  });
+
+  test('example app auto-triggered CSS value completions work before an existing trailing semicolon', async function () {
+    this.timeout(60000);
+    const editor = await vscode.window.showTextDocument(appDoc);
+    const anchor = '        border-radius: 6px;\n';
+    const anchorIdx = appDoc.getText().indexOf(anchor);
+    assert.ok(anchorIdx > 0, 'Could not find example App trailing-semicolon insertion anchor');
+    const insertOffset = anchorIdx + anchor.length;
+    const insertPos = appDoc.positionAt(insertOffset);
+    const insertedText = '        font-weight: ;\n';
+
+    await editor.edit((editBuilder) => {
+      editBuilder.insert(insertPos, insertedText);
+    });
+
+    try {
+      const pos = appDoc.positionAt(insertOffset + '        font-weight: '.length);
+      editor.selection = new vscode.Selection(pos, pos);
+      editor.revealRange(new vscode.Range(pos, pos));
+
+      await vscode.commands.executeCommand('type', { text: 'b' });
+      await wait(350);
+      await vscode.commands.executeCommand('type', { text: 'o' });
+      await wait(1000);
+      await vscode.commands.executeCommand('acceptSelectedSuggestion');
+      await wait(300);
+
+      const afterText = appDoc.getText();
+      assert.ok(
+        afterText.includes('font-weight: bold;'),
+        `Expected example App trailing-semicolon style value completion to produce font-weight: bold;, got ${stringifySmall(afterText, 400)}`,
+      );
+    } finally {
+      await editor.edit((editBuilder) => {
+        const currentText = appDoc.getText();
+        const candidates = [
+          '        font-weight: bold;\n',
+          '        font-weight: bo;\n',
+          '        font-weight: b;\n',
+          insertedText,
+        ];
+        for (const candidate of candidates) {
+          const idx = currentText.indexOf(candidate, insertOffset - 2);
+          if (idx >= 0) {
+            editBuilder.delete(new vscode.Range(
+              appDoc.positionAt(idx),
+              appDoc.positionAt(idx + candidate.length),
+            ));
+            return;
+          }
+        }
+      });
+    }
+  });
+
+  test('show shadow tsx moves pug style blocks into helper calls', async function () {
+    this.timeout(60000);
+    const helperUri = vscode.Uri.file(path.join(workspaceRoot, 'src', '__vscode_style_helpers.ts'));
+    await vscode.workspace.fs.writeFile(helperUri, Buffer.from([
+      'export function pug(strings: TemplateStringsArray, ...values: any[]): any {',
+      '  return { strings, values };',
+      '}',
+      'export function css(strings: TemplateStringsArray, ...values: any[]): any {',
+      '  return { strings, values };',
+      '}',
+    ].join('\n'), 'utf8'));
+    tempUris.push(helperUri);
+
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_shadow.tsx',
+      [
+        "import { pug } from './__vscode_style_helpers';",
+        'function App() {',
+        '  return pug`',
+        '    .title Hello',
+        '    style',
+        '      .title {',
+        '        color: red;',
+        '      }',
+        '  `;',
+        '}',
+        'export { App };',
+      ].join('\n'),
+    );
+
+    await vscode.window.showTextDocument(doc);
+    await vscode.commands.executeCommand('pugReact.showShadowTsx');
+
+    const shadowDoc = await retry(async () => {
+      const candidate = vscode.workspace.textDocuments.find((openDoc) =>
+        openDoc.uri.scheme === 'pug-react-shadow'
+        && openDoc.uri.path.endsWith(`${doc.fileName}.shadow.tsx`),
+      );
+      return candidate ?? null;
+    }, 30000, 250);
+
+    const shadowText = shadowDoc.getText();
+    const hasCssImport = /import\s*\{\s*css\s*\}\s*from\s*['"]\.\/__vscode_style_helpers['"]/.test(shadowText);
+    assert.ok(
+      hasCssImport || shadowText.includes('import "./__vscode_style_helpers";'),
+      `Expected shadow document to preserve helper-module imports for style block, got ${stringifySmall(shadowText, 500)}`,
+    );
+    assert.ok(
+      shadowText.includes('  css`'),
+      'Expected shadow document to move style block into css helper call at function top',
+    );
+    assert.ok(
+      shadowText.indexOf('  css`') < shadowText.indexOf('return '),
+      'Expected moved style helper call to appear before the return statement',
+    );
+    assert.ok(
+      !shadowText.includes('<style'),
+      'Expected shadow document to strip the original style tag from generated JSX',
+    );
+  });
+
   test('uppercase shorthand segments can form component path with class tail for highlight + IntelliSense', async function () {
     this.timeout(60000);
     const content = [
@@ -947,6 +1594,71 @@ suite('Extension Host Features (example workspace)', () => {
     await captureTestStep('features-after-diagnostics', {
       diagnosticCount: diagnostics.length,
       hasTypeError,
+    });
+  });
+
+  test('nested style tag reports a transform diagnostic on the style keyword', async function () {
+    this.timeout(60000);
+    const badText = [
+      'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+      'const view = pug`',
+      '  .wrapper',
+      '    style',
+      '      .title { color: red; }',
+      '`;',
+      'export { view };',
+    ].join('\n');
+
+    const badDoc = await createTempDoc('__vscode_test_nested_style_error.tsx', badText);
+    const editor = await vscode.window.showTextDocument(badDoc);
+    const styleIdx = badText.indexOf('style');
+    assert.ok(styleIdx > 0, 'Could not find nested style keyword');
+    const stylePos = badDoc.positionAt(styleIdx);
+    editor.selection = new vscode.Selection(stylePos, stylePos);
+    editor.revealRange(new vscode.Range(stylePos, stylePos));
+    await captureTestStep('features-before-nested-style-diagnostics', {
+      file: badDoc.uri.fsPath,
+      position: { line: stylePos.line + 1, character: stylePos.character + 1 },
+    });
+
+    const diagnostics = await retry(async () => {
+      const result = vscode.languages.getDiagnostics(badDoc.uri);
+      const nestedStyle = result.find((d) => {
+        const text = typeof d.message === 'string' ? d.message : '';
+        return d.code === 99003 && /highest level/.test(text);
+      });
+      return nestedStyle ? result : null;
+    }, 45000, 500);
+
+    const nestedStyleDiag = diagnostics.find((d) => {
+      const text = typeof d.message === 'string' ? d.message : '';
+      return d.code === 99003 && /highest level/.test(text);
+    });
+
+    assert.ok(nestedStyleDiag, 'Expected nested style transform diagnostic');
+    assert.strictEqual(nestedStyleDiag.range.start.line, stylePos.line);
+    assert.strictEqual(nestedStyleDiag.range.start.character, stylePos.character);
+    assert.strictEqual(
+      nestedStyleDiag.range.end.character - nestedStyleDiag.range.start.character,
+      'style'.length,
+      `Expected nested style diagnostic to highlight only the style token, got ${JSON.stringify(nestedStyleDiag.range)}`,
+    );
+    await captureTestStep('features-after-nested-style-diagnostics', {
+      diagnosticCount: diagnostics.length,
+      nestedStyleDiagnostic: {
+        code: nestedStyleDiag.code ?? null,
+        message: nestedStyleDiag.message,
+        range: {
+          start: {
+            line: nestedStyleDiag.range.start.line + 1,
+            character: nestedStyleDiag.range.start.character + 1,
+          },
+          end: {
+            line: nestedStyleDiag.range.end.line + 1,
+            character: nestedStyleDiag.range.end.character + 1,
+          },
+        },
+      },
     });
   });
 

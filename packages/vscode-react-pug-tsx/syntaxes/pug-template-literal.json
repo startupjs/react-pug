@@ -24,6 +24,9 @@
       "contentName": "source.pug",
       "patterns": [
         {
+          "include": "#pug-style-block"
+        },
+        {
           "include": "#js-template-interpolation"
         },
         {
@@ -81,6 +84,134 @@
         },
         {
           "include": "source.ts"
+        }
+      ]
+    },
+    "pug-style-block": {
+      "patterns": [
+        {
+          "include": "#pug-style-block-styl"
+        },
+        {
+          "include": "#pug-style-block-scss"
+        },
+        {
+          "include": "#pug-style-block-sass"
+        },
+        {
+          "include": "#pug-style-block-css"
+        }
+      ]
+    },
+    "pug-style-block-styl": {
+      "begin": "(^\\s*)(style)(\\s*\\(\\s*(lang)(\\s*=\\s*)(['\"])(styl)(\\6)\\s*\\)\\s*)$",
+      "beginCaptures": {
+        "2": {
+          "name": "entity.name.tag.html"
+        },
+        "4": {
+          "name": "entity.other.attribute-name.jsx"
+        },
+        "5": {
+          "name": "keyword.operator.assignment.pug"
+        },
+        "7": {
+          "name": "string.quoted.single.pug"
+        }
+      },
+      "end": "(?=`)",
+      "name": "meta.embedded.block.stylus.pug",
+      "contentName": "source.stylus",
+      "patterns": [
+        {
+          "include": "#js-template-interpolation"
+        },
+        {
+          "include": "source.stylus"
+        }
+      ]
+    },
+    "pug-style-block-scss": {
+      "begin": "(^\\s*)(style)(\\s*\\(\\s*(lang)(\\s*=\\s*)(['\"])(scss)(\\6)\\s*\\)\\s*)$",
+      "beginCaptures": {
+        "2": {
+          "name": "entity.name.tag.html"
+        },
+        "4": {
+          "name": "entity.other.attribute-name.jsx"
+        },
+        "5": {
+          "name": "keyword.operator.assignment.pug"
+        },
+        "7": {
+          "name": "string.quoted.single.pug"
+        }
+      },
+      "end": "(?=`)",
+      "name": "meta.embedded.block.scss.pug",
+      "contentName": "source.css.scss",
+      "patterns": [
+        {
+          "include": "#js-template-interpolation"
+        },
+        {
+          "include": "source.css.scss"
+        }
+      ]
+    },
+    "pug-style-block-sass": {
+      "begin": "(^\\s*)(style)(\\s*\\(\\s*(lang)(\\s*=\\s*)(['\"])(sass)(\\6)\\s*\\)\\s*)$",
+      "beginCaptures": {
+        "2": {
+          "name": "entity.name.tag.html"
+        },
+        "4": {
+          "name": "entity.other.attribute-name.jsx"
+        },
+        "5": {
+          "name": "keyword.operator.assignment.pug"
+        },
+        "7": {
+          "name": "string.quoted.single.pug"
+        }
+      },
+      "end": "(?=`)",
+      "name": "meta.embedded.block.sass.pug",
+      "contentName": "source.css.sass",
+      "patterns": [
+        {
+          "include": "#js-template-interpolation"
+        },
+        {
+          "include": "source.css.sass"
+        }
+      ]
+    },
+    "pug-style-block-css": {
+      "begin": "(^\\s*)(style)(?:(\\s*\\(\\s*(lang)(\\s*=\\s*)(['\"])(css)(\\6)\\s*\\)\\s*))?$",
+      "beginCaptures": {
+        "2": {
+          "name": "entity.name.tag.html"
+        },
+        "4": {
+          "name": "entity.other.attribute-name.jsx"
+        },
+        "5": {
+          "name": "keyword.operator.assignment.pug"
+        },
+        "7": {
+          "name": "string.quoted.single.pug"
+        }
+      },
+      "end": "(?=`)",
+      "name": "meta.embedded.block.css.pug",
+      "contentName": "source.css",
+      "patterns": [
+        {
+          "include": "#js-template-interpolation"
+        },
+        {
+          "include": "source.css"
         }
       ]
     },

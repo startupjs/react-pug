@@ -1,4 +1,12 @@
-import type { CodeMapping, CodeInformation, PugParseError, PugToken } from './mapping';
+import type {
+  CodeMapping,
+  CodeInformation,
+  ExtractedStyleBlock,
+  PugParseError,
+  PugToken,
+  PugTransformError,
+  StyleTagLang,
+} from './mapping';
 import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from './mapping';
 import { extractPugRegions } from './extractRegions';
 
@@ -536,6 +544,216 @@ function strippedToRawOffset(rawText: string, strippedOffset: number, commonInde
     raw += line.length + 1;
   }
   return raw;
+}
+
+function countIndent(line: string): number {
+  return line.match(/^(\s*)/)?.[1].length ?? 0;
+}
+
+function isBlankLine(line: string): boolean {
+  return line.trim().length === 0;
+}
+
+function stripCommonIndent(text: string): { stripped: string; indent: number } {
+  const lines = text.split('\n');
+  let minIndent = Infinity;
+
+  for (const line of lines) {
+    if (line.trim().length === 0) continue;
+    const indent = countIndent(line);
+    if (indent < minIndent) minIndent = indent;
+  }
+
+  if (minIndent === Infinity || minIndent === 0) {
+    return { stripped: text, indent: 0 };
+  }
+
+  return {
+    stripped: lines
+      .map((line) => (line.trim().length === 0 ? '' : line.slice(minIndent)))
+      .join('\n'),
+    indent: minIndent,
+  };
+}
+
+function matchStyleTagLine(line: string): { attrText: string | null } | null {
+  const match = line.match(/^style(?:\((.*)\))?\s*$/);
+  if (!match) return null;
+  return { attrText: match[1] ?? null };
+}
+
+function parseStyleLang(
+  attrText: string | null,
+  line: number,
+  column: number,
+  offset: number,
+): { lang: StyleTagLang | null; error: PugTransformError | null } {
+  if (attrText == null || attrText.trim().length === 0) {
+    return { lang: 'css', error: null };
+  }
+
+  const attrMatch = attrText.match(/^\s*lang\s*=\s*(['"])([^'"]+)\1\s*$/);
+  if (!attrMatch) {
+    return {
+      lang: null,
+      error: {
+        code: 'invalid-style-attrs',
+        message: 'style tag only supports a single lang attribute',
+        line,
+        column,
+        offset,
+      },
+    };
+  }
+
+  const lang = attrMatch[2];
+  if (lang === 'css' || lang === 'styl' || lang === 'sass' || lang === 'scss') {
+    return { lang, error: null };
+  }
+
+  return {
+    lang: null,
+    error: {
+      code: 'unsupported-style-lang',
+      message: `Unsupported style lang "${lang}". Expected css, styl, sass, or scss`,
+      line,
+      column,
+      offset,
+    },
+  };
+}
+
+function extractTerminalStyleBlock(pugText: string): {
+  pugTextWithoutStyle: string;
+  styleBlock: ExtractedStyleBlock | null;
+  transformError: PugTransformError | null;
+} {
+  if (!pugText.includes('style')) {
+    return {
+      pugTextWithoutStyle: pugText,
+      styleBlock: null,
+      transformError: null,
+    };
+  }
+
+  const lines = pugText.split('\n');
+  const lineStarts: number[] = [];
+  let runningOffset = 0;
+  for (const line of lines) {
+    lineStarts.push(runningOffset);
+    runningOffset += line.length + 1;
+  }
+
+  const topLevelIndices: number[] = [];
+  let styleIndex = -1;
+  let styleAttrs: string | null = null;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (isBlankLine(line)) continue;
+
+    const indent = countIndent(line);
+    const matched = matchStyleTagLine(line.trim());
+
+    if (matched) {
+      if (indent !== 0) {
+        return {
+          pugTextWithoutStyle: pugText,
+          styleBlock: null,
+          transformError: {
+            code: 'style-tag-must-be-last',
+            message: 'style tag must be at the highest level and the last top-level node in a pug template',
+            line: i + 1,
+            column: indent + 1,
+            offset: lineStarts[i] + indent,
+          },
+        };
+      }
+      if (styleIndex >= 0) {
+        return {
+          pugTextWithoutStyle: pugText,
+          styleBlock: null,
+          transformError: {
+            code: 'style-tag-must-be-last',
+            message: 'style tag must be at the highest level and the last top-level node in a pug template',
+            line: i + 1,
+            column: 1,
+            offset: lineStarts[i],
+          },
+        };
+      }
+      styleIndex = i;
+      styleAttrs = matched.attrText;
+      topLevelIndices.push(i);
+      continue;
+    }
+
+    if (indent === 0) {
+      topLevelIndices.push(i);
+    }
+  }
+
+  if (styleIndex < 0) {
+    return {
+      pugTextWithoutStyle: pugText,
+      styleBlock: null,
+      transformError: null,
+    };
+  }
+
+  const lastTopLevelIndex = topLevelIndices[topLevelIndices.length - 1] ?? -1;
+  if (styleIndex !== lastTopLevelIndex) {
+    return {
+      pugTextWithoutStyle: pugText,
+      styleBlock: null,
+      transformError: {
+        code: 'style-tag-must-be-last',
+        message: 'style tag must be at the highest level and the last top-level node in a pug template',
+        line: styleIndex + 1,
+        column: 1,
+        offset: lineStarts[styleIndex],
+      },
+    };
+  }
+
+  const line = lines[styleIndex];
+  const styleColumn = countIndent(line) + 1;
+  const styleOffset = lineStarts[styleIndex] + countIndent(line);
+  const parsedLang = parseStyleLang(styleAttrs, styleIndex + 1, styleColumn, styleOffset);
+  if (parsedLang.error) {
+    return {
+      pugTextWithoutStyle: pugText,
+      styleBlock: null,
+      transformError: parsedLang.error,
+    };
+  }
+
+  const bodyLines = lines.slice(styleIndex + 1);
+  const bodyText = bodyLines.join('\n');
+  const strippedBody = stripCommonIndent(bodyText);
+  const bodyOffset = styleIndex + 1 < lineStarts.length ? lineStarts[styleIndex + 1] : lineStarts[styleIndex] + line.length;
+  const bodyEndOffset = pugText.length;
+
+  const prefixLines = lines.slice(0, styleIndex);
+  let pugTextWithoutStyle = prefixLines.join('\n');
+  if (pugTextWithoutStyle.length > 0 && pugText.endsWith('\n')) {
+    pugTextWithoutStyle += '\n';
+  }
+
+  return {
+    pugTextWithoutStyle,
+    styleBlock: {
+      lang: parsedLang.lang!,
+      content: strippedBody.stripped,
+      tagOffset: styleOffset,
+      contentStart: bodyOffset,
+      contentEnd: bodyEndOffset,
+      commonIndent: strippedBody.indent,
+      line: styleIndex + 1,
+      column: styleColumn,
+    },
+    transformError: null,
+  };
 }
 
 function emitCompiledPugRegionInExpression(
@@ -1575,6 +1793,8 @@ export interface CompileResult {
   mappings: CodeMapping[];
   lexerTokens: PugToken[];
   parseError: PugParseError | null;
+  styleBlock: ExtractedStyleBlock | null;
+  transformError: PugTransformError | null;
 }
 
 export type CompileMode = 'languageService' | 'runtime';
@@ -1607,7 +1827,8 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
   const parse = require('pug-parser');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const stripComments = require('pug-strip-comments');
-  const prepared = prepareTemplateInterpolations(pugText);
+  const extractedStyle = extractTerminalStyleBlock(pugText);
+  const prepared = prepareTemplateInterpolations(extractedStyle.pugTextWithoutStyle);
   const pugTextForParse = prepared.sanitizedText;
   interpolationContextStack.push(prepared.context);
   compileContextStack.push({
@@ -1618,6 +1839,17 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
   });
 
   try {
+    if (extractedStyle.transformError) {
+      return {
+        tsx: fallbackNullExpression(mode),
+        mappings: [],
+        lexerTokens: [],
+        parseError: null,
+        styleBlock: null,
+        transformError: extractedStyle.transformError,
+      };
+    }
+
     let tokens: any[];
     let parseError: PugParseError | null = null;
     try {
@@ -1640,6 +1872,8 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
             mappings: [],
             lexerTokens: [],
             parseError,
+            styleBlock: extractedStyle.styleBlock,
+            transformError: null,
           };
         }
       } else {
@@ -1648,6 +1882,8 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
           mappings: [],
           lexerTokens: [],
           parseError,
+          styleBlock: extractedStyle.styleBlock,
+          transformError: null,
         };
       }
     }
@@ -1692,6 +1928,8 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
           mappings: [],
           lexerTokens,
           parseError,
+          styleBlock: extractedStyle.styleBlock,
+          transformError: null,
         };
       }
     }
@@ -1712,6 +1950,8 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
       mappings: result.mappings,
       lexerTokens,
       parseError,
+      styleBlock: extractedStyle.styleBlock,
+      transformError: null,
     };
   } finally {
     compileContextStack.pop();

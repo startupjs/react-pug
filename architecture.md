@@ -45,6 +45,7 @@ Shared language/compiler core:
 
 - extract tagged template regions
 - compile Pug AST into JSX/TSX fragments
+- extract terminal `style` blocks and move them into scope-level helper calls
 - assemble transformed file output
 - produce mapping metadata for offset/range remapping
 - expose helpers for line/column conversions
@@ -119,6 +120,16 @@ ESLint processor:
 
 `extractRegions.ts` parses source with Babel parser and finds `TaggedTemplateExpression` nodes whose tag matches configured `tagFunction` (default: `pug`).
 
+It also computes:
+
+- the target scope for terminal `style` block injection
+  - nearest enclosing block scope, or `Program`
+  - expression-bodied arrows are treated as their own insertion target and rewritten to block bodies later
+  - single-line statement bodies such as `if (...) return ...` are treated as statement-body targets and normalized into blocks later
+- the module source of the matched `pug` import
+- existing `css` / `styl` / `sass` / `scss` imports from that same source
+- the insertion point for any new helper import
+
 Fallback regex extraction is used when AST parse fails.
 
 ### 4.2 Pug Parsing and Emission
@@ -140,6 +151,9 @@ Supported constructs include:
 - `if/else`, `each`, `while`, `case/when`
 - `-` code lines and `tag= expr`
 - text nodes and `|` lines
+- terminal `style` blocks using `css`, `styl`, `sass`, or `scss`
+
+Terminal `style` blocks are extracted before normal Pug parsing. The `style` node itself is not emitted as JSX. Instead, its dedented body is returned as a separate payload so the shadow/runtime transform can inject a helper call at the top of the immediate enclosing JS scope. For `Program`, that insertion point is after the last import or directive. When the nearest target is a single-line statement body, the transform first normalizes that body into a block and then inserts the helper call before the original statement.
 
 ### 4.3 Compile Modes
 
@@ -168,6 +182,13 @@ Each region stores Volar-compatible mappings and `CodeInformation` feature flags
 - original -> generated offsets
 - generated -> original offsets
 - generated diagnostic range -> original range
+
+The shadow document now consists of:
+
+- copied original-text segments
+- mapped generated Pug replacement regions
+- mapped generated style-helper-call regions
+- synthetic insertions such as helper imports and arrow-body wrappers
 
 This model is shared by:
 
@@ -231,6 +252,8 @@ Extension contributes:
 
 Grammar is focused on rich highlighting while semantic correctness remains TS-plugin-driven.
 
+For embedded `style` blocks, the grammar switches the terminal block body into CSS / Stylus / Sass / SCSS scopes and keeps `${...}` segments in embedded TS/TSX mode.
+
 ---
 
 ## 9. Compiler Adapter Flows
@@ -281,6 +304,7 @@ Important coverage themes:
 - multi-region files
 - runtime TS-syntax safety for JS/JSX
 - source map generation in compiler flows
+- moved style-block helper-call mapping fidelity
 - Babel source-map chaining through a downstream JSX transform
 - generated->original diagnostic mapping fidelity
 
@@ -308,4 +332,6 @@ CI jobs:
 - Runtime transform equivalence is behavior-oriented, not intended to be byte-identical to legacy Babel plugins.
 - Babel `sourceMaps: 'basic'` is the compatibility-first default and only provides coarse source maps within transformed Pug regions.
 - Babel `sourceMaps: 'detailed'` provides granular maps, but does so by taking ownership of parsing via `parserOverride`, which is less composable with other parse-owning Babel plugins.
+- Terminal `style` blocks require an explicit `pug` import so the matching helper import source can be derived.
+- Embedded Stylus editor support depends on a VS Code extension contributing `source.stylus`.
 - During very incomplete edits, temporary IntelliSense mapping may be approximate until syntax stabilizes.

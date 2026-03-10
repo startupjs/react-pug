@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { styl, observer, useSub, $ } from 'startupjs';
+import { observer, useSub, $, styl } from 'startupjs';
 import { Link, Item, ScrollView, Form, useFormProps, Alert, Content, Tag, Br, Button, Modal, Div, confirm, useFormFields$, useValidate } from 'startupjs-ui';
 import { useGlobalSearchParams } from 'expo-router';
 import { faPen } from '@fortawesome/free-solid-svg-icons/faPen';
@@ -102,6 +102,14 @@ const SelectLikes = observer(({
   oppositeBreed,
   eventId
 }) => {
+  styl`
+    .item
+      border-radius 1u
+      &.selected
+        // FIXME: We can't use color var(--color-text-success-strong) here
+        background-color var(--color-text-success-strong)
+
+  `;
   const $cats = useSub($.cats, {
     eventId,
     breed: oppositeBreed,
@@ -122,11 +130,4 @@ const SelectLikes = observer(({
     }
     return __pugEachResult.length ? __pugEachResult : <Alert variant={'info'}>No cats with selected breed yet</Alert>;
   })();
-  styl`
-    .item
-      border-radius 1u
-      &.selected
-        // FIXME: We can't use color var(--color-text-success-strong) here
-        background-color var(--color-text-success-strong)
-  `;
 });

@@ -145,11 +145,41 @@ describe('pug-tagged-template grammar rule', () => {
   it('keeps class shorthand matching available before generic tag-line matching', () => {
     const rule = getRule();
     const includes = rule.patterns.map((p: any) => p.include);
+    const styleIdx = includes.indexOf('#pug-style-block');
     const tagLineIdx = includes.indexOf('#pug-tag-line');
     const classIdx = includes.indexOf('#pug-class-id-shorthand');
+    expect(styleIdx).toBeGreaterThanOrEqual(0);
     expect(tagLineIdx).toBeGreaterThanOrEqual(0);
     expect(classIdx).toBeGreaterThanOrEqual(0);
+    expect(styleIdx).toBeLessThan(classIdx);
     expect(classIdx).toBeLessThan(tagLineIdx);
+  });
+
+  it('defines style-block repository rules for css/stylus/sass/scss embedding', () => {
+    grammar = grammar ?? JSON.parse(readFileSync(grammarPath, 'utf-8'));
+    expect(grammar.repository?.['pug-style-block']).toBeDefined();
+    expect(grammar.repository?.['pug-style-block-css']).toBeDefined();
+    expect(grammar.repository?.['pug-style-block-styl']).toBeDefined();
+    expect(grammar.repository?.['pug-style-block-sass']).toBeDefined();
+    expect(grammar.repository?.['pug-style-block-scss']).toBeDefined();
+  });
+
+  it('style-block rules embed stylesheet grammars and preserve JS template interpolation', () => {
+    grammar = grammar ?? JSON.parse(readFileSync(grammarPath, 'utf-8'));
+    const cssRule = grammar.repository?.['pug-style-block-css'];
+    const stylRule = grammar.repository?.['pug-style-block-styl'];
+    const sassRule = grammar.repository?.['pug-style-block-sass'];
+    const scssRule = grammar.repository?.['pug-style-block-scss'];
+
+    expect(cssRule.contentName).toBe('source.css');
+    expect(stylRule.contentName).toBe('source.stylus');
+    expect(sassRule.contentName).toBe('source.css.sass');
+    expect(scssRule.contentName).toBe('source.css.scss');
+
+    for (const rule of [cssRule, stylRule, sassRule, scssRule]) {
+      const includes = rule.patterns.map((p: any) => p.include);
+      expect(includes).toContain('#js-template-interpolation');
+    }
   });
 });
 
@@ -276,5 +306,9 @@ describe('package.json grammar configuration', () => {
     const entry = pkg.contributes.grammars[0];
     expect(entry.embeddedLanguages).toBeDefined();
     expect(entry.embeddedLanguages['source.pug']).toBe('jade');
+    expect(entry.embeddedLanguages['source.css']).toBe('css');
+    expect(entry.embeddedLanguages['source.css.scss']).toBe('scss');
+    expect(entry.embeddedLanguages['source.css.sass']).toBe('sass');
+    expect(entry.embeddedLanguages['source.stylus']).toBe('stylus');
   });
 });

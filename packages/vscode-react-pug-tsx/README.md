@@ -12,6 +12,12 @@ npm run package:vsix
 code --install-extension packages/vscode-react-pug-tsx/*.vsix
 ```
 
+Embedded `style(...)` editor support notes:
+
+- `css` and `scss` work with built-in VS Code support
+- `styl` requires `sysoev.language-stylus`
+- `sass` requires `Syler.sass-indented` because built-in VS Code CSS support does not handle indented Sass syntax
+
 Extension id:
 
 ```text
@@ -22,6 +28,7 @@ startupjs.vscode-react-pug-tsx
 
 - completions, hover, diagnostics, and go-to-definition inside Pug sections
 - syntax highlighting for embedded Pug regions
+- embedded `style(lang='css' | 'scss' | 'styl' | 'sass')` blocks
 - shadow TSX view for debugging mappings
 - automatic wiring of `@startupjs/typescript-plugin-react-pug` into the VS Code TypeScript host
 

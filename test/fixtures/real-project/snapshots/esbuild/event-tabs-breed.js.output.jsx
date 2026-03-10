@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { styl, observer, useSub, $ } from "startupjs";
+import { observer, useSub, $, styl } from "startupjs";
 import {
   Link,
   Item,
@@ -88,6 +88,14 @@ const SelectLikesInput = observer(({ $value, ...props }) => {
   return oppositeBreed ? <SelectLikes $likes={$value} oppositeBreed={oppositeBreed} eventId={eventId} /> : <Alert variant={"warning"}>Select breed to choose likes</Alert>;
 });
 const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
+  styl`
+    .item
+      border-radius 1u
+      &.selected
+        // FIXME: We can't use color var(--color-text-success-strong) here
+        background-color var(--color-text-success-strong)
+
+  `;
   const $cats = useSub($.cats, { eventId, breed: oppositeBreed, $sort: { breed: 1, number: 1 } });
   return (() => {
     const __pugEachResult = [];
@@ -99,13 +107,6 @@ const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
     }
     return __pugEachResult.length ? __pugEachResult : <Alert variant={"info"}>No cats with selected breed yet</Alert>;
   })();
-  styl`
-    .item
-      border-radius 1u
-      &.selected
-        // FIXME: We can't use color var(--color-text-success-strong) here
-        background-color var(--color-text-success-strong)
-  `;
 });
 export {
   event_tabs_breed_default as default

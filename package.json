@@ -19,9 +19,9 @@
     "test:unit": "vitest run",
     "test": "npm run test:unit && npm run test:vscode",
     "deps:example": "node scripts/ensure-workspace-deps.mjs example",
-    "pretest:vscode": "npm run deps:example",
-    "pretest:vscode:example": "npm run deps:example",
-    "pretest:vscode:example:screenshots": "npm run deps:example",
+    "pretest:vscode": "npm run deps:example && npm run build",
+    "pretest:vscode:example": "npm run deps:example && npm run build",
+    "pretest:vscode:example:screenshots": "npm run deps:example && npm run build",
     "test:vscode": "vscode-test --config packages/vscode-react-pug-tsx/.vscode-test.mjs",
     "test:vscode:example": "vscode-test --config packages/vscode-react-pug-tsx/.vscode-test.mjs --label example",
     "test:vscode:example:screenshots": "VSCODE_CAPTURE_SCREENSHOTS=1 vscode-test --config packages/vscode-react-pug-tsx/.vscode-test.mjs --label example",
@@ -30,7 +30,7 @@
     "check-types": "tsc --noEmit",
     "typecheck": "npm run check-types",
     "vscode:prepublish": "npm run package",
-    "vscode:fresh:example": "node scripts/open-vscode-fresh.mjs example"
+    "vscode:fresh:example": "npm run deps:example && npm run build && node scripts/open-vscode-fresh.mjs example"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

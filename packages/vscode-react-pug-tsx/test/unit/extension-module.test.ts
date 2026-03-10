@@ -22,6 +22,8 @@ vi.mock('vscode', () => ({
       set: () => {},
       dispose: () => {},
     }),
+    registerCompletionItemProvider: () => ({ dispose: () => {} }),
+    setTextDocumentLanguage: async (doc: any) => doc,
   },
   workspace: {
     onDidChangeConfiguration: () => ({ dispose: () => {} }),

@@ -18,11 +18,11 @@ describe('buildShadowDocument', () => {
     const doc = buildShadowDocument(text, 'test.tsx');
 
     expect(doc.regions).toHaveLength(1);
-    expect(doc.shadowText).not.toContain('pug`');
-    expect(doc.shadowText).toContain('<div');
-    // Surrounding code should be preserved
-    expect(doc.shadowText).toContain('const view = ');
-    expect(doc.shadowText).toContain('export default view;');
+    expect(doc.shadowText).toMatchInlineSnapshot(`
+      "const view = (<div />);
+      export default view;
+      "
+    `);
   });
 
   it('populates region shadow fields correctly', () => {
@@ -63,9 +63,10 @@ describe('buildShadowDocument', () => {
     const doc = buildShadowDocument(text, 'test.tsx');
 
     expect(doc.regions).toHaveLength(2);
-    expect(doc.shadowText).toContain('<div');
-    expect(doc.shadowText).toContain('<span');
-    expect(doc.shadowText).not.toContain('pug`');
+    expect(doc.shadowText).toMatchInlineSnapshot(`
+      "const a = (<div />);
+      const b = (<span />);"
+    `);
 
     // Each region should have correct shadow positions
     for (const region of doc.regions) {
@@ -144,9 +145,7 @@ describe('buildShadowDocument', () => {
 
     expect(doc.regions).toHaveLength(1);
     const region = doc.regions[0];
-    expect(region.tsxText).toContain('className="card"');
-    expect(region.tsxText).toContain('<h1');
-    expect(region.tsxText).toContain('Title');
+    expect(region.tsxText).toMatchInlineSnapshot(`"(<div className="card"><h1>Title</h1><p>Body</p></div>)"`);
     expect(region.parseError).toBeNull();
   });
 

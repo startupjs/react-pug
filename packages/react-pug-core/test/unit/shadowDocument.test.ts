@@ -158,6 +158,138 @@ describe('single pug region', () => {
   });
 });
 
+// ── Terminal style blocks ──────────────────────────────────────
+
+describe('terminal style blocks in shadow document', () => {
+  it('moves a style block to the top of the immediate enclosing block scope', () => {
+    const text = [
+      "import { pug, observer } from 'startupjs';",
+      'function App() {',
+      '  if (visible) {',
+      '    const view = pug`',
+      '      .title Hello',
+      "      style(lang='styl')",
+      '        .title',
+      '          color red',
+      '    `;',
+      '  }',
+      '}',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.shadowText).toMatchInlineSnapshot(`
+      "import {observer,styl} from 'startupjs';  
+      function App() {
+        if (visible) {
+          
+          styl\`
+            .title
+              color red
+
+          \`;
+      const view = (<div styleName={["title"]}>Hello</div>);
+        }
+      }"
+    `);
+  });
+
+  it('converts immediate arrow-expression bodies into block bodies when inserting styles', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'const App = () => pug`',
+      '  .title Hello',
+      '  style',
+      '    .title { color: red; }',
+      '`;',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.shadowText).toMatchInlineSnapshot(`
+      "import { css } from 'startupjs';
+      const App = () => {
+        css\`
+          .title { color: red; }
+
+        \`;
+        return (<div styleName={["title"]}>Hello</div>);
+      };"
+    `);
+  });
+
+  it('normalizes single-line if/else return bodies into blocks before inserting styles', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'function App () {',
+      '  if (x) return pug`',
+      '    .title One',
+      '    style',
+      '      .one { color: red; }',
+      '  `',
+      '  else return pug`',
+      '    .title Two',
+      '    style',
+      '      .two { color: blue; }',
+      '  `',
+      '}',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.shadowText).toMatchInlineSnapshot(`
+      "import { css } from 'startupjs';
+      function App () {
+        if (x) {
+          css\`
+            .one { color: red; }
+
+          \`;
+          return (<div styleName={["title"]}>One</div>)
+        }
+        else {
+          css\`
+            .two { color: blue; }
+
+          \`;
+          return (<div styleName={["title"]}>Two</div>)
+        }
+      }"
+    `);
+  });
+
+  it('falls back to program scope when no function scope exists', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'export const view = pug`',
+      '  .title Hello',
+      '  style',
+      '    .title { color: red; }',
+      '`;',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.shadowText).toContain("import { css } from 'startupjs';");
+    expect(doc.shadowText.indexOf('css`')).toBeLessThan(doc.shadowText.indexOf('export const view'));
+  });
+
+  it('keeps a transformError and placeholder output when style blocks need pug import metadata', () => {
+    const text = [
+      'const view = pug`',
+      '  .title Hello',
+      '  style',
+      '    .title { color: red; }',
+      '`;',
+    ].join('\n');
+
+    const doc = buildShadowDocument(text, 'app.tsx');
+
+    expect(doc.regions[0].transformError?.code).toBe('missing-pug-import-for-style');
+    expect(doc.regions[0].tsxText).toContain('null');
+  });
+});
+
 // ── Multiple regions ────────────────────────────────────────────
 
 describe('multiple pug regions', () => {

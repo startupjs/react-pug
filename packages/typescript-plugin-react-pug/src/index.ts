@@ -38,6 +38,29 @@ function withExtraReactAttributes(shadowText: string): string {
   return `${shadowText}\n${EXTRA_REACT_ATTRIBUTES_TEXT}`;
 }
 
+function strippedOffsetToRawOffset(rawText: string, strippedOffset: number, commonIndent: number): number {
+  if (commonIndent === 0) return strippedOffset;
+  let stripped = 0;
+  let raw = 0;
+  const lines = rawText.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
+    const strippedLineLength = Math.max(0, line.length - indentToRemove);
+    if (strippedOffset <= stripped + strippedLineLength) {
+      return raw + indentToRemove + (strippedOffset - stripped);
+    }
+    stripped += strippedLineLength + 1;
+    raw += line.length + 1;
+  }
+  return raw;
+}
+
+function regionOffsetToOriginalOffset(doc: PugDocument, region: PugDocument['regions'][number], strippedOffset: number): number {
+  const rawText = doc.originalText.slice(region.pugTextStart, region.pugTextEnd);
+  return region.pugTextStart + strippedOffsetToRawOffset(rawText, strippedOffset, region.commonIndent);
+}
+
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;
 
@@ -760,7 +783,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           if (region.parseError) {
             const err = region.parseError;
             // Compute a meaningful error span length
-            let errorStart = region.pugTextStart + err.offset;
+            let errorStart = regionOffsetToOriginalOffset(doc, region, err.offset);
             let textAfterError = doc.originalText.slice(errorStart);
 
             // If error points at a newline, advance to the next non-empty line
@@ -782,6 +805,25 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
               messageText: `Pug parse error: ${err.message}`,
               category: tsModule.DiagnosticCategory.Error,
               code: 99001,
+              source: 'pug-react',
+            } as unknown as T);
+          }
+          if (region.transformError) {
+            const err = region.transformError;
+            const errorStart = regionOffsetToOriginalOffset(doc, region, err.offset);
+            const textAfterError = doc.originalText.slice(errorStart);
+            const nlIdx = textAfterError.indexOf('\n');
+            const errorLength = err.code === 'style-tag-must-be-last'
+              ? 'style'.length
+              : Math.max(1, nlIdx >= 0 ? nlIdx : Math.min(textAfterError.length, 20));
+
+            mapped.push({
+              file: undefined,
+              start: errorStart,
+              length: errorLength,
+              messageText: `Pug transform error: ${err.message}`,
+              category: tsModule.DiagnosticCategory.Error,
+              code: 99003,
               source: 'pug-react',
             } as unknown as T);
           }

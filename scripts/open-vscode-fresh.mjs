@@ -45,7 +45,7 @@ async function main() {
     userDataDir,
     '--extensions-dir',
     extensionsDir,
-    '--disable-extensions',
+    '--disable-extension=vscode.git',
     '--extensionDevelopmentPath',
     extensionDevelopmentPath,
     workspacePath,

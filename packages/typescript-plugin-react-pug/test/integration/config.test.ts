@@ -365,7 +365,37 @@ describe('plugin with class shorthand config', () => {
     );
 
     const shadow = snapshotText(result.host.getScriptSnapshot(file));
-    expect(shadow).toContain('styleName={["title", active]}');
+    expect(shadow).toMatchInlineSnapshot(`
+      "import "startupjs";             
+      const active = { active: true };
+      const view = (<span styleName={["title", active]} />);
+
+      /* [pug-react] startupjs/cssxjs extra react attributes */
+      // extra props for cssxjs \`:part\` and \`styleName\` features
+      import 'react'
+
+      type __PugReactSimpleValue = string | number | boolean | null | undefined | bigint | symbol
+      type __PugReactFlagObject = Record<string, __PugReactSimpleValue>
+
+      // part: string OR array of (string | flag-object)
+      type __PugReactPartProp = string | Array<string | __PugReactFlagObject>
+
+      // styleName: classnames-compatible value (string/object or nested arrays)
+      type __PugReactStyleNameLeaf = undefined | string | __PugReactFlagObject
+      type __PugReactStyleNameProp = __PugReactStyleNameLeaf | Array<__PugReactStyleNameProp>
+
+      declare module 'react' {
+        // For ANY React component (<MyComp ... />)
+        // JSX.IntrinsicAttributes extends React.Attributes
+        interface Attributes {
+          /** [cssxjs] Name this element to be styleable from outside with \`:part(name)\` */
+          part?: __PugReactPartProp
+          /** [cssxjs] Class name(s) for styling the component. Supports classnames-like syntax */
+          styleName?: __PugReactStyleNameProp
+        }
+      }
+      "
+    `);
   });
 
   it('can force shorthand target to class', async () => {
@@ -383,7 +413,6 @@ describe('plugin with class shorthand config', () => {
     );
 
     const shadow = snapshotText(result.host.getScriptSnapshot(file));
-    expect(shadow).toContain(' class="title"');
-    expect(shadow).not.toContain('className=');
+    expect(shadow).toMatchInlineSnapshot(`"const view = (<span class="title" />);"`);
   });
 });

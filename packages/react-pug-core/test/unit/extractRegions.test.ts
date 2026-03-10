@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractPugRegions } from '../../src/language/extractRegions';
+import { extractPugAnalysis, extractPugRegions } from '../../src/language/extractRegions';
 
 // Test checklist:
 // [x] Single pug template -- correct originalStart/End, pugTextStart/End, pugText
@@ -253,6 +253,88 @@ describe('nested in TS constructs', () => {
     const regions = extractPugRegions(text, 'app.tsx');
     expect(regions).toHaveLength(1);
     expect(regions[0].pugText).toBe('div Hello');
+  });
+});
+
+// ── Style scope/import analysis ────────────────────────────────
+
+describe('style scope and import analysis', () => {
+  it('targets the immediate enclosing arrow-expression scope', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'function App() {',
+      '  const renderItem = () => pug`',
+      '    .title Hello',
+      '    style',
+      '      .title { color: red; }',
+      '  `;',
+      '}',
+    ].join('\n');
+
+    const analysis = extractPugAnalysis(text, 'app.tsx');
+
+    expect(analysis.styleScopeTargets).toHaveLength(1);
+    expect(analysis.styleScopeTargets[0].kind).toBe('arrow-expression');
+    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('pug`'));
+  });
+
+  it('targets the immediate enclosing block scope', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'function renderPage() {',
+      '  if (visible) {',
+      '    const view = pug`',
+      '      .title Hello',
+      "      style(lang='styl')",
+      '        .title',
+      '          color red',
+      '    `;',
+      '  }',
+      '}',
+    ].join('\n');
+
+    const analysis = extractPugAnalysis(text, 'app.tsx');
+
+    expect(analysis.styleScopeTargets).toHaveLength(1);
+    expect(analysis.styleScopeTargets[0].kind).toBe('block');
+    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('const view'));
+  });
+
+  it('targets single-line statement bodies so they can be normalized into blocks', () => {
+    const text = [
+      "import { pug } from 'startupjs';",
+      'function App () {',
+      '  if (x) return pug`',
+      '    .title One',
+      '    style',
+      '      .one { color: red; }',
+      '  `',
+      '}',
+    ].join('\n');
+
+    const analysis = extractPugAnalysis(text, 'app.tsx');
+
+    expect(analysis.styleScopeTargets).toHaveLength(1);
+    expect(analysis.styleScopeTargets[0].kind).toBe('statement-body');
+    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('return pug`'));
+  });
+
+  it('tracks helper import source metadata from the pug import module', () => {
+    const text = [
+      "import { css, pug } from 'startupjs';",
+      'const view = pug`',
+      '  .title Hello',
+      '  style',
+      '    .title { color: red; }',
+      '`;',
+    ].join('\n');
+
+    const analysis = extractPugAnalysis(text, 'app.tsx');
+
+    expect(analysis.tagImportSource).toBe('startupjs');
+    expect(analysis.tagImportSourceText).toBe("'startupjs'");
+    expect(analysis.existingStyleImports.has('css')).toBe(true);
+    expect(analysis.helperImportInsertionOffset).toBeGreaterThan(0);
   });
 });
 

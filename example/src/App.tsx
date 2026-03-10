@@ -58,5 +58,15 @@ export default function App() {
             .todo-item.done(key=todo.id)
               input(type="checkbox", checked=todo.done, onChange=() => handleToggle(todo.id))
               span= todo.text
+
+    style
+      .todo-item {
+        border-radius: 6px;
+        background-color: rgba(0, 128, 255, 0.08);
+      }
+
+      .empty {
+        font-family: system-ui;
+      }
   `;
 }
