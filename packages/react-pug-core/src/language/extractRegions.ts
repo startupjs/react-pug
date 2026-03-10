@@ -48,12 +48,13 @@ function getPluginsForFile(filename: string): any[] {
 }
 
 /** Walk the AST and collect TaggedTemplateExpression nodes where tag matches tagName */
-interface ExtractedImportData {
+export interface ExtractedImportData {
   declaration: ImportDeclaration;
   source: string;
   sourceText: string;
   cleanup: TagImportCleanup | null;
   hasMatchedTag: boolean;
+  matchedSpecifiers: Array<ImportSpecifier | ImportDefaultSpecifier | ImportNamespaceSpecifier>;
   helperImports: Set<StyleTagLang>;
 }
 
@@ -73,6 +74,7 @@ interface ExtractedTemplateData {
 export interface ExtractPugAnalysisResult {
   regions: PugRegion[];
   importCleanups: TagImportCleanup[];
+  tagImportEntries: ExtractedImportData[];
   usesTagFunction: boolean;
   hasTagImport: boolean;
   tagImportSource: string | null;
@@ -306,6 +308,7 @@ function collectPugAnalysis(
       sourceText: getNodeText(text, declaration.source as StringLiteral),
       cleanup: matchedSpecifiers.length > 0 ? buildImportCleanup(text, declaration, matchedSpecifiers) : null,
       hasMatchedTag: matchedSpecifiers.length > 0,
+      matchedSpecifiers,
       helperImports,
     });
   }
@@ -388,6 +391,7 @@ export function extractPugAnalysis(
     return {
       regions: [],
       importCleanups: [],
+      tagImportEntries: [],
       usesTagFunction: false,
       hasTagImport: false,
       tagImportSource: null,
@@ -426,6 +430,7 @@ export function extractPugAnalysis(
     return {
       regions,
       importCleanups: [],
+      tagImportEntries: [],
       usesTagFunction: regions.length > 0,
       hasTagImport: false,
       tagImportSource: null,
@@ -446,6 +451,7 @@ export function extractPugAnalysis(
     return {
       regions: [],
       importCleanups: [],
+      tagImportEntries,
       usesTagFunction: false,
       hasTagImport: tagImportEntries.length > 0,
       tagImportSource: null,
@@ -509,6 +515,7 @@ export function extractPugAnalysis(
   return {
     regions,
     importCleanups: tagImportEntries.flatMap(entry => entry.cleanup ? [entry.cleanup] : []),
+    tagImportEntries,
     usesTagFunction: regions.length > 0,
     hasTagImport: tagImportEntries.length > 0,
     tagImportSource,

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { observer, useSub, $ } from 'startupjs';
-import { styl } from 'startupjs';
+import { observer, useSub, $, styl } from 'startupjs';
 import { Link, Item, ScrollView, Form, useFormProps, Alert, Content, Tag, Br, Button, Modal, Div, confirm, useFormFields$, useValidate } from 'startupjs-ui';
 import { useGlobalSearchParams } from 'expo-router';
 import { faPen } from '@fortawesome/free-solid-svg-icons/faPen';

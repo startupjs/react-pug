@@ -174,9 +174,9 @@ describe('transformSourceFile', () => {
     })).toThrow('Missing import for tag function "pug"');
   });
 
-  it('moves a style block into the target scope and adds the matching helper import', () => {
+  it('moves a style block into the target scope and merges the matching helper into the existing import', () => {
     const source = [
-      "import { pug } from 'startupjs';",
+      "import { pug, observer } from 'startupjs';",
       'function App() {',
       '  return pug`',
       '    .title Hello',
@@ -189,8 +189,8 @@ describe('transformSourceFile', () => {
 
     const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
 
-    expect(result.code).toContain("import { styl } from 'startupjs';");
-    expect(result.code).toContain("import 'startupjs';");
+    expect(result.code).toContain("import {observer,styl} from 'startupjs';");
+    expect(result.code).not.toContain("import { styl } from 'startupjs';");
     expect(result.code).toContain('styl`');
     expect(result.code).not.toContain('<style');
   });

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { observer, useSub, $ } from "startupjs";
-import { styl } from "startupjs";
+import { observer, useSub, $, styl } from "startupjs";
 import {
   Link,
   Item,

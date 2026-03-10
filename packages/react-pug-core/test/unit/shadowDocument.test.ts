@@ -163,7 +163,7 @@ describe('single pug region', () => {
 describe('terminal style blocks in shadow document', () => {
   it('moves a style block to the top of the nearest uppercase function', () => {
     const text = [
-      "import { pug } from 'startupjs';",
+      "import { pug, observer } from 'startupjs';",
       'function App() {',
       '  return pug`',
       '    .title Hello',
@@ -176,8 +176,8 @@ describe('terminal style blocks in shadow document', () => {
 
     const doc = buildShadowDocument(text, 'app.tsx');
 
-    expect(doc.shadowText).toContain("import { styl } from 'startupjs';");
-    expect(doc.shadowText).toContain("import 'startupjs';");
+    expect(doc.shadowText).toContain("import {observer,styl} from 'startupjs';");
+    expect(doc.shadowText).not.toContain("import { styl } from 'startupjs';");
     expect(doc.shadowText).toContain('function App() {');
     expect(doc.shadowText).toContain('  styl`');
     expect(doc.shadowText).toContain('    .title');

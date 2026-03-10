@@ -11,7 +11,11 @@ import type {
   TagImportCleanup,
 } from './mapping';
 import { FULL_FEATURES } from './mapping';
-import { extractPugAnalysis, type StyleScopeTarget } from './extractRegions';
+import {
+  extractPugAnalysis,
+  type ExtractedImportData,
+  type StyleScopeTarget,
+} from './extractRegions';
 import { compilePugToTsx, type CompileOptions } from './pugToTsx';
 import { originalToShadow } from './positionMapping';
 
@@ -228,6 +232,87 @@ function applyImportCleanups(doc: PugDocument, cleanups: TagImportCleanup[]): st
   return chars.join('');
 }
 
+function padToLength(text: string, targetLength: number): string | null {
+  if (text.length > targetLength) return null;
+  return text + ' '.repeat(targetLength - text.length);
+}
+
+function buildImportCleanupWithHelpers(
+  originalText: string,
+  entry: ExtractedImportData,
+  helpersToAdd: Set<StyleTagLang>,
+  removeTagImport: boolean,
+): { cleanup: TagImportCleanup | null; mergedHelpers: Set<StyleTagLang> } {
+  const declaration = entry.declaration;
+  const originalStart = declaration.start ?? 0;
+  const originalEnd = declaration.end ?? originalStart;
+  const originalImportText = originalText.slice(originalStart, originalEnd);
+  const originalLength = originalEnd - originalStart;
+  const hasSemicolon = originalImportText.trimEnd().endsWith(';');
+  const sourceText = entry.sourceText;
+  const matchedSpecifiers = removeTagImport ? entry.matchedSpecifiers : [];
+  const remaining = declaration.specifiers.filter(spec => !matchedSpecifiers.includes(spec as any));
+  const defaultSpecifier = remaining.find(spec => spec.type === 'ImportDefaultSpecifier');
+  const namespaceSpecifier = remaining.find(spec => spec.type === 'ImportNamespaceSpecifier');
+  const namedSpecifiers = remaining.filter(spec => spec.type === 'ImportSpecifier');
+  const namedPieces = namedSpecifiers.map(spec => originalText.slice(spec.start ?? 0, spec.end ?? 0));
+  const existingLocalNames = new Set(namedSpecifiers.map(spec => spec.local.name));
+  const mergedHelpers = new Set<StyleTagLang>();
+
+  if (!namespaceSpecifier) {
+    for (const helper of [...helpersToAdd].sort()) {
+      if (existingLocalNames.has(helper)) continue;
+      namedPieces.push(helper);
+      existingLocalNames.add(helper);
+      mergedHelpers.add(helper);
+    }
+  }
+
+  const parts: string[] = [];
+  if (defaultSpecifier) parts.push(originalText.slice(defaultSpecifier.start ?? 0, defaultSpecifier.end ?? 0));
+  if (namespaceSpecifier) parts.push(originalText.slice(namespaceSpecifier.start ?? 0, namespaceSpecifier.end ?? 0));
+  if (namedPieces.length > 0) parts.push(`{ ${namedPieces.join(', ')} }`);
+
+  let replacement = '';
+  if (parts.length === 0) {
+    replacement = declaration.importKind === 'type'
+      ? ''
+      : `import ${sourceText}${hasSemicolon ? ';' : ''}`;
+  } else {
+    const importPrefix = declaration.importKind === 'type' ? 'import type ' : 'import ';
+    replacement = `${importPrefix}${parts.join(', ')} from ${sourceText}${hasSemicolon ? ';' : ''}`;
+  }
+
+  let replacementText = padToLength(replacement, originalLength);
+  if (replacementText == null) {
+    const compactParts: string[] = [];
+    if (defaultSpecifier) compactParts.push(originalText.slice(defaultSpecifier.start ?? 0, defaultSpecifier.end ?? 0));
+    if (namespaceSpecifier) compactParts.push(originalText.slice(namespaceSpecifier.start ?? 0, namespaceSpecifier.end ?? 0));
+    if (namedPieces.length > 0) compactParts.push(`{${namedPieces.join(',')}}`);
+    const importPrefix = declaration.importKind === 'type' ? 'import type ' : 'import ';
+    const compactReplacement = compactParts.length === 0
+      ? (declaration.importKind === 'type' ? '' : `import ${sourceText}${hasSemicolon ? ';' : ''}`)
+      : `${importPrefix}${compactParts.join(',')} from ${sourceText}${hasSemicolon ? ';' : ''}`;
+    replacementText = padToLength(compactReplacement, originalLength);
+  }
+
+  if (replacementText == null) {
+    return {
+      cleanup: removeTagImport ? entry.cleanup : null,
+      mergedHelpers: new Set<StyleTagLang>(),
+    };
+  }
+
+  return {
+    cleanup: {
+      originalStart,
+      originalEnd,
+      replacementText,
+    },
+    mergedHelpers,
+  };
+}
+
 /**
  * Build a shadow document from source text.
  *
@@ -247,7 +332,6 @@ export function buildShadowDocument(
   const analysis = extractPugAnalysis(originalText, uri, tagName);
   const regions = analysis.regions;
   const removeTagImport = compileOptions.removeTagImport !== false;
-  const importCleanups = removeTagImport ? analysis.importCleanups : [];
   const missingTagImport: MissingTagImportDiagnostic | null = (
     compileOptions.requirePugImport && analysis.usesTagFunction && !analysis.hasTagImport
   ) ? {
@@ -310,10 +394,28 @@ export function buildShadowDocument(
     }
   }
 
+  const importCleanups: TagImportCleanup[] = [];
+  const unmergedHelpers = new Set(
+    [...requiredHelpers].filter(helper => !analysis.existingStyleImports.has(helper)),
+  );
+  for (const entry of analysis.tagImportEntries) {
+    const { cleanup, mergedHelpers } = buildImportCleanupWithHelpers(
+      originalText,
+      entry,
+      unmergedHelpers,
+      removeTagImport,
+    );
+    if (cleanup && (removeTagImport || mergedHelpers.size > 0)) {
+      importCleanups.push(cleanup);
+    } else if (removeTagImport && entry.cleanup) {
+      importCleanups.push(entry.cleanup);
+    }
+    for (const helper of mergedHelpers) unmergedHelpers.delete(helper);
+  }
+
   const pendingInsertions: PendingInsertion[] = [];
   if (analysis.tagImportSourceText && analysis.helperImportInsertionOffset != null) {
-    for (const helper of [...requiredHelpers].sort()) {
-      if (analysis.existingStyleImports.has(helper)) continue;
+    for (const helper of [...unmergedHelpers].sort()) {
       pendingInsertions.push({
         kind: 'style-import',
         originalOffset: analysis.helperImportInsertionOffset,
