@@ -1249,14 +1249,13 @@ function emitAttribute(
   if (typeof attr.val === 'string') {
     const val = attr.val;
 
-    // Check if value is a quoted string: "hello" or 'hello'
+    // JSX string literal attribute: label="Hello"
     if ((val.startsWith('"') && val.endsWith('"')) ||
         (val.startsWith("'") && val.endsWith("'"))) {
-      emitter.emitSynthetic('={');
+      emitter.emitSynthetic('=');
       // Find the value offset: after "name=" in the source
       const valOffset = attrOffset + attr.name.length + 1; // +1 for '='
       emitter.emitMapped(val, valOffset, FULL_FEATURES);
-      emitter.emitSynthetic('}');
     } else {
       // Expression value
       emitter.emitSynthetic('={');

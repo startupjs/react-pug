@@ -28,18 +28,18 @@ export default observer(function TabLayout () {
     tabBarActiveBackgroundColor: 'rgba(255, 255, 255, 0.5)',
     headerShown: false,
     headerTitle: $event.name.get()
-  }}><Tabs.Screen name={'index'} options={{
+  }}><Tabs.Screen name='index' options={{
       title: 'Dashboard',
       tabBarIcon: renderHomeIcon
-    }} /><Tabs.Screen name={'-breed'} options={{
+    }} /><Tabs.Screen name='-breed' options={{
       href: null
-    }} /><Tabs.Screen name={'domestic'} options={{
+    }} /><Tabs.Screen name='domestic' options={{
       title: 'Domestic Cats',
       tabBarIcon: renderDomesticIcon
-    }} /><Tabs.Screen name={'wild'} options={{
+    }} /><Tabs.Screen name='wild' options={{
       title: 'Wild Cats',
       tabBarIcon: renderWildIcon
-    }} /><Tabs.Screen name={'test'} options={{
+    }} /><Tabs.Screen name='test' options={{
       title: 'Dev Only',
       tabBarIcon: renderTestIcon
     }} /></Tabs></>)
@@ -60,7 +60,7 @@ function renderEditEvent ({ $event }) {
 
 const EditEvent = observer(({ $event }) => {
   const $showModal = $()
-  return (<><Button onPress={() => $showModal.set(true)} variant={'text'} icon={faPen}>Edit this cat meetup</Button><Modal title={'Edit cat meetup'} $visible={$showModal}><Form $value={$event} fields={EVENT_FORM} /></Modal></>)
+  return (<><Button onPress={() => $showModal.set(true)} variant='text' icon={faPen}>Edit this cat meetup</Button><Modal title='Edit cat meetup' $visible={$showModal}><Form $value={$event} fields={EVENT_FORM} /></Modal></>)
 })
 
 function renderWildIcon ({ color, size }) {

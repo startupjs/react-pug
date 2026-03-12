@@ -90,7 +90,7 @@ function getOriginalOffsetFromSourceMap(
 describe('babel-plugin-react-pug transform', () => {
   it('replaces pug tagged template with JSX expression', () => {
     const out = transform('const view = pug`Button(label=\"Save\")`;');
-    expect(out).toMatchInlineSnapshot(`"const view = <Button label={"Save"} />;"`);
+    expect(out).toMatchInlineSnapshot(`"const view = <Button label="Save" />;"`);
   });
 
   it('supports interpolated expressions in attributes', () => {
@@ -156,7 +156,7 @@ describe('babel-plugin-react-pug transform', () => {
     const out = transform(COMPILER_NESTED_INTERPOLATION_SOURCE);
     expect(out).toMatchInlineSnapshot(`
       "const submitDescription = "send form";
-      const view = <Button label={"Submit"} tooltip={<div className="tooltip"><span className="tooltip-text">Click me!{submitDescription}</span><Button label={"info"} onClick><Icon name={"faCoffee"} /></Button></div>} />;"
+      const view = <Button label="Submit" tooltip={<div className="tooltip"><span className="tooltip-text">Click me!{submitDescription}</span><Button label="info" onClick><Icon name="faCoffee" /></Button></div>} />;"
     `);
   });
 
@@ -179,7 +179,7 @@ describe('babel-plugin-react-pug transform', () => {
     ].join('\n'));
     expect(out).toMatchInlineSnapshot(`
       "const a = <span>One</span>;
-      const b = <Button label={"Two"} />;"
+      const b = <Button label="Two" />;"
     `);
   });
 

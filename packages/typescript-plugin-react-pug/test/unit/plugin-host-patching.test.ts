@@ -605,7 +605,7 @@ describe('pug-to-JSX transformation', () => {
       'app.tsx': 'const v = pug`\n  Button(onClick=handler, label="Hi")\n`',
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
-    expect(text).toMatchInlineSnapshot(`"const v = (<Button onClick={handler} label={"Hi"} />)"`);
+    expect(text).toMatchInlineSnapshot(`"const v = (<Button onClick={handler} label="Hi" />)"`);
   });
 
   it('empty content produces null placeholder', async () => {

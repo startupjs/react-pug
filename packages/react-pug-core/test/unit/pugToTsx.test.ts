@@ -7,8 +7,8 @@ import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from '../../src/lang
 // [x] Class shorthand: .card -> <div className="card" />
 // [x] Class+ID: .foo.bar#baz -> <div className="foo bar" id="baz" />
 // [x] Attributes: onClick=handler -> onClick={handler}
-// [x] Boolean attributes: disabled -> disabled={true}
-// [x] String attributes: label="Hello" -> label={"Hello"}
+// [x] Boolean attributes: disabled -> disabled
+// [x] String attributes: label="Hello" -> label="Hello"
 // [x] Spread: ...props -> {...props}
 // [x] Text: p Hello -> <p>Hello</p>
 // [x] Text interpolation: p Hello #{name} -> <p>...{name}...</p>
@@ -158,10 +158,10 @@ describe('attributes', () => {
     expect(result.tsx).not.toContain('{true}');
   });
 
-  it('string attribute: label="Hello" -> label={"Hello"}', () => {
+  it('string attribute uses JSX string literal form', () => {
     const result = compilePugToTsx('Button(label="Hello")');
-    expect(result.tsx).toContain('label=');
-    expect(result.tsx).toContain('"Hello"');
+    expect(result.tsx).toContain('label="Hello"');
+    expect(result.tsx).not.toContain('label={"Hello"}');
   });
 
   it('multiple attributes', () => {

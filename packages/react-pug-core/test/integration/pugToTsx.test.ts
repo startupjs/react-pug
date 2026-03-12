@@ -79,7 +79,8 @@ describe('compilePugToTsx - attributes', () => {
 
   it('compiles string attribute', () => {
     const result = compilePugToTsx('Button(label="Hello")');
-    expect(result.tsx).toContain('label={"Hello"}');
+    expect(result.tsx).toContain('label="Hello"');
+    expect(result.tsx).not.toContain('label={"Hello"}');
   });
 
   it('compiles boolean attribute', () => {
@@ -102,7 +103,7 @@ describe('compilePugToTsx - attributes', () => {
   it('compiles multiple attributes', () => {
     const result = compilePugToTsx('Button(onClick=handler, label="Hi")');
     expect(result.tsx).toContain('onClick={handler}');
-    expect(result.tsx).toContain('label={"Hi"}');
+    expect(result.tsx).toContain('label="Hi"');
   });
 });
 

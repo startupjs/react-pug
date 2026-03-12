@@ -15,7 +15,7 @@ export default observer(({
     photoFileId,
     phonegram
   } = $cat.get();
-  return <Div part={'root'} row vAlign={'center'}>{photoFileId ? <Photo styleName={["avatar", {
+  return <Div part='root' row vAlign='center'>{photoFileId ? <Photo styleName={["avatar", {
       large,
       small
     }]} fileId={photoFileId} name={name} /> : <Avatar styleName={["avatar", {
@@ -58,7 +58,7 @@ const Photo = observer(({
   try {
     url = $file.getUrl();
   } catch (err) {}
-  return <Avatar part={'root'} src={url}>{name}</Avatar>;
+  return <Avatar part='root' src={url}>{name}</Avatar>;
 });
 function getCatgramLink(username) {
   if (!username) return;

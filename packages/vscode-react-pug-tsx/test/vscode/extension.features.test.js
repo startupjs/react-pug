@@ -202,7 +202,7 @@ suite('Extension Host Features (example workspace)', () => {
       'Expected shadow TSX to contain transformed App JSX component output',
     );
     assert.ok(
-      shadowText.includes('label={"Reset"}'),
+      shadowText.includes('label="Reset"'),
       'Expected shadow TSX to contain transformed App JSX props',
     );
 
@@ -211,7 +211,7 @@ suite('Extension Host Features (example workspace)', () => {
       removedPugImport: !shadowText.includes('import { pug } from \'./helpers\';'),
       injectedStyleHelperImport: shadowText.includes('import { css } from \'./helpers\';'),
       containsCardJsx: shadowText.includes('<Card'),
-      containsResetProp: shadowText.includes('label={"Reset"}'),
+      containsResetProp: shadowText.includes('label="Reset"'),
     });
   });
 

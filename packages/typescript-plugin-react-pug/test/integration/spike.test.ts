@@ -86,7 +86,7 @@ describe('Spike: TS plugin host patching', () => {
 
       const handler = () => console.log('clicked');
 
-      const view = (<Button onClick={handler} label={"Hello"}>Click me</Button>)
+      const view = (<Button onClick={handler} label="Hello">Click me</Button>)
       "
     `);
   });

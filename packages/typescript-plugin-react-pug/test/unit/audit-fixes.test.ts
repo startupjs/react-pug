@@ -371,13 +371,15 @@ describe('version incorporates host version (Finding 2)', () => {
 describe('plugin module resolvability (Finding 3)', () => {
   const root = resolve(__dirname, '../../../..');
   const extensionPkgPath = resolve(root, 'packages/vscode-react-pug-tsx/package.json');
+  const pluginPkgPath = resolve(root, 'packages/typescript-plugin-react-pug/package.json');
   const depPkgPath = resolve(root, 'node_modules/@react-pug/typescript-plugin-react-pug/package.json');
   const distPluginPath = resolve(root, 'packages/typescript-plugin-react-pug/dist/plugin.js');
 
   it('extension package declares @react-pug/typescript-plugin-react-pug dependency', () => {
     const pkg = JSON.parse(readFileSync(extensionPkgPath, 'utf-8'));
+    const pluginPkg = JSON.parse(readFileSync(pluginPkgPath, 'utf-8'));
     expect(pkg.dependencies?.['@react-pug/typescript-plugin-react-pug'])
-      .toBe('^0.0.1');
+      .toBe(`^${pluginPkg.version}`);
   });
 
   it('node_modules/@react-pug/typescript-plugin-react-pug/package.json exists', () => {

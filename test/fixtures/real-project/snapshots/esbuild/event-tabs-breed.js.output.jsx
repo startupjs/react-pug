@@ -66,16 +66,16 @@ var event_tabs_breed_default = observer(({ breed }) => {
     const oppositeBreed = $selected?.breed.get() && ($selected.breed.get() === "domestic" ? "wild" : "domestic");
     return <><Form key={$selected?.getId() || "NEW"} $fields={$fields} $value={$selected} oppositeBreed={oppositeBreed} eventId={eventId} customInputs={{
       likes: SelectLikesInput
-    }} validate={validate} /><Br />{$mode.get() === "new" ? <Div align={"right"} row><Button onPress={cancel}>Cancel</Button><Button disabled={validate.hasErrors} pushed variant={"flat"} color={"primary"} onPress={create}>Create</Button></Div> : $mode.get() === "edit" ? <Div align={"right"} row><Button color={"error"} onPress={deleteCat}>Delete</Button></Div> : null}</>;
+    }} validate={validate} /><Br />{$mode.get() === "new" ? <Div align='right' row><Button onPress={cancel}>Cancel</Button><Button disabled={validate.hasErrors} pushed variant='flat' color='primary' onPress={create}>Create</Button></Div> : $mode.get() === "edit" ? <Div align='right' row><Button color='error' onPress={deleteCat}>Delete</Button></Div> : null}</>;
   })()}</Modal></>;
 });
 const CatsList = observer(({ onEdit, breed, eventId }) => {
-  if (!eventId) return <Alert variant={"error"}>No event specified</Alert>;
+  if (!eventId) return <Alert variant='error'>No event specified</Alert>;
   const $cats = useSub($.cats, { eventId, breed, $sort: { breed: 1, number: 1 } });
   return (() => {
     const __pugEachResult = [];
     for (const $cat of $cats) {
-      __pugEachResult.push(<Item key={$cat.getId()}><CatCard $cat={$cat} /><Item.Right><Div vAlign={"center"} row gap={1}>{!hasContact($cat) ? <Tag color={"error"}>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color={"error"}>No photo</Tag> : null}<Button variant={"text"} icon={faPen} onPress={() => onEdit($cat)} tooltip={"Edit"} /><Link href={"/events/" + eventId + "/matches/" + $cat.getId()}><Button variant={"text"} icon={faHeart} tooltip={"Matches"} /></Link><Link href={"/cats/" + $cat.token.get()}><Button variant={"text"} icon={faLink} tooltip={"Cat profile link"}>Link</Button></Link></Div></Item.Right></Item>);
+      __pugEachResult.push(<Item key={$cat.getId()}><CatCard $cat={$cat} /><Item.Right><Div vAlign='center' row gap={1}>{!hasContact($cat) ? <Tag color='error'>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color='error'>No photo</Tag> : null}<Button variant='text' icon={faPen} onPress={() => onEdit($cat)} tooltip='Edit' /><Link href={"/events/" + eventId + "/matches/" + $cat.getId()}><Button variant='text' icon={faHeart} tooltip='Matches' /></Link><Link href={"/cats/" + $cat.token.get()}><Button variant='text' icon={faLink} tooltip='Cat profile link'>Link</Button></Link></Div></Item.Right></Item>);
     }
     return __pugEachResult;
   })();
@@ -85,7 +85,7 @@ function hasContact($cat) {
 }
 const SelectLikesInput = observer(({ $value, ...props }) => {
   const { oppositeBreed, eventId } = { ...useFormProps(), ...props };
-  return oppositeBreed ? <SelectLikes $likes={$value} oppositeBreed={oppositeBreed} eventId={eventId} /> : <Alert variant={"warning"}>Select breed to choose likes</Alert>;
+  return oppositeBreed ? <SelectLikes $likes={$value} oppositeBreed={oppositeBreed} eventId={eventId} /> : <Alert variant='warning'>Select breed to choose likes</Alert>;
 });
 const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
   styl`
@@ -105,7 +105,7 @@ const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
         return <Item styleName={["item", { selected: $likes[catId].get() }]} key={catId} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small /></Item>;
       })());
     }
-    return __pugEachResult.length ? __pugEachResult : <Alert variant={"info"}>No cats with selected breed yet</Alert>;
+    return __pugEachResult.length ? __pugEachResult : <Alert variant='info'>No cats with selected breed yet</Alert>;
   })();
 });
 export {

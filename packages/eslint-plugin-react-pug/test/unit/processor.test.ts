@@ -14,7 +14,7 @@ describe('eslint-plugin-react-pug processor', () => {
     const blocks = processor.preprocess(input, 'file.jsx');
 
     expect(blocks).toHaveLength(1);
-    expect(blocks[0]).toMatchInlineSnapshot(`"const view = (<Button label={"Save"} />);"`);
+    expect(blocks[0]).toMatchInlineSnapshot(`"const view = (<Button label="Save" />);"`);
   });
 
   it('auto class strategy switches to styleName+classnames for startupjs marker', () => {

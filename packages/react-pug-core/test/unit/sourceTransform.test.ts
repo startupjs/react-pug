@@ -18,7 +18,7 @@ describe('transformSourceFile', () => {
 
     expect(result.regions).toHaveLength(1);
     expect(result.code).toMatchInlineSnapshot(`
-      "const view = (<Button label={"Save"} />);
+      "const view = (<Button label="Save" />);
       "
     `);
   });
@@ -33,7 +33,7 @@ describe('transformSourceFile', () => {
     expect(result.regions).toHaveLength(2);
     expect(result.code).toMatchInlineSnapshot(`
       "const first = (<span>One</span>);
-      const second = (<Button label={"Two"} />);"
+      const second = (<Button label="Two" />);"
     `);
   });
 

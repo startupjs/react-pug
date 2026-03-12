@@ -29,7 +29,7 @@ describe('esbuild-plugin-react-pug', () => {
       'fixture.tsx',
     );
 
-    expect(transformed.code).toMatchInlineSnapshot(`"const view = (<Button label={"Save"} />);"`);
+    expect(transformed.code).toMatchInlineSnapshot(`"const view = (<Button label="Save" />);"`);
   });
 
   it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
