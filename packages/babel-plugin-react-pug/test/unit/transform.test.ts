@@ -156,7 +156,7 @@ describe('babel-plugin-react-pug transform', () => {
     const out = transform(COMPILER_NESTED_INTERPOLATION_SOURCE);
     expect(out).toMatchInlineSnapshot(`
       "const submitDescription = "send form";
-      const view = <Button label={"Submit"} tooltip={<div className="tooltip"><span className="tooltip-text">Click me!{submitDescription}</span><Button label={"info"} onClick={true}><Icon name={"faCoffee"} /></Button></div>} />;"
+      const view = <Button label={"Submit"} tooltip={<div className="tooltip"><span className="tooltip-text">Click me!{submitDescription}</span><Button label={"info"} onClick><Icon name={"faCoffee"} /></Button></div>} />;"
     `);
   });
 

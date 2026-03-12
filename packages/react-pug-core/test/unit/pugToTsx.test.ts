@@ -146,10 +146,16 @@ describe('attributes', () => {
     expect(result.tsx).toContain('{handler}');
   });
 
-  it('boolean attribute: disabled -> disabled={true}', () => {
+  it('boolean attribute uses JSX shorthand', () => {
     const result = compilePugToTsx('Button(disabled)');
     expect(result.tsx).toContain('disabled');
-    expect(result.tsx).toContain('{true}');
+    expect(result.tsx).not.toContain('{true}');
+  });
+
+  it('boolean attribute uses JSX shorthand in runtime mode too', () => {
+    const result = compilePugToTsx('Button(disabled)', { mode: 'runtime' });
+    expect(result.tsx).toContain('disabled');
+    expect(result.tsx).not.toContain('{true}');
   });
 
   it('string attribute: label="Hello" -> label={"Hello"}', () => {

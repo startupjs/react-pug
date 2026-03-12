@@ -84,7 +84,14 @@ describe('compilePugToTsx - attributes', () => {
 
   it('compiles boolean attribute', () => {
     const result = compilePugToTsx('input(disabled)');
-    expect(result.tsx).toContain('disabled={true}');
+    expect(result.tsx).toContain('disabled');
+    expect(result.tsx).not.toContain('disabled={true}');
+  });
+
+  it('compiles boolean attribute with JSX shorthand in runtime mode too', () => {
+    const result = compilePugToTsx('input(disabled)', { mode: 'runtime' });
+    expect(result.tsx).toContain('disabled');
+    expect(result.tsx).not.toContain('disabled={true}');
   });
 
   it('compiles spread attribute', () => {
