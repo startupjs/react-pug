@@ -8,5 +8,8 @@
   "scripts": {
     "build": "rm -rf dist && node ../../esbuild.config.mjs plugin",
     "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@react-pug/react-pug-core": "^0.1.1"
   }
 }

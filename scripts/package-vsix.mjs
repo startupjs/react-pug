@@ -19,6 +19,9 @@ if (!existsSync(extensionDistFile) || !existsSync(pluginDistFile)) {
 const extensionPkg = JSON.parse(
   readFileSync(resolve(extensionSrcDir, 'package.json'), 'utf8'),
 );
+const pluginPkg = JSON.parse(
+  readFileSync(resolve(pluginSrcDir, 'package.json'), 'utf8'),
+);
 const tempRoot = resolve(repoRoot, '.tmp/vsix');
 const vsixVersionedOut = resolve(
   tempRoot,
@@ -39,6 +42,12 @@ mkdirSync(resolve(tempPluginDir, 'dist'), { recursive: true });
 const stagedExtensionPkg = {
   ...extensionPkg,
   scripts: {},
+};
+
+const stagedPluginPkg = {
+  name: pluginPkg.name,
+  version: pluginPkg.version,
+  main: pluginPkg.main,
 };
 
 mkdirSync(tempExtDir, { recursive: true });
@@ -62,9 +71,9 @@ copyFileSync(
   resolve(extensionSrcDir, 'syntaxes/pug-template-literal.json'),
   resolve(tempExtDir, 'syntaxes/pug-template-literal.json'),
 );
-copyFileSync(
-  resolve(pluginSrcDir, 'package.json'),
+writeFileSync(
   resolve(tempPluginDir, 'package.json'),
+  `${JSON.stringify(stagedPluginPkg, null, 2)}\n`,
 );
 copyFileSync(
   resolve(pluginSrcDir, 'dist/plugin.js'),

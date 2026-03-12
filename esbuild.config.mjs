@@ -35,6 +35,9 @@ const shared = {
   sourcemap: production ? false : true,
   sourcesContent: false,
   external: ['vscode'],
+  alias: {
+    '@react-pug/react-pug-core': resolve(scriptDir, 'packages/react-pug-core/src/index.ts'),
+  },
   define: {
     'process.env.NODE_ENV': JSON.stringify(production ? 'production' : 'development'),
   },

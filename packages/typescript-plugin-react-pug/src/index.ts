@@ -1,7 +1,11 @@
 import type ts from 'typescript';
-import type { PugDocument } from '../../react-pug-core/src/language/mapping';
-import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDocument';
-import { findRegionAtOriginalOffset, originalToShadow, shadowToOriginal } from '../../react-pug-core/src/language/positionMapping';
+import {
+  type PugDocument,
+  buildShadowDocument,
+  findRegionAtOriginalOffset,
+  originalToShadow,
+  shadowToOriginal,
+} from '@react-pug/react-pug-core';
 
 const EXTRA_REACT_ATTRIBUTES_MARKER = '/* [pug-react] startupjs/cssxjs extra react attributes */';
 const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
