@@ -161,6 +161,27 @@ describe('real project fixtures compiler snapshots', () => {
         .toMatchFileSnapshot(snapshotPath('babel', fileName, 'output.sourcemap.json'));
       expect(countMappingsInsidePugRegions(babelResult?.map, source, runtimeTransform)).toBeGreaterThan(0);
 
+      const babelBasicResult = babelTransformSync(source, {
+        filename: relativeFixture,
+        sourceFileName: relativeFixture,
+        configFile: false,
+        babelrc: false,
+        sourceMaps: true,
+        parserOpts: {
+          sourceType: 'module',
+          plugins: ['jsx'],
+        },
+        generatorOpts: {
+          compact: false,
+          comments: false,
+        },
+        plugins: [[babelPluginReactPug, { mode: 'runtime', sourceMaps: 'basic' }]],
+      });
+      expect(babelBasicResult?.code).toBeTruthy();
+      await expect(babelBasicResult?.code ?? '').toMatchFileSnapshot(snapshotPath('babel-basic', fileName, 'output.jsx'));
+      await expect(JSON.stringify(normalizeMapSources(babelBasicResult?.map), null, 2))
+        .toMatchFileSnapshot(snapshotPath('babel-basic', fileName, 'output.sourcemap.json'));
+
       const swcPreTransform = transformReactPugSourceForSwc(source, relativeFixture);
       expect(swcPreTransform.code).toBe(runtimeTransform.code);
       await expect(swcPreTransform.code).toMatchFileSnapshot(snapshotPath('swc', fileName, 'output.jsx'));

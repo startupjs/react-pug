@@ -441,6 +441,116 @@ describe('babel-plugin-react-pug transform', () => {
     expect(out).toContain('World');
   });
 
+  it('keeps style helper hoists in basic mode', () => {
+    const out = transform([
+      'import { pug, styl } from "startupjs";',
+      'const view = pug`',
+      '  .item',
+      '    span Hello',
+      "  style(lang='styl')",
+      '    .item',
+      '      color red',
+      '`;',
+    ].join('\n'), { sourceMaps: 'basic' }, 'style-basic-fixture.jsx');
+    expect(out).toMatchInlineSnapshot(`
+      "import { styl } from "startupjs";
+      styl\`
+        .item
+          color red
+      \`;
+      const view = <div styleName={["item"]}><span>Hello</span></div>;"
+    `);
+  });
+
+  it('adds only one extra helper import when multiple pug templates use the same style helper in basic mode', () => {
+    const out = transform([
+      'import { pug } from "startupjs";',
+      'const first = pug`',
+      '  .one',
+      '    span One',
+      "  style(lang='styl')",
+      '    .one',
+      '      color red',
+      '`;',
+      'const second = pug`',
+      '  .two',
+      '    span Two',
+      "  style(lang='styl')",
+      '    .two',
+      '      color blue',
+      '`;',
+    ].join('\n'), { sourceMaps: 'basic' }, 'style-basic-multi-shared-helper.jsx');
+    expect(out).toMatchInlineSnapshot(`
+      "import { styl } from "startupjs";
+      styl\`
+        .one
+          color red
+      \`;
+      styl\`
+        .two
+          color blue
+      \`;
+      const first = <div styleName={["one"]}><span>One</span></div>;
+      const second = <div styleName={["two"]}><span>Two</span></div>;"
+    `);
+  });
+
+  it('adds both css and styl imports when basic mode needs both helpers', () => {
+    const out = transform([
+      'import { pug } from "startupjs";',
+      'const first = pug`',
+      '  .one',
+      '    span One',
+      '  style',
+      '    .one {',
+      '      color: red;',
+      '    }',
+      '`;',
+      'const second = pug`',
+      '  .two',
+      '    span Two',
+      "  style(lang='styl')",
+      '    .two',
+      '      color blue',
+      '`;',
+    ].join('\n'), { sourceMaps: 'basic' }, 'style-basic-multi-helper-types.jsx');
+    expect(out).toMatchInlineSnapshot(`
+      "import { css, styl } from "startupjs";
+      css\`
+        .one {
+          color: red;
+        }
+      \`;
+      styl\`
+        .two
+          color blue
+      \`;
+      const first = <div styleName={["one"]}><span>One</span></div>;
+      const second = <div styleName={["two"]}><span>Two</span></div>;"
+    `);
+  });
+
+  it('does not add a helper import that is already explicitly imported in basic mode', () => {
+    const out = transform([
+      'import { pug, styl } from "startupjs";',
+      'const view = pug`',
+      '  .item',
+      '    span Hello',
+      "  style(lang='styl')",
+      '    .item',
+      '      color red',
+      '`;',
+    ].join('\n'), { sourceMaps: 'basic' }, 'style-basic-existing-helper-import.jsx');
+    expect(out).toMatchInlineSnapshot(`
+      "import { styl } from "startupjs";
+      styl\`
+        .item
+          color red
+      \`;
+      const view = <div styleName={["item"]}><span>Hello</span></div>;"
+    `);
+  });
+
   it('transforms multiple pug templates in one file', () => {
     const out = transform([
       'const a = pug`span One`;',
