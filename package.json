@@ -11,6 +11,7 @@
     "build:plugin": "node esbuild.config.mjs plugin",
     "package": "npm run check-types && npm run clean:dist && node esbuild.config.mjs --production",
     "package:vsix": "npm run package && node scripts/package-vsix.mjs",
+    "install:vsix": "npm run package:vsix && code --install-extension .tmp/vsix/vscode-react-pug-tsx.vsix",
     "publish-alpha-patch": "npx lerna publish prerelease --preid alpha --dist-tag alpha",
     "publish-breaking-minor": "npx lerna publish minor",
     "publish-patch": "npx lerna publish patch",

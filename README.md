@@ -14,10 +14,17 @@ For now, clone the monorepo and run the following commands from the repository r
 ```bash
 npm ci
 npm run package:vsix
-code --install-extension packages/vscode-react-pug-tsx/*.vsix
+code --install-extension .tmp/vsix/vscode-react-pug-tsx.vsix
 ```
 
-This builds the VSIX from the monorepo and installs it locally into VS Code.
+Or, to build and install in one step:
+
+```bash
+npm ci
+npm run install:vsix
+```
+
+This builds the VSIX from the monorepo into `.tmp/vsix/`, keeps a stable install path at `.tmp/vsix/vscode-react-pug-tsx.vsix`, and installs it locally into VS Code.
 
 For embedded editor support inside `style(...)` blocks:
 

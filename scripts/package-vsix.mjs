@@ -19,12 +19,12 @@ if (!existsSync(extensionDistFile) || !existsSync(pluginDistFile)) {
 const extensionPkg = JSON.parse(
   readFileSync(resolve(extensionSrcDir, 'package.json'), 'utf8'),
 );
-const vsixOut = resolve(
-  extensionSrcDir,
+const tempRoot = resolve(repoRoot, '.tmp/vsix');
+const vsixVersionedOut = resolve(
+  tempRoot,
   `${extensionPkg.name}-${extensionPkg.version}.vsix`,
 );
-
-const tempRoot = resolve(repoRoot, '.tmp/vsix');
+const vsixStableOut = resolve(tempRoot, `${extensionPkg.name}.vsix`);
 const tempExtDir = resolve(tempRoot, 'vscode-react-pug-tsx');
 const tempPluginDir = resolve(
   tempExtDir,
@@ -73,7 +73,7 @@ copyFileSync(
 
 const result = spawnSync(
   'npx',
-  ['@vscode/vsce', 'package', '--allow-missing-repository', '--out', vsixOut],
+  ['@vscode/vsce', 'package', '--allow-missing-repository', '--out', vsixVersionedOut],
   { cwd: tempExtDir, stdio: 'inherit' },
 );
 
@@ -81,4 +81,7 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
-console.log(`VSIX created at ${vsixOut}`);
+copyFileSync(vsixVersionedOut, vsixStableOut);
+
+console.log(`VSIX created at ${vsixVersionedOut}`);
+console.log(`Stable VSIX path: ${vsixStableOut}`);
