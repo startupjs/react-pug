@@ -3,7 +3,7 @@
   "private": true,
   "displayName": "Pug React IntelliSense",
   "description": "JSX-grade IntelliSense for pug`` tagged template literals in React projects",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "startupjs",
   "license": "MIT",
   "engines": {
@@ -143,7 +143,7 @@
     ]
   },
   "dependencies": {
-    "@react-pug/typescript-plugin-react-pug": "^0.1.2"
+    "@react-pug/typescript-plugin-react-pug": "^0.1.3"
   },
   "publishConfig": {
     "access": "public"
