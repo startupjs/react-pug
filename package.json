@@ -12,6 +12,8 @@
     "package": "npm run check-types && npm run clean:dist && node esbuild.config.mjs --production",
     "package:vsix": "npm run package && node scripts/package-vsix.mjs",
     "publish-alpha-patch": "npx lerna publish prerelease --preid alpha --dist-tag alpha",
+    "publish-breaking-minor": "npx lerna publish minor",
+    "publish-patch": "npx lerna publish patch",
     "watch": "node esbuild.config.mjs --watch",
     "test:core": "vitest run packages/react-pug-core/test",
     "test:ts-plugin": "vitest run packages/typescript-plugin-react-pug/test",
