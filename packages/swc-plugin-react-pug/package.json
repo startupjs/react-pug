@@ -1,6 +1,6 @@
 {
   "name": "@react-pug/swc-plugin-react-pug",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "publishConfig": {
@@ -11,7 +11,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@react-pug/react-pug-core": "^0.1.1"
+    "@react-pug/react-pug-core": "^0.1.2"
   },
   "peerDependencies": {
     "@swc/core": "^1.0.0"

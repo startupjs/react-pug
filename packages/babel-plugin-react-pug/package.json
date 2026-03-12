@@ -1,6 +1,6 @@
 {
   "name": "@react-pug/babel-plugin-react-pug",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "publishConfig": {
@@ -13,7 +13,7 @@
   "dependencies": {
     "@babel/parser": "^7.0.0",
     "@babel/types": "^7.0.0",
-    "@react-pug/react-pug-core": "^0.1.1"
+    "@react-pug/react-pug-core": "^0.1.2"
   },
   "peerDependencies": {
     "@babel/core": "^7.0.0"
