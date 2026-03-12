@@ -152,6 +152,275 @@ describe('babel-plugin-react-pug transform', () => {
     expect(out).toContain('value');
   });
 
+  it('supports unbuffered code followed by a single if/else-if chain', () => {
+    const out = transform([
+      'const item = { type: "page", value: 1 };',
+      'const view = pug`',
+      '  React.Fragment',
+      '    - const { type, value } = item',
+      "    if type === 'page'",
+      '      span= value',
+      "    else if type === 'status'",
+      '      span Status',
+      '    else',
+      '      span Other',
+      '`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const item = {
+        type: "page",
+        value: 1
+      };
+      const view = <React.Fragment>{(() => {
+          const {
+            type,
+            value
+          } = item;
+          return type === 'page' ? <span>{value}</span> : type === 'status' ? <span>Status</span> : <span>Other</span>;
+        })()}</React.Fragment>;"
+    `);
+  });
+
+  it('supports unbuffered code followed by a single each loop', () => {
+    const out = transform([
+      'const values = ["a", "b"];',
+      'const view = pug`',
+      '  React.Fragment',
+      '    - const items = values',
+      '    each item, index in items',
+      '      span(key=index)= item',
+      '`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const values = ["a", "b"];
+      const view = <React.Fragment>{(() => {
+          const items = values;
+          return (() => {
+            const __pugEachResult = [];
+            let __pugEachIndex = 0;
+            for (const item of items) {
+              const index = __pugEachIndex;
+              __pugEachResult.push(<span key={index}>{item}</span>);
+              __pugEachIndex++;
+            }
+            return __pugEachResult;
+          })();
+        })()}</React.Fragment>;"
+    `);
+  });
+
+  it('supports unbuffered code followed by a single each loop with else', () => {
+    const out = transform([
+      'const values = [];',
+      'const view = pug`',
+      '  React.Fragment',
+      '    - const items = values',
+      '    each item, index in items',
+      '      span(key=index)= item',
+      '    else',
+      '      span Empty',
+      '`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const values = [];
+      const view = <React.Fragment>{(() => {
+          const items = values;
+          return (() => {
+            const __pugEachResult = [];
+            let __pugEachIndex = 0;
+            for (const item of items) {
+              const index = __pugEachIndex;
+              __pugEachResult.push(<span key={index}>{item}</span>);
+              __pugEachIndex++;
+            }
+            return __pugEachResult.length ? __pugEachResult : <span>Empty</span>;
+          })();
+        })()}</React.Fragment>;"
+    `);
+  });
+
+  it('supports unbuffered code followed by a single while loop', () => {
+    const out = transform([
+      'const view = pug`',
+      '  React.Fragment',
+      '    - let index = 0',
+      '    while index < 2',
+      '      - index++',
+      '      span= index',
+      '`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const view = <React.Fragment>{(() => {
+          let index = 0;
+          return (() => {
+            const __r = [];
+            while (index < 2) {
+              __r.push((() => {
+                index++;
+                return <span>{index}</span>;
+              })());
+            }
+            return __r;
+          })();
+        })()}</React.Fragment>;"
+    `);
+  });
+
+  it('supports unbuffered code followed by a single case chain', () => {
+    const out = transform([
+      'const inputKind = "page";',
+      'const view = pug`',
+      '  React.Fragment',
+      '    - const kind = inputKind',
+      '    case kind',
+      "      when 'page'",
+      '        span Page',
+      "      when 'status'",
+      '        span Status',
+      '      default',
+      '        span Other',
+      '`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const inputKind = "page";
+      const view = <React.Fragment>{(() => {
+          const kind = inputKind;
+          return kind === 'page' ? <span>Page</span> : kind === 'status' ? <span>Status</span> : <span>Other</span>;
+        })()}</React.Fragment>;"
+    `);
+  });
+
+  it('supports sibling JSX around a conditional chain after unbuffered code', () => {
+    const out = transform([
+      'const item = { type: "page", value: 1 };',
+      'const view = pug`',
+      '  React.Fragment',
+      '    - const { type, value } = item',
+      '    span Before',
+      "    if type === 'page'",
+      '      span= value',
+      '    else',
+      '      span Other',
+      '    span After',
+      '`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const item = {
+        type: "page",
+        value: 1
+      };
+      const view = <React.Fragment>{(() => {
+          const {
+            type,
+            value
+          } = item;
+          return <><span>Before</span>{type === 'page' ? <span>{value}</span> : <span>Other</span>}<span>After</span></>;
+        })()}</React.Fragment>;"
+    `);
+  });
+
+  it('supports sibling JSX around an each loop after unbuffered code', () => {
+    const out = transform([
+      'const values = ["a", "b"];',
+      'const view = pug`',
+      '  React.Fragment',
+      '    - const items = values',
+      '    span Before',
+      '    each item, index in items',
+      '      span(key=index)= item',
+      '    span After',
+      '`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const values = ["a", "b"];
+      const view = <React.Fragment>{(() => {
+          const items = values;
+          return <><span>Before</span>{(() => {
+              const __pugEachResult = [];
+              let __pugEachIndex = 0;
+              for (const item of items) {
+                const index = __pugEachIndex;
+                __pugEachResult.push(<span key={index}>{item}</span>);
+                __pugEachIndex++;
+              }
+              return __pugEachResult;
+            })()}<span>After</span></>;
+        })()}</React.Fragment>;"
+    `);
+  });
+
+  it('supports nested each inside a conditional chain after unbuffered code', () => {
+    const out = transform([
+      'const values = ["a", "b"];',
+      'const visible = true;',
+      'const view = pug`',
+      '  React.Fragment',
+      '    - const items = values',
+      '    - const show = visible',
+      '    if show',
+      '      each item, index in items',
+      '        span(key=index)= item',
+      '    else',
+      '      span Hidden',
+      '`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const values = ["a", "b"];
+      const visible = true;
+      const view = <React.Fragment>{(() => {
+          const items = values;
+          const show = visible;
+          return show ? (() => {
+            const __pugEachResult = [];
+            let __pugEachIndex = 0;
+            for (const item of items) {
+              const index = __pugEachIndex;
+              __pugEachResult.push(<span key={index}>{item}</span>);
+              __pugEachIndex++;
+            }
+            return __pugEachResult;
+          })() : <span>Hidden</span>;
+        })()}</React.Fragment>;"
+    `);
+  });
+
+  it('supports nested conditionals inside an each loop after unbuffered code', () => {
+    const out = transform([
+      'const values = [{ visible: true, label: "A" }, { visible: false, label: "B" }];',
+      'const view = pug`',
+      '  React.Fragment',
+      '    - const items = values',
+      '    each item, index in items',
+      '      if item.visible',
+      '        span(key=index)= item.label',
+      '      else',
+      '        span(key=index) Hidden',
+      '`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const values = [{
+        visible: true,
+        label: "A"
+      }, {
+        visible: false,
+        label: "B"
+      }];
+      const view = <React.Fragment>{(() => {
+          const items = values;
+          return (() => {
+            const __pugEachResult = [];
+            let __pugEachIndex = 0;
+            for (const item of items) {
+              const index = __pugEachIndex;
+              __pugEachResult.push(item.visible ? <span key={index}>{item.label}</span> : <span key={index}>Hidden</span>);
+              __pugEachIndex++;
+            }
+            return __pugEachResult;
+          })();
+        })()}</React.Fragment>;"
+    `);
+  });
+
   it('supports nested pug templates inside ${} interpolation', () => {
     const out = transform(COMPILER_NESTED_INTERPOLATION_SOURCE);
     expect(out).toMatchInlineSnapshot(`

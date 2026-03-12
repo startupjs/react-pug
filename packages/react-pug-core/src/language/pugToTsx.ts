@@ -1398,7 +1398,11 @@ function emitBlockWithCodeSupport(
     if (jsxNodes.length === 0) {
       emitter.emitSynthetic('null');
     } else if (jsxNodes.length === 1) {
-      emitNode(jsxNodes[0], emitter, pugText);
+      // This branch is still in a JS-expression position (`return (...)`), not a JSX-children
+      // position. Expression-producing nodes such as if/each/while/case must therefore be
+      // emitted via the expression path, otherwise wrappers like `return ({cond ? ...})`
+      // can become syntactically invalid.
+      emitNodeAsExpression(jsxNodes[0], emitter, pugText);
     } else {
       emitter.emitSynthetic('<>');
       for (const node of jsxNodes) {

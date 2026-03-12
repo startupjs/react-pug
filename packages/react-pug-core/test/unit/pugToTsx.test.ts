@@ -1063,6 +1063,163 @@ describe('code blocks', () => {
     expect(result.parseError).toBeNull();
   });
 
+  it('keeps a single conditional chain valid when mixed with unbuffered code', () => {
+    const pug = [
+      'React.Fragment',
+      '  - const { type, value } = item',
+      "  if type === 'page'",
+      '    span= value',
+      "  else if type === 'status'",
+      '    span Status',
+      '  else',
+      '    span Other',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {const { type, value } = item;return (type === 'page' ? <span>{value}</span> : type === 'status' ? <span>Status</span> : <span>Other</span>);})()}</React.Fragment>)"`);
+  });
+
+  it('keeps a single each loop valid when mixed with unbuffered code', () => {
+    const pug = [
+      'React.Fragment',
+      '  - const items = values',
+      '  each item, index in items',
+      '    span(key=index)= item',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {const items = values;return ((() => {const __pugEachResult = [];let __pugEachIndex = 0;for (const item of items) {const index = __pugEachIndex;__pugEachResult.push(<span key={index}>{item}</span>);__pugEachIndex++;}return __pugEachResult;})());})()}</React.Fragment>)"`);
+  });
+
+  it('keeps a single each loop with else valid when mixed with unbuffered code', () => {
+    const pug = [
+      'React.Fragment',
+      '  - const items = values',
+      '  each item, index in items',
+      '    span(key=index)= item',
+      '  else',
+      '    span Empty',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {const items = values;return ((() => {const __pugEachResult = [];let __pugEachIndex = 0;for (const item of items) {const index = __pugEachIndex;__pugEachResult.push(<span key={index}>{item}</span>);__pugEachIndex++;}return __pugEachResult.length ? __pugEachResult : <span>Empty</span>;})());})()}</React.Fragment>)"`);
+  });
+
+  it('keeps a single while loop valid when mixed with unbuffered code', () => {
+    const pug = [
+      'React.Fragment',
+      '  - let index = 0',
+      '  while index < 2',
+      '    - index++',
+      '    span= index',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {let index = 0;return ((() => {const __r = [];while (index < 2) {__r.push((() => {index++;return <span>{index}</span>;})());}return __r;})());})()}</React.Fragment>)"`);
+  });
+
+  it('keeps a single case chain valid when mixed with unbuffered code', () => {
+    const pug = [
+      'React.Fragment',
+      '  - const kind = inputKind',
+      '  case kind',
+      "    when 'page'",
+      '      span Page',
+      "    when 'status'",
+      '      span Status',
+      '    default',
+      '      span Other',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {const kind = inputKind;return (kind === 'page' ? <span>Page</span> : kind === 'status' ? <span>Status</span> : <span>Other</span>);})()}</React.Fragment>)"`);
+  });
+
+  it('keeps sibling JSX around a conditional chain valid when mixed with unbuffered code', () => {
+    const pug = [
+      'React.Fragment',
+      '  - const { type, value } = item',
+      '  span Before',
+      "  if type === 'page'",
+      '    span= value',
+      '  else',
+      '    span Other',
+      '  span After',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {const { type, value } = item;return (<><span>Before</span>{type === 'page' ? <span>{value}</span> : <span>Other</span>}<span>After</span></>);})()}</React.Fragment>)"`);
+  });
+
+  it('keeps sibling JSX around an each loop valid when mixed with unbuffered code', () => {
+    const pug = [
+      'React.Fragment',
+      '  - const items = values',
+      '  span Before',
+      '  each item, index in items',
+      '    span(key=index)= item',
+      '  span After',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {const items = values;return (<><span>Before</span>{(() => {const __pugEachResult = [];let __pugEachIndex = 0;for (const item of items) {const index = __pugEachIndex;__pugEachResult.push(<span key={index}>{item}</span>);__pugEachIndex++;}return __pugEachResult;})()}<span>After</span></>);})()}</React.Fragment>)"`);
+  });
+
+  it('keeps nested each inside a conditional chain valid when mixed with unbuffered code', () => {
+    const pug = [
+      'React.Fragment',
+      '  - const items = values',
+      '  - const show = visible',
+      '  if show',
+      '    each item, index in items',
+      '      span(key=index)= item',
+      '  else',
+      '    span Hidden',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {const items = values;const show = visible;return (show ? (() => {const __pugEachResult = [];let __pugEachIndex = 0;for (const item of items) {const index = __pugEachIndex;__pugEachResult.push(<span key={index}>{item}</span>);__pugEachIndex++;}return __pugEachResult;})() : <span>Hidden</span>);})()}</React.Fragment>)"`);
+  });
+
+  it('keeps nested conditional inside each valid when mixed with unbuffered code', () => {
+    const pug = [
+      'React.Fragment',
+      '  - const items = values',
+      '  each item, index in items',
+      '    if item.visible',
+      '      span(key=index)= item.label',
+      '    else',
+      '      span(key=index) Hidden',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {const items = values;return ((() => {const __pugEachResult = [];let __pugEachIndex = 0;for (const item of items) {const index = __pugEachIndex;__pugEachResult.push(item.visible ? <span key={index}>{item.label}</span> : <span key={index}>Hidden</span>);__pugEachIndex++;}return __pugEachResult;})());})()}</React.Fragment>)"`);
+  });
+
+  it('keeps the single-child conditional shape valid in language-service mode too', () => {
+    const pug = [
+      'React.Fragment',
+      '  - const { type, value } = item',
+      "  if type === 'page'",
+      '    span= value',
+      '  else',
+      '    span Other',
+    ].join('\n');
+    const result = compilePugToTsx(pug, { mode: 'shadow' });
+    expect(result.parseError).toBeNull();
+    expect(result.transformError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<React.Fragment>{(() => {const { type, value } = item;return (type === 'page' ? <span>{value}</span> : <span>Other</span>);})()}</React.Fragment>)"`);
+  });
+
   it('code block expression is mapped with FULL_FEATURES', () => {
     const pug = '- const x = 10\nspan= x';
     const result = compilePugToTsx(pug);
