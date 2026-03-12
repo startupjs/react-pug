@@ -126,12 +126,12 @@ They piggyback on parsing or transform passes that already exist.
 
 Published runtime/build packages:
 
-- `@startupjs/babel-plugin-react-pug`
-- `@startupjs/swc-plugin-react-pug`
-- `@startupjs/esbuild-plugin-react-pug`
-- `@startupjs/eslint-plugin-react-pug`
+- `@react-pug/babel-plugin-react-pug`
+- `@react-pug/swc-plugin-react-pug`
+- `@react-pug/esbuild-plugin-react-pug`
+- `@react-pug/eslint-plugin-react-pug`
 
-All of them reuse `@startupjs/react-pug-core`.
+All of them reuse `@react-pug/react-pug-core`.
 
 ### Common Shared Costs
 

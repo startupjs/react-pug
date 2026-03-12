@@ -39,7 +39,7 @@ Top-level orchestration files:
 
 ## 3. Package Responsibilities
 
-### 3.1 `@startupjs/react-pug-core`
+### 3.1 `@react-pug/react-pug-core`
 
 Shared language/compiler core:
 
@@ -59,7 +59,7 @@ Core entry points used across packages:
 - `mapGeneratedRangeToOriginal(...)`
 - `mapGeneratedDiagnosticToOriginal(...)`
 
-### 3.2 `@startupjs/typescript-plugin-react-pug`
+### 3.2 `@react-pug/typescript-plugin-react-pug`
 
 TypeScript language-service plugin:
 
@@ -77,7 +77,7 @@ VS Code extension host package:
 - contributes `pugReact.*` settings
 - provides `Pug React: Show Shadow TSX` command for debugging
 
-### 3.4 `@startupjs/babel-plugin-react-pug`
+### 3.4 `@react-pug/babel-plugin-react-pug`
 
 Babel transform adapter:
 
@@ -87,7 +87,7 @@ Babel transform adapter:
 - `detailed` mode uses `parserOverride` plus an inline input source map so later Babel transforms can compose mappings back to original Pug offsets
 - stores transform metadata on Babel file for downstream remapping
 
-### 3.5 `@startupjs/swc-plugin-react-pug`
+### 3.5 `@react-pug/swc-plugin-react-pug`
 
 SWC adapter utilities:
 
@@ -95,7 +95,7 @@ SWC adapter utilities:
 - optional convenience wrapper around `@swc/core.transformSync`
 - generated->original mapping helpers
 
-### 3.6 `@startupjs/esbuild-plugin-react-pug`
+### 3.6 `@react-pug/esbuild-plugin-react-pug`
 
 esbuild plugin:
 
@@ -104,7 +104,7 @@ esbuild plugin:
 - loader inference by extension
 - diagnostic/range remapping helpers using esbuild-style line/column inputs
 
-### 3.7 `@startupjs/eslint-plugin-react-pug`
+### 3.7 `@react-pug/eslint-plugin-react-pug`
 
 ESLint processor:
 

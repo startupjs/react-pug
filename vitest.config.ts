@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
-      '@startupjs/react-pug-core': resolve(__dirname, 'packages/react-pug-core/src/index.ts'),
+      '@react-pug/react-pug-core': resolve(__dirname, 'packages/react-pug-core/src/index.ts'),
     },
   },
   test: {

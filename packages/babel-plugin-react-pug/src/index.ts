@@ -14,7 +14,7 @@ import {
   type PugDocument,
   type PugRegion,
   type TransformSourceMap,
-} from '@startupjs/react-pug-core';
+} from '@react-pug/react-pug-core';
 
 export type BabelPugCompileMode = 'runtime' | 'languageService';
 export type BabelPugSourceMapMode = 'basic' | 'detailed';

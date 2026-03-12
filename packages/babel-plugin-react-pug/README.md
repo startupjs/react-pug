@@ -1,11 +1,11 @@
-# @startupjs/babel-plugin-react-pug
+# @react-pug/babel-plugin-react-pug
 
 Babel plugin for transforming `pug\`...\`` tagged template literals in React code.
 
 ## Install
 
 ```bash
-npm i -D @startupjs/babel-plugin-react-pug
+npm i -D @react-pug/babel-plugin-react-pug
 ```
 
 ## Usage
@@ -13,7 +13,7 @@ npm i -D @startupjs/babel-plugin-react-pug
 ```js
 module.exports = {
   plugins: [
-    ['@startupjs/babel-plugin-react-pug', {
+    ['@react-pug/babel-plugin-react-pug', {
       tagFunction: 'pug',
       sourceMaps: 'detailed',
       requirePugImport: false,

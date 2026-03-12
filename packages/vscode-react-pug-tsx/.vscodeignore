@@ -4,5 +4,5 @@
 !package.json
 !LICENSE.md
 !.vscodeignore
-!node_modules/@startupjs/typescript-plugin-react-pug/package.json
-!node_modules/@startupjs/typescript-plugin-react-pug/dist/**
+!node_modules/@react-pug/typescript-plugin-react-pug/package.json
+!node_modules/@react-pug/typescript-plugin-react-pug/dist/**

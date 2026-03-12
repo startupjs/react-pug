@@ -1,5 +1,5 @@
 {
-  "name": "@startupjs/eslint-plugin-react-pug",
+  "name": "@react-pug/eslint-plugin-react-pug",
   "version": "0.0.1",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -7,11 +7,11 @@
     "access": "public"
   },
   "scripts": {
-    "build": "npm --prefix ../.. run build -w @startupjs/react-pug-core && rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "npm --prefix ../.. run build -w @react-pug/react-pug-core && rm -rf dist && tsc -p tsconfig.build.json",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@startupjs/react-pug-core": "^0.0.1"
+    "@react-pug/react-pug-core": "^0.0.1"
   },
   "peerDependencies": {
     "eslint": "^9.0.0"

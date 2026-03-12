@@ -1,5 +1,5 @@
 {
-  "name": "@startupjs/babel-plugin-react-pug",
+  "name": "@react-pug/babel-plugin-react-pug",
   "version": "0.0.1",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -7,13 +7,13 @@
     "access": "public"
   },
   "scripts": {
-    "build": "npm --prefix ../.. run build -w @startupjs/react-pug-core && rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "npm --prefix ../.. run build -w @react-pug/react-pug-core && rm -rf dist && tsc -p tsconfig.build.json",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@babel/parser": "^7.0.0",
     "@babel/types": "^7.0.0",
-    "@startupjs/react-pug-core": "^0.0.1"
+    "@react-pug/react-pug-core": "^0.0.1"
   },
   "peerDependencies": {
     "@babel/core": "^7.0.0"

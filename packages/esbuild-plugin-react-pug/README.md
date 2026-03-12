@@ -1,18 +1,18 @@
-# @startupjs/esbuild-plugin-react-pug
+# @react-pug/esbuild-plugin-react-pug
 
 esbuild plugin for transforming `pug\`...\`` tagged template literals in React code.
 
 ## Install
 
 ```bash
-npm i -D @startupjs/esbuild-plugin-react-pug esbuild
+npm i -D @react-pug/esbuild-plugin-react-pug esbuild
 ```
 
 ## Usage
 
 ```ts
 import { build } from 'esbuild'
-import { reactPugEsbuildPlugin } from '@startupjs/esbuild-plugin-react-pug'
+import { reactPugEsbuildPlugin } from '@react-pug/esbuild-plugin-react-pug'
 
 await build({
   entryPoints: ['src/index.tsx'],

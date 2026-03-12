@@ -11,7 +11,7 @@ import {
   type PugDocument,
   type PugRegion,
   type StartupjsCssxjsOption,
-} from '@startupjs/react-pug-core';
+} from '@react-pug/react-pug-core';
 import { transformSync, type Options as SwcOptions } from '@swc/core';
 
 export type SwcPugCompileMode = 'runtime' | 'languageService';

@@ -1,19 +1,19 @@
-# @startupjs/react-pug-core
+# @react-pug/react-pug-core
 
 Shared transformation and mapping engine for the `react-pug` toolchain.
 
 This package is the low-level core used by:
 
-- `@startupjs/typescript-plugin-react-pug`
-- `@startupjs/babel-plugin-react-pug`
-- `@startupjs/swc-plugin-react-pug`
-- `@startupjs/esbuild-plugin-react-pug`
-- `@startupjs/eslint-plugin-react-pug`
+- `@react-pug/typescript-plugin-react-pug`
+- `@react-pug/babel-plugin-react-pug`
+- `@react-pug/swc-plugin-react-pug`
+- `@react-pug/esbuild-plugin-react-pug`
+- `@react-pug/eslint-plugin-react-pug`
 
 ## Install
 
 ```bash
-npm i @startupjs/react-pug-core
+npm i @react-pug/react-pug-core
 ```
 
 ## What It Provides

@@ -39,13 +39,13 @@ code --install-extension startupjs.vscode-react-pug-tsx
 
 Published package names:
 
-- `@startupjs/react-pug-core`
-- `@startupjs/typescript-plugin-react-pug`
+- `@react-pug/react-pug-core`
+- `@react-pug/typescript-plugin-react-pug`
 - `vscode-react-pug-tsx`
-- `@startupjs/babel-plugin-react-pug`
-- `@startupjs/swc-plugin-react-pug`
-- `@startupjs/esbuild-plugin-react-pug`
-- `@startupjs/eslint-plugin-react-pug`
+- `@react-pug/babel-plugin-react-pug`
+- `@react-pug/swc-plugin-react-pug`
+- `@react-pug/esbuild-plugin-react-pug`
+- `@react-pug/eslint-plugin-react-pug`
 
 ### Babel
 
@@ -53,7 +53,7 @@ Published package names:
 // babel.config.js
 module.exports = {
   plugins: [
-    ['@startupjs/babel-plugin-react-pug', {
+    ['@react-pug/babel-plugin-react-pug', {
       tagFunction: 'pug',
       sourceMaps: 'basic',
       requirePugImport: false,
@@ -74,7 +74,7 @@ Babel source map modes:
 ### SWC (programmatic)
 
 ```ts
-import { transformWithSwcReactPug } from '@startupjs/swc-plugin-react-pug'
+import { transformWithSwcReactPug } from '@react-pug/swc-plugin-react-pug'
 
 const result = transformWithSwcReactPug(sourceCode, fileName, {
   jsc: {
@@ -89,7 +89,7 @@ const result = transformWithSwcReactPug(sourceCode, fileName, {
 
 ```ts
 import { build } from 'esbuild'
-import { reactPugEsbuildPlugin } from '@startupjs/esbuild-plugin-react-pug'
+import { reactPugEsbuildPlugin } from '@react-pug/esbuild-plugin-react-pug'
 
 await build({
   entryPoints: ['src/index.tsx'],
@@ -103,7 +103,7 @@ await build({
 
 ```js
 // eslint.config.js (flat config)
-import reactPugPlugin from '@startupjs/eslint-plugin-react-pug'
+import reactPugPlugin from '@react-pug/eslint-plugin-react-pug'
 
 export default [
   {
@@ -170,7 +170,7 @@ node scripts/check-pug-types.mjs <project-dir>
 
 ## How It Works (High Level)
 
-1. `@startupjs/react-pug-core` finds tagged templates and compiles Pug regions.
+1. `@react-pug/react-pug-core` finds tagged templates and compiles Pug regions.
 2. For editor tooling, the TS plugin builds a shadow document and remaps LS results.
 3. For build/lint tooling, compiler adapters transform source and remap diagnostics to original Pug ranges.
 

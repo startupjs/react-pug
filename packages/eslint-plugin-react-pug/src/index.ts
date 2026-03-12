@@ -6,7 +6,7 @@ import {
   offsetToLineColumn,
   type StartupjsCssxjsOption,
   transformSourceFile,
-} from '@startupjs/react-pug-core';
+} from '@react-pug/react-pug-core';
 
 export interface EslintReactPugProcessorOptions {
   tagFunction?: string;

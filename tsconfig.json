@@ -6,7 +6,7 @@
     "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
-      "@startupjs/react-pug-core": [
+      "@react-pug/react-pug-core": [
         "packages/react-pug-core/src/index.ts"
       ]
     },

@@ -28,7 +28,7 @@ const tempRoot = resolve(repoRoot, '.tmp/vsix');
 const tempExtDir = resolve(tempRoot, 'vscode-react-pug-tsx');
 const tempPluginDir = resolve(
   tempExtDir,
-  'node_modules/@startupjs/typescript-plugin-react-pug',
+  'node_modules/@react-pug/typescript-plugin-react-pug',
 );
 
 rmSync(tempRoot, { recursive: true, force: true });

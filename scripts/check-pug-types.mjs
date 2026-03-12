@@ -73,7 +73,7 @@ function loadPlugin(projectDir) {
 
   for (const location of probeLocations) {
     try {
-      const resolved = require.resolve('@startupjs/typescript-plugin-react-pug', {
+      const resolved = require.resolve('@react-pug/typescript-plugin-react-pug', {
         paths: [location],
       });
       const mod = require(resolved);
@@ -98,7 +98,7 @@ function loadPlugin(projectDir) {
   }
 
   throw new Error(
-    `Cannot load @startupjs/typescript-plugin-react-pug. Ensure it is installed or built.\n${String(lastError)}`,
+    `Cannot load @react-pug/typescript-plugin-react-pug. Ensure it is installed or built.\n${String(lastError)}`,
   );
 }
 

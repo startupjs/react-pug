@@ -1,17 +1,17 @@
-# @startupjs/swc-plugin-react-pug
+# @react-pug/swc-plugin-react-pug
 
 Programmatic SWC helper for transforming `pug\`...\`` tagged template literals before passing code to SWC.
 
 ## Install
 
 ```bash
-npm i -D @startupjs/swc-plugin-react-pug @swc/core
+npm i -D @react-pug/swc-plugin-react-pug @swc/core
 ```
 
 ## Usage
 
 ```ts
-import { transformWithSwcReactPug } from '@startupjs/swc-plugin-react-pug'
+import { transformWithSwcReactPug } from '@react-pug/swc-plugin-react-pug'
 
 const result = transformWithSwcReactPug(sourceCode, fileName, {
   jsc: {

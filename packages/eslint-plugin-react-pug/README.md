@@ -1,17 +1,17 @@
-# @startupjs/eslint-plugin-react-pug
+# @react-pug/eslint-plugin-react-pug
 
 ESLint processor for linting files that contain `pug\`...\`` tagged template literals.
 
 ## Install
 
 ```bash
-npm i -D @startupjs/eslint-plugin-react-pug eslint
+npm i -D @react-pug/eslint-plugin-react-pug eslint
 ```
 
 ## Usage
 
 ```js
-import reactPugPlugin from '@startupjs/eslint-plugin-react-pug'
+import reactPugPlugin from '@react-pug/eslint-plugin-react-pug'
 
 export default [
   {

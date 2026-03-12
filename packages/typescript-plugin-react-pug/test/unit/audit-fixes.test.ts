@@ -371,16 +371,16 @@ describe('version incorporates host version (Finding 2)', () => {
 describe('plugin module resolvability (Finding 3)', () => {
   const root = resolve(__dirname, '../../../..');
   const extensionPkgPath = resolve(root, 'packages/vscode-react-pug-tsx/package.json');
-  const depPkgPath = resolve(root, 'node_modules/@startupjs/typescript-plugin-react-pug/package.json');
+  const depPkgPath = resolve(root, 'node_modules/@react-pug/typescript-plugin-react-pug/package.json');
   const distPluginPath = resolve(root, 'packages/typescript-plugin-react-pug/dist/plugin.js');
 
-  it('extension package declares @startupjs/typescript-plugin-react-pug dependency', () => {
+  it('extension package declares @react-pug/typescript-plugin-react-pug dependency', () => {
     const pkg = JSON.parse(readFileSync(extensionPkgPath, 'utf-8'));
-    expect(pkg.dependencies?.['@startupjs/typescript-plugin-react-pug'])
+    expect(pkg.dependencies?.['@react-pug/typescript-plugin-react-pug'])
       .toBe('^0.0.1');
   });
 
-  it('node_modules/@startupjs/typescript-plugin-react-pug/package.json exists', () => {
+  it('node_modules/@react-pug/typescript-plugin-react-pug/package.json exists', () => {
     expect(existsSync(depPkgPath)).toBe(true);
   });
 
@@ -390,24 +390,24 @@ describe('plugin module resolvability (Finding 3)', () => {
   });
 
   it('the resolved dist/plugin.js file actually exists', () => {
-    const depDir = resolve(root, 'node_modules/@startupjs/typescript-plugin-react-pug');
+    const depDir = resolve(root, 'node_modules/@react-pug/typescript-plugin-react-pug');
     const depPkg = JSON.parse(readFileSync(depPkgPath, 'utf-8'));
     const resolvedPath = resolve(depDir, depPkg.main);
     expect(existsSync(resolvedPath)).toBe(true);
   });
 
   it('resolved path matches packages/typescript-plugin-react-pug/dist/plugin.js', () => {
-    const depDir = resolve(root, 'node_modules/@startupjs/typescript-plugin-react-pug');
+    const depDir = resolve(root, 'node_modules/@react-pug/typescript-plugin-react-pug');
     const depPkg = JSON.parse(readFileSync(depPkgPath, 'utf-8'));
     const resolvedPath = resolve(depDir, depPkg.main);
     const fs = require('fs') as typeof import('fs');
     expect(fs.realpathSync(resolvedPath)).toBe(fs.realpathSync(distPluginPath));
   });
 
-  it('typescriptServerPlugins contribution uses @startupjs/typescript-plugin-react-pug', () => {
+  it('typescriptServerPlugins contribution uses @react-pug/typescript-plugin-react-pug', () => {
     const pkg = JSON.parse(readFileSync(extensionPkgPath, 'utf-8'));
     const tsPlugins = pkg.contributes?.typescriptServerPlugins ?? [];
-    expect(tsPlugins[0]?.name).toBe('@startupjs/typescript-plugin-react-pug');
+    expect(tsPlugins[0]?.name).toBe('@react-pug/typescript-plugin-react-pug');
   });
 });
 

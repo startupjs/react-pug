@@ -1,5 +1,5 @@
 {
-  "name": "@startupjs/typescript-plugin-react-pug",
+  "name": "@react-pug/typescript-plugin-react-pug",
   "main": "./dist/plugin.js",
   "version": "0.0.1",
   "publishConfig": {

@@ -1,5 +1,5 @@
 {
-  "name": "@startupjs/react-pug-core",
+  "name": "@react-pug/react-pug-core",
   "main": "./dist/index.js",
   "version": "0.0.1",
   "types": "./dist/index.d.ts",

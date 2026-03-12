@@ -6,7 +6,7 @@ import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDoc
 
 const SCHEME = 'pug-react-shadow';
 const STYLE_SCHEME = 'pug-react-style';
-const TS_PLUGIN_NAME = '@startupjs/typescript-plugin-react-pug';
+const TS_PLUGIN_NAME = '@react-pug/typescript-plugin-react-pug';
 const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
 const STYLE_COMPLETION_TRIGGER_CHARS = ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-:@.#&$'.split('');
 

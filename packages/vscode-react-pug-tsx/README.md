@@ -30,7 +30,7 @@ startupjs.vscode-react-pug-tsx
 - syntax highlighting for embedded Pug regions
 - embedded `style(lang='css' | 'scss' | 'styl' | 'sass')` blocks
 - shadow TSX view for debugging mappings
-- automatic wiring of `@startupjs/typescript-plugin-react-pug` into the VS Code TypeScript host
+- automatic wiring of `@react-pug/typescript-plugin-react-pug` into the VS Code TypeScript host
 
 ## Settings
 

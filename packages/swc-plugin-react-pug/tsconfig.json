@@ -4,7 +4,7 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@startupjs/react-pug-core": [
+      "@react-pug/react-pug-core": [
         "../react-pug-core/src/index.ts"
       ]
     }

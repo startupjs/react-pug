@@ -1,11 +1,11 @@
-# @startupjs/typescript-plugin-react-pug
+# @react-pug/typescript-plugin-react-pug
 
 TypeScript language-service plugin for `pug\`...\`` tagged template literals in React files.
 
 ## Install
 
 ```bash
-npm i -D @startupjs/typescript-plugin-react-pug
+npm i -D @react-pug/typescript-plugin-react-pug
 ```
 
 ## tsconfig.json
@@ -14,7 +14,7 @@ npm i -D @startupjs/typescript-plugin-react-pug
 {
   "compilerOptions": {
     "plugins": [
-      { "name": "@startupjs/typescript-plugin-react-pug" }
+      { "name": "@react-pug/typescript-plugin-react-pug" }
     ]
   }
 }
