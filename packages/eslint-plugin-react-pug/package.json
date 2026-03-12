@@ -1,6 +1,6 @@
 {
   "name": "@react-pug/eslint-plugin-react-pug",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "publishConfig": {
@@ -11,7 +11,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@react-pug/react-pug-core": "^0.1.0"
+    "@react-pug/react-pug-core": "^0.1.1"
   },
   "peerDependencies": {
     "eslint": "^9.0.0"
