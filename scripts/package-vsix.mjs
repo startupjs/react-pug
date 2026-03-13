@@ -33,11 +33,17 @@ const tempPluginDir = resolve(
   tempExtDir,
   'node_modules/@react-pug/typescript-plugin-react-pug',
 );
+const iconRelativePath = typeof extensionPkg.icon === 'string' ? extensionPkg.icon : null;
+const iconSrcFile = iconRelativePath ? resolve(extensionSrcDir, iconRelativePath) : null;
 
 rmSync(tempRoot, { recursive: true, force: true });
 mkdirSync(resolve(tempExtDir, 'dist'), { recursive: true });
 mkdirSync(resolve(tempExtDir, 'syntaxes'), { recursive: true });
 mkdirSync(resolve(tempPluginDir, 'dist'), { recursive: true });
+
+if (iconRelativePath && !existsSync(iconSrcFile)) {
+  throw new Error(`Extension icon not found: ${iconRelativePath}`);
+}
 
 const stagedExtensionPkg = {
   ...extensionPkg,
@@ -71,6 +77,19 @@ copyFileSync(
   resolve(extensionSrcDir, 'syntaxes/pug-template-literal.json'),
   resolve(tempExtDir, 'syntaxes/pug-template-literal.json'),
 );
+
+if (iconRelativePath) {
+  const tempIconFile = resolve(tempExtDir, iconRelativePath);
+  mkdirSync(dirname(tempIconFile), { recursive: true });
+  copyFileSync(iconSrcFile, tempIconFile);
+
+  const vscodeIgnorePath = resolve(tempExtDir, '.vscodeignore');
+  const vscodeIgnore = readFileSync(vscodeIgnorePath, 'utf8');
+  const iconAllowRule = `!${iconRelativePath.replaceAll('\\', '/')}`;
+  if (!vscodeIgnore.includes(iconAllowRule)) {
+    writeFileSync(vscodeIgnorePath, `${vscodeIgnore.trimEnd()}\n${iconAllowRule}\n`);
+  }
+}
 writeFileSync(
   resolve(tempPluginDir, 'package.json'),
   `${JSON.stringify(stagedPluginPkg, null, 2)}\n`,
