@@ -167,12 +167,20 @@ Useful:
 npm run test:vscode:example:screenshots
 npm run vscode:fresh:example
 npm run check:pug:example
+npx @react-pug/check-types .
+npx @react-pug/check-types src/App.tsx src/Button.tsx
 ```
 
 Pug-aware CI type check for a target project (without VS Code UI):
 
 ```bash
-node scripts/check-pug-types.mjs <project-dir>
+npx @react-pug/check-types <project-dir>
+```
+
+If you are using StartupJS, the same checker can be exposed as:
+
+```bash
+npx startupjs check
 ```
 
 ## How It Works (High Level)
