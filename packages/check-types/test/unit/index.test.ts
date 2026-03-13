@@ -2,8 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { checkTypes, formatDiagnosticOutput, formatSummary, parseArgs, resolveCliTargets, resolvePrettyOption, resolveTsconfigPath, runCli } from '../../src/index.js'
 import ts from 'typescript'
 import { resolve } from 'node:path'
+import { createRequire } from 'node:module'
 
 const repoRoot = resolve(__dirname, '../../../..')
+const require = createRequire(import.meta.url)
+const loadPluginModule = async () => {
+  const plugin = require(resolve(repoRoot, 'packages/typescript-plugin-react-pug/dist/plugin.js'))
+  return plugin.default ?? plugin
+}
+const loadTypeScriptModule = async () => ts
 
 describe('@react-pug/check-types', () => {
   it('parses CLI args', () => {
@@ -48,7 +55,9 @@ describe('@react-pug/check-types', () => {
     const exitCode = await runCli(['example'], {
       stdout: line => stdout.push(line),
       stderr: line => stderr.push(line),
-      cwd: repoRoot
+      cwd: repoRoot,
+      loadPluginModule,
+      loadTypeScriptModule
     })
 
     expect(exitCode).toBe(0)
@@ -61,7 +70,9 @@ describe('@react-pug/check-types', () => {
     const projectRoot = resolve(repoRoot, 'example')
     const result = await checkTypes({
       cwd: projectRoot,
-      filePaths: ['src/App.tsx']
+      filePaths: ['src/App.tsx'],
+      loadPluginModule,
+      loadTypeScriptModule
     })
 
     expect(result.ok).toBe(true)
