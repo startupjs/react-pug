@@ -66,6 +66,10 @@ copyFileSync(
   resolve(tempExtDir, 'LICENSE.md'),
 );
 copyFileSync(
+  resolve(extensionSrcDir, 'README.md'),
+  resolve(tempExtDir, 'README.md'),
+);
+copyFileSync(
   resolve(extensionSrcDir, '.vscodeignore'),
   resolve(tempExtDir, '.vscodeignore'),
 );
