@@ -366,9 +366,9 @@ describe('plugin with class shorthand config', () => {
 
     const shadow = snapshotText(result.host.getScriptSnapshot(file));
     expect(shadow).toMatchInlineSnapshot(`
-      "import "startupjs";             
+      "import "startupjs";
       const active = { active: true };
-      const view = (<span styleName={["title", active]} />);
+      const view = (<span styleName={['title', active]} />);
 
       /* [pug-react] startupjs/cssxjs extra react attributes */
       // extra props for cssxjs \`:part\` and \`styleName\` features

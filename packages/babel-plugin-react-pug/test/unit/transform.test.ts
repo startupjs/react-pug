@@ -458,7 +458,7 @@ describe('babel-plugin-react-pug transform', () => {
         .item
           color red
       \`;
-      const view = <div styleName={["item"]}><span>Hello</span></div>;"
+      const view = <div styleName={['item']}><span>Hello</span></div>;"
     `);
   });
 
@@ -490,8 +490,8 @@ describe('babel-plugin-react-pug transform', () => {
         .two
           color blue
       \`;
-      const first = <div styleName={["one"]}><span>One</span></div>;
-      const second = <div styleName={["two"]}><span>Two</span></div>;"
+      const first = <div styleName={['one']}><span>One</span></div>;
+      const second = <div styleName={['two']}><span>Two</span></div>;"
     `);
   });
 
@@ -525,8 +525,8 @@ describe('babel-plugin-react-pug transform', () => {
         .two
           color blue
       \`;
-      const first = <div styleName={["one"]}><span>One</span></div>;
-      const second = <div styleName={["two"]}><span>Two</span></div>;"
+      const first = <div styleName={['one']}><span>One</span></div>;
+      const second = <div styleName={['two']}><span>Two</span></div>;"
     `);
   });
 
@@ -547,7 +547,7 @@ describe('babel-plugin-react-pug transform', () => {
         .item
           color red
       \`;
-      const view = <div styleName={["item"]}><span>Hello</span></div>;"
+      const view = <div styleName={['item']}><span>Hello</span></div>;"
     `);
   });
 
@@ -578,7 +578,7 @@ describe('babel-plugin-react-pug transform', () => {
       const active = {
         active: true
       };
-      const view = <span styleName={["title", active]} />;"
+      const view = <span styleName={['title', active]} />;"
     `);
   });
 
@@ -598,7 +598,7 @@ describe('babel-plugin-react-pug transform', () => {
     ].join('\n'));
     expect(out).toMatchInlineSnapshot(`
       "import "startupjs";
-      const view = <span styleName={["title"]} />;"
+      const view = <span styleName={['title']} />;"
     `);
   });
 
@@ -609,7 +609,7 @@ describe('babel-plugin-react-pug transform', () => {
     ].join('\n'));
     expect(out).toMatchInlineSnapshot(`
       "import { observer } from "startupjs";
-      const view = <span styleName={["title"]} />;"
+      const view = <span styleName={['title']} />;"
     `);
   });
 

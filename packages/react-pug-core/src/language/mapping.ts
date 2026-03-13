@@ -119,7 +119,7 @@ export interface TagImportCleanup {
   /** Offset of the full import declaration in the original file */
   originalStart: number;
   originalEnd: number;
-  /** Fixed-length replacement text for the shadow/transformed output */
+  /** Replacement text for the shadow/transformed output */
   replacementText: string;
 }
 

@@ -365,6 +365,8 @@ export async function runCli (argv = process.argv.slice(2), io = {}) {
   const stderr = io.stderr ?? console.error
   const cwd = io.cwd ?? process.cwd()
   const prettyIsTTY = io.stderrIsTTY ?? process.stderr.isTTY
+  const loadPluginModule = io.loadPluginModule
+  const loadTypeScriptModule = io.loadTypeScriptModule
 
   let parsed
   try {
@@ -388,7 +390,9 @@ export async function runCli (argv = process.argv.slice(2), io = {}) {
       filePaths,
       projectPath: parsed.projectPath,
       tagFunction: parsed.tagFunction,
-      injectCssxjsTypes: parsed.injectCssxjsTypes
+      injectCssxjsTypes: parsed.injectCssxjsTypes,
+      loadPluginModule,
+      loadTypeScriptModule
     })
     const pretty = resolvePrettyOption(parsed.pretty, prettyIsTTY)
     if (result.ok) {

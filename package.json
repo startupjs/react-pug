@@ -19,7 +19,7 @@
     "test:core": "vitest run packages/react-pug-core/test",
     "test:ts-plugin": "vitest run packages/typescript-plugin-react-pug/test",
     "test:vscode:unit": "vitest run packages/vscode-react-pug-tsx/test/unit",
-    "test:unit": "vitest run",
+    "test:unit": "npm run deps:example && npm run build:plugin && vitest run",
     "test": "npm run test:unit && npm run test:vscode",
     "deps:example": "node scripts/ensure-workspace-deps.mjs example",
     "pretest:vscode": "npm run deps:example && npm run build",
@@ -47,6 +47,7 @@
     "esbuild": "^0.27.3",
     "eslint": "^9.39.3",
     "lerna": "^9.0.5",
+    "neostandard": "^0.13.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }

@@ -169,9 +169,9 @@ function findProgramInsertionOffset(text: string, program: Program): number {
   return lastLeading ? getOffsetAfterTrailingLineBreak(text, lastLeading.end ?? 0) : 0;
 }
 
-function findBlockInsertionOffset(block: BlockStatement): number {
+function findBlockInsertionOffset(text: string, block: BlockStatement): number {
   const firstNonDirective = block.body.find(statement => !isDirectiveStatement(statement));
-  if (firstNonDirective) return firstNonDirective.start ?? ((block.start ?? 0) + 1);
+  if (firstNonDirective) return getLineStartOffset(text, firstNonDirective.start ?? ((block.start ?? 0) + 1));
   return Math.max(0, (block.end ?? 0) - 1);
 }
 
@@ -194,7 +194,7 @@ function buildBlockScopeTarget(text: string, block: BlockStatement): StyleScopeT
   const blockIndent = getLineIndent(text, block.start ?? 0);
   return {
     kind: 'block',
-    insertionOffset: findBlockInsertionOffset(block),
+    insertionOffset: findBlockInsertionOffset(text, block),
     statementIndent: `${blockIndent}  `,
     closingIndent: blockIndent,
   };

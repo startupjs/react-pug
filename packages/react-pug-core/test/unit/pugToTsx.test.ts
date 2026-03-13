@@ -1441,7 +1441,7 @@ describe('class shorthand strategy', () => {
       classAttribute: 'styleName',
       classMerge: 'classnames',
     });
-    expect(result.tsx).toContain('styleName={["title", active]}');
+    expect(result.tsx).toContain("styleName={['title', active]}");
   });
 
   it('concatenate mode for className merges into string expression', () => {
@@ -1457,7 +1457,7 @@ describe('class shorthand strategy', () => {
       classAttribute: 'styleName',
       classMerge: 'classnames',
     });
-    expect(result.tsx).toContain('styleName={["title", "bold"]}');
+    expect(result.tsx).toContain("styleName={['title', 'bold']}");
   });
 
   it('keeps mapping for existing className attr when merged with shorthand class', () => {

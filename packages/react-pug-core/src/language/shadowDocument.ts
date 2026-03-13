@@ -17,7 +17,6 @@ import {
   type StyleScopeTarget,
 } from './extractRegions';
 import { compilePugToTsx, type CompileOptions } from './pugToTsx';
-import { originalToShadow } from './positionMapping';
 
 const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
 
@@ -35,6 +34,14 @@ interface PendingInsertion {
   originalOffset: number;
   text: string;
   mappedRegions: Array<Omit<ShadowMappedRegion, 'shadowStart' | 'shadowEnd'>>;
+  priority: number;
+}
+
+interface PendingTextReplacement {
+  kind: 'import-cleanup';
+  originalStart: number;
+  originalEnd: number;
+  text: string;
   priority: number;
 }
 
@@ -124,7 +131,7 @@ function buildStyleCallText(
     generatedOffset += 1;
   }
 
-  text += `${statementIndent}\`;\n`;
+  text += `${statementIndent}\`\n`;
 
   return {
     text,
@@ -165,7 +172,13 @@ function buildStyleInsertions(
 
     if (target.kind === 'arrow-expression' || target.kind === 'statement-body') {
       text += '{\n';
-    } else if (target.insertionOffset > 0) {
+    } else if (
+      target.insertionOffset > 0
+      && originalText[target.insertionOffset - 1] !== '\n'
+      && originalText[target.insertionOffset - 1] !== '\r'
+      && originalText[target.insertionOffset] !== '\n'
+      && originalText[target.insertionOffset] !== '\r'
+    ) {
       const prevChar = originalText[target.insertionOffset - 1];
       if (prevChar !== '\n' && prevChar !== '\r') text += '\n';
     }
@@ -233,26 +246,6 @@ function buildStyleInsertions(
   return insertions;
 }
 
-function applyImportCleanups(doc: PugDocument, cleanups: TagImportCleanup[]): string {
-  if (cleanups.length === 0) return doc.shadowText;
-  const chars = doc.shadowText.split('');
-  for (const cleanup of cleanups) {
-    const shadowStart = originalToShadow(doc, cleanup.originalStart);
-    if (shadowStart == null) continue;
-    const shadowEnd = shadowStart + (cleanup.originalEnd - cleanup.originalStart);
-    for (let i = shadowStart; i < shadowEnd; i += 1) {
-      chars[i] = '';
-    }
-    chars[shadowStart] = cleanup.replacementText;
-  }
-  return chars.join('');
-}
-
-function padToLength(text: string, targetLength: number): string | null {
-  if (text.length > targetLength) return null;
-  return text + ' '.repeat(targetLength - text.length);
-}
-
 function buildImportCleanupWithHelpers(
   originalText: string,
   entry: ExtractedImportData,
@@ -263,7 +256,6 @@ function buildImportCleanupWithHelpers(
   const originalStart = declaration.start ?? 0;
   const originalEnd = declaration.end ?? originalStart;
   const originalImportText = originalText.slice(originalStart, originalEnd);
-  const originalLength = originalEnd - originalStart;
   const hasSemicolon = originalImportText.trimEnd().endsWith(';');
   const sourceText = entry.sourceText;
   const matchedSpecifiers = removeTagImport ? entry.matchedSpecifiers : [];
@@ -299,31 +291,11 @@ function buildImportCleanupWithHelpers(
     replacement = `${importPrefix}${parts.join(', ')} from ${sourceText}${hasSemicolon ? ';' : ''}`;
   }
 
-  let replacementText = padToLength(replacement, originalLength);
-  if (replacementText == null) {
-    const compactParts: string[] = [];
-    if (defaultSpecifier) compactParts.push(originalText.slice(defaultSpecifier.start ?? 0, defaultSpecifier.end ?? 0));
-    if (namespaceSpecifier) compactParts.push(originalText.slice(namespaceSpecifier.start ?? 0, namespaceSpecifier.end ?? 0));
-    if (namedPieces.length > 0) compactParts.push(`{${namedPieces.join(',')}}`);
-    const importPrefix = declaration.importKind === 'type' ? 'import type ' : 'import ';
-    const compactReplacement = compactParts.length === 0
-      ? (declaration.importKind === 'type' ? '' : `import ${sourceText}${hasSemicolon ? ';' : ''}`)
-      : `${importPrefix}${compactParts.join(',')} from ${sourceText}${hasSemicolon ? ';' : ''}`;
-    replacementText = padToLength(compactReplacement, originalLength);
-  }
-
-  if (replacementText == null) {
-    return {
-      cleanup: removeTagImport ? entry.cleanup : null,
-      mergedHelpers: new Set<StyleTagLang>(),
-    };
-  }
-
   return {
     cleanup: {
       originalStart,
       originalEnd,
-      replacementText,
+      replacementText: replacement,
     },
     mergedHelpers,
   };
@@ -442,6 +414,13 @@ export function buildShadowDocument(
     }
   }
   pendingInsertions.push(...buildStyleInsertions(originalText, regions, stylePlans));
+  const pendingImportCleanups: PendingTextReplacement[] = importCleanups.map((cleanup) => ({
+    kind: 'import-cleanup',
+    originalStart: cleanup.originalStart,
+    originalEnd: cleanup.originalEnd,
+    text: cleanup.replacementText,
+    priority: -2,
+  }));
 
   const pendingReplacements: PendingReplacement[] = regions.map((region, regionIndex) => ({
     kind: 'replace',
@@ -461,6 +440,11 @@ export function buildShadowDocument(
   }));
 
   const edits = [
+    ...pendingImportCleanups.map((replacement) => ({
+      sortStart: replacement.originalStart,
+      priority: replacement.priority,
+      edit: replacement,
+    })),
     ...pendingInsertions.map((insertion) => ({
       sortStart: insertion.originalOffset,
       priority: insertion.priority,
@@ -498,14 +482,16 @@ export function buildShadowDocument(
 
       const shadowStart = shadowText.length;
       edit.text && (shadowText += edit.text);
-      regions[edit.regionIndex].shadowStart = shadowStart;
-      regions[edit.regionIndex].shadowEnd = shadowText.length;
-      if (edit.mappedRegion) {
-        mappedRegions.push({
-          ...edit.mappedRegion,
-          shadowStart,
-          shadowEnd: shadowText.length,
-        });
+      if ('regionIndex' in edit) {
+        regions[edit.regionIndex].shadowStart = shadowStart;
+        regions[edit.regionIndex].shadowEnd = shadowText.length;
+        if (edit.mappedRegion) {
+          mappedRegions.push({
+            ...edit.mappedRegion,
+            shadowStart,
+            shadowEnd: shadowText.length,
+          });
+        }
       }
       cursor = edit.originalEnd;
       continue;
@@ -569,10 +555,6 @@ export function buildShadowDocument(
     hasTagImport: analysis.hasTagImport,
     missingTagImport,
   };
-
-  if (importCleanups.length > 0) {
-    document.shadowText = applyImportCleanups(document, importCleanups);
-  }
 
   return document;
 }

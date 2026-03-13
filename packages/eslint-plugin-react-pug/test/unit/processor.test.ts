@@ -19,7 +19,7 @@ describe('eslint-plugin-react-pug processor', () => {
     expect(blocks[0]).toMatchInlineSnapshot(`
       {
         "filename": "../../../pug-react.jsx",
-        "text": "const view = (<Button label="Save" />);",
+        "text": "const view = <Button label='Save' />;",
       }
     `);
   });
@@ -34,9 +34,9 @@ describe('eslint-plugin-react-pug processor', () => {
     const [block] = processor.preprocess(input, 'file.jsx');
     const code = typeof block === 'string' ? block : block.text;
     expect(code).toMatchInlineSnapshot(`
-      "import "startupjs";             
+      "import "startupjs";
       const active = { active: true };
-      const view = (<span styleName={["title", active]} />);"
+      const view = <span styleName={['title', active]} />;"
     `);
   });
 
@@ -47,14 +47,22 @@ describe('eslint-plugin-react-pug processor', () => {
     });
     const [block] = processor.preprocess('const view = pug`span.title(class=isActive)`;', 'file.jsx');
     const code = typeof block === 'string' ? block : block.text;
-    expect(code).toMatchInlineSnapshot(`"const view = (<span class={"title" + " " + (isActive)} />);"`);
+    expect(code).toMatchInlineSnapshot(`"const view = <span class={'title' + ' ' + isActive} />;"`);
   });
 
   it('preprocess output for JS/JSX is runtime-safe and TS-free', () => {
     const processor = createReactPugProcessor();
     const [block] = processor.preprocess(COMPILER_JS_RUNTIME_SOURCE, 'file.jsx');
     const code = typeof block === 'string' ? block : block.text;
-    expect(code).toMatchInlineSnapshot(`"const view = ((() => {const __r = [];while (ready) {__r.push(<span>Ok</span>);}return __r;})());"`);
+    expect(code).toMatchInlineSnapshot(`
+      "const view = (() => {
+        const __r = []
+        while (ready) {
+          __r.push(<span>Ok</span>)
+        }
+        return __r
+      })();"
+    `);
     expectNoTsOnlyRuntimeSyntax(code);
   });
 
@@ -68,13 +76,52 @@ describe('eslint-plugin-react-pug processor', () => {
     `);
   });
 
+  it('preserves surrounding JS formatting while reformatting only pug output', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'function renderTitle () {',
+      '  return pug`',
+      '    Card(',
+      "      title='Hello'",
+      '      subtitle=condition ? value : fallback',
+      '    )',
+      '  `',
+      '}',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    expect(code).toMatchInlineSnapshot(`
+      "function renderTitle () {
+        return <Card title='Hello' subtitle={condition ? value : fallback} />
+      }"
+    `);
+  });
+
   it('uses a TSX virtual filename for transformed TypeScript files', () => {
     const processor = createReactPugProcessor();
     const [block] = processor.preprocess('const view = pug`Button(label="Save")`;', 'file.ts');
     expect(block).toMatchInlineSnapshot(`
       {
         "filename": "../../../pug-react.tsx",
-        "text": "const view = (<Button label="Save" />);",
+        "text": "const view = <Button label='Save' />;",
+      }
+    `);
+  });
+
+  it('formats transformed pug regions in tsx files with TypeScript syntax', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      "const variant = 'text' as const;",
+      "const view = pug`Button(variant=(variant as 'text' | 'solid'))`;",
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.tsx');
+    expect(block).toMatchInlineSnapshot(`
+      {
+        "filename": "../../../pug-react.tsx",
+        "text": "const variant = 'text' as const;
+      const view = null;",
       }
     `);
   });

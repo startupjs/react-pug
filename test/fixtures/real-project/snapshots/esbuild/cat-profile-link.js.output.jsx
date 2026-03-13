@@ -26,15 +26,16 @@ var cat_profile_link_default = observer(() => {
   }} /><Stage $cat={$cat} $event={$event} /></>;
 });
 const Profile = observer(({ $cat, $event }) => {
+  styl`
+    .hackSidePadding
+      width 1u
+
+  `;
   const $showEdit = $();
   const { tablet } = useMedia();
   const excludeNumber = $event.stage.get() !== STAGES.InProgress;
   const profileEditFields = useFormFields(CAT_PROFILE_EDIT_FORM, excludeNumber ? { exclude: ["number"] } : {});
   return <><Div row vAlign='center' gap={1}>{!hasContact($cat) ? <Tag color='error'>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color='error'>No photo</Tag> : null}{$cat.getMyStage() === STAGES.Profile ? <Div styleName={["hackSidePadding"]} /> : <Button variant='text' icon={faPen} onPress={() => $showEdit.set(true)}>{tablet ? "Edit cat profile" : "Edit"}</Button>}</Div><Modal title='Edit cat profile' $visible={$showEdit}><Form fields={profileEditFields} $value={$cat} /></Modal></>;
-  styl`
-    .hackSidePadding
-      width 1u
-  `;
 });
 function hasContact($cat) {
   return ($cat.phone.get() || "").trim() || ($cat.catgram.get() || "").trim() || ($cat.phonegram.get() || "").trim();

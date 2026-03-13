@@ -100,9 +100,9 @@ describe('transformSourceFile', () => {
     ].join('\n');
     const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
     expect(result.code).toMatchInlineSnapshot(`
-      "import 'startupjs';             
+      "import 'startupjs';
       const active = { active: true };
-      const view = (<span styleName={["title", active]} />);"
+      const view = (<span styleName={['title', active]} />);"
     `);
   });
 
@@ -139,8 +139,8 @@ describe('transformSourceFile', () => {
     ].join('\n');
     const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
     expect(result.code).toMatchInlineSnapshot(`
-      "import 'startupjs';             
-      const view = (<span styleName={["title"]} />);"
+      "import 'startupjs';
+      const view = (<span styleName={['title']} />);"
     `);
   });
 
@@ -151,8 +151,8 @@ describe('transformSourceFile', () => {
     ].join('\n');
     const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
     expect(result.code).toMatchInlineSnapshot(`
-      "import { observer } from 'startupjs';     
-      const view = (<span styleName={["title"]} />);"
+      "import { observer } from 'startupjs';
+      const view = (<span styleName={['title']} />);"
     `);
   });
 
@@ -167,7 +167,7 @@ describe('transformSourceFile', () => {
     });
     expect(result.code).toMatchInlineSnapshot(`
       "import { pug } from 'startupjs';
-      const view = (<span styleName={["title"]} />);"
+      const view = (<span styleName={['title']} />);"
     `);
   });
 
@@ -194,15 +194,14 @@ describe('transformSourceFile', () => {
     const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
 
     expect(result.code).toMatchInlineSnapshot(`
-      "import {observer,styl} from 'startupjs';  
+      "import { observer, styl } from 'startupjs';
       function App() {
-        
         styl\`
           .title
             color red
 
-        \`;
-      return (<div styleName={["title"]}>Hello</div>);
+        \`
+        return (<div styleName={['title']}>Hello</div>);
       }"
     `);
   });
@@ -233,15 +232,15 @@ describe('transformSourceFile', () => {
           css\`
             .one { color: red; }
 
-          \`;
-          return (<div styleName={["title"]}>One</div>)
+          \`
+          return (<div styleName={['title']}>One</div>)
         }
         else {
           css\`
             .two { color: blue; }
 
-          \`;
-          return (<div styleName={["title"]}>Two</div>)
+          \`
+          return (<div styleName={['title']}>Two</div>)
         }
       }"
     `);
