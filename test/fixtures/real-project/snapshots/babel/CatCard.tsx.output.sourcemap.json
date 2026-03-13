@@ -1,0 +1,43 @@
+{
+  "version": 3,
+  "names": [
+    "React",
+    "Div",
+    "Span",
+    "Avatar",
+    "Link",
+    "observer",
+    "$cat",
+    "showPhone",
+    "large",
+    "small",
+    "name",
+    "number",
+    "phone",
+    "catgram",
+    "photoFileId",
+    "phonegram",
+    "get",
+    "getCatgramLink",
+    "getPhonegramLink",
+    "Photo",
+    "fileId",
+    "$file",
+    "useSub",
+    "$",
+    "files",
+    "url",
+    "getUrl",
+    "err",
+    "username",
+    "test"
+  ],
+  "sources": [
+    "test/fixtures/real-project/CatCard.tsx"
+  ],
+  "sourcesContent": [
+    "import React from 'react'\nimport { pug, observer, useSub, $ } from 'startupjs'\nimport { Div, Span, Avatar, Link } from 'startupjs-ui'\n\nexport default observer(({ $cat, showPhone, large, small }) => {\n  const { name, number, phone, catgram, photoFileId, phonegram } = $cat.get()\n  return pug`\n    Div(part='root' row vAlign='center')\n      if photoFileId\n        Photo.avatar(styleName={ large, small } fileId=photoFileId name=name)\n      else\n        Avatar.avatar(styleName={ large, small })= name\n      Div(row)\n        Span.text(bold styleName={ large })= (number || 'X') + '. '\n        Div\n          Span.text(styleName={ large })= name\n          if showPhone\n            if phone\n              Span.text(styleName={ large })\n                Span(bold) Phone:#{' '}\n                = phone\n            if catgram\n              Span.text(styleName={ large })\n                Span(bold) Catgram:#{' '}\n                Link.text(styleName={ large } to=getCatgramLink(catgram))= catgram\n            if phonegram\n              Span.text(styleName={ large })\n                Span(bold) Phonegram:#{' '}\n                Link.text(styleName={ large } to=getPhonegramLink(phonegram))= phonegram\n    style(lang='styl')\n      .avatar\n        margin-right 1u\n        &.large\n          width 12u\n          height @width\n        &.small\n          width 4u\n          height @width\n      .text.large\n        font(h6)\n  `\n})\n\nconst Photo = observer(({ fileId, name }) => {\n  const $file = useSub($.files[fileId])\n  let url\n  try { url = $file.getUrl() } catch (err) {}\n  return pug`\n    Avatar(part='root' src=url)= name\n  `\n})\n\nfunction getCatgramLink (username) {\n  if (!username) return\n  if (/:\\/\\//.test(username)) return username\n  return 'https://catgr.am/' + username\n}\n\nfunction getPhonegramLink (username) {\n  if (!username) return\n  if (/:\\/\\//.test(username)) return username\n  return 'https://www.phonegram.com/' + username\n}\n"
+  ],
+  "mappings": "AAAA,OAAAA,KAAA;qDACoD;AACpD,SAAAC,GAAA,EAAAC,IAAA,EAAAC,MAAA,EAAAC,IAAA;AAEA,eAAAC,QAAA;EAAAC,IAAA;EAAAC,SAAA;EAAAC,KAAA;EAAAC;AAAA;;;;;;;;;;;;;;EACA;IAAAC,IAAA;IAAAC,MAAA;IAAAC,KAAA;IAAAC,OAAA;IAAAC,WAAA;IAAAC;EAAA,IAAAT,IAAA,CAAAU,GAAA;EACA,QACI,qCACKF,WAAA,IACD,MAAa,oBAAR,EAAkB;MAAAN,KAAA;MAAAC;IAAA,IAAiB,QAAOK,WAAA,EAAY,MAAKJ,IAAA,QAEhE,OAAc,oBAAR,EAAkB;MAAAF,KAAA;MAAAC;IAAA,KAAmBC,IAAA,YAC7C,SACE,KAAe,kBAAX,EAAqB;QAAAF;MAAA,IAAf,MAA2B,CAAAG,MAAA,wBACrC,KACE,KAAU,kBAAN,EAAgB;UAAAH;QAAA,KAAYE,IAAA,SAC7BH,SAAA,MACEK,KAAA,IACD,KAAU,kBAAN,EAAgB;YAAAJ;UAAA,KAClB,UAAW,OAAQ,YACjBI,KAAA,iBACHC,OAAA,IACD,KAAU,kBAAN,EAAgB;YAAAL;UAAA,KAClB,UAAW,SAAU,YACrB,KAAU,kBAAN,EAAgB;cAAAA;YAAA,IAAU,IAAGS,cAAA,CAAAJ,OAAA,IAA0BA,OAAA,wBAC5DE,SAAA,IACD,KAAU,kBAAN,EAAgB;YAAAP;UAAA,KAClB,UAAW,WAAY,YACvB,KAAU,kBAAN,EAAgB;cAAAA;YAAA,IAAU,IAAGU,gBAAA,CAAAH,SAAA,IAA8BA,SAAA;AAa/E;AAEA,MAAAI,KAAA,GAAAd,QAAA;EAAAe,MAAA;EAAAV;AAAA;EACA,MAAAW,KAAA,GAAAC,MAAA,CAAAC,CAAA,CAAAC,KAAA,CAAAJ,MAAA;EACA,IAAAK,GAAA;EACA;IAAAA,GAAA,GAAAJ,KAAA,CAAAK,MAAA;EAAA,SAAAC,GAAA;EACA,QACI,wBAAuBF,GAAA,GAAMf,IAAA;AAEjC;AAEA,SAAAO,eAAAW,QAAA;EACA,KAAAA,QAAA;EACA,YAAAC,IAAA,CAAAD,QAAA,UAAAA,QAAA;EACA,6BAAAA,QAAA;AACA;AAEA,SAAAV,iBAAAU,QAAA;EACA,KAAAA,QAAA;EACA,YAAAC,IAAA,CAAAD,QAAA,UAAAA,QAAA;EACA,sCAAAA,QAAA;AACA",
+  "ignoreList": []
+}

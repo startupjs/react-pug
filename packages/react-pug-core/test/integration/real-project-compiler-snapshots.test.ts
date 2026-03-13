@@ -24,7 +24,19 @@ const FIXTURES = [
   'event-tabs-breed.js',
   'cat-profile-link.js',
   'CatCard.js',
+  'event-tabs-layout.tsx',
+  'event-tabs-breed.tsx',
+  'cat-profile-link.tsx',
+  'CatCard.tsx',
 ];
+
+function isTypeScriptLikeFixture(fileName: string): boolean {
+  return /\.(?:ts|tsx|mts|cts)$/.test(fileName);
+}
+
+function parserPluginsForFixture(fileName: string): string[] {
+  return isTypeScriptLikeFixture(fileName) ? ['jsx', 'typescript'] : ['jsx'];
+}
 
 function fixturePath(fileName: string): string {
   return join(FIXTURES_DIR, fileName);
@@ -199,7 +211,7 @@ describe('real project fixtures compiler snapshots', () => {
         sourceMaps: true,
         parserOpts: {
           sourceType: 'module',
-          plugins: ['jsx'],
+          plugins: parserPluginsForFixture(fileName),
         },
         generatorOpts: {
           compact: false,
@@ -221,7 +233,7 @@ describe('real project fixtures compiler snapshots', () => {
         sourceMaps: true,
         parserOpts: {
           sourceType: 'module',
-          plugins: ['jsx'],
+          plugins: parserPluginsForFixture(fileName),
         },
         generatorOpts: {
           compact: false,
@@ -262,6 +274,8 @@ describe('real project fixtures compiler snapshots', () => {
         jsx: 'preserve',
         loader: {
           '.js': 'jsx',
+          '.ts': 'ts',
+          '.tsx': 'tsx',
         },
         target: 'esnext',
         sourcemap: 'external',
@@ -269,8 +283,10 @@ describe('real project fixtures compiler snapshots', () => {
         plugins: [reactPugEsbuildPlugin()],
       });
 
-      const esbuildJs = transformedByEsbuildPlugin.outputFiles?.find((f) => f.path.endsWith('.js'))?.text ?? '';
-      const esbuildMapRaw = transformedByEsbuildPlugin.outputFiles?.find((f) => f.path.endsWith('.js.map'))?.text ?? 'null';
+      const esbuildCodeFile = transformedByEsbuildPlugin.outputFiles?.find((f) => !f.path.endsWith('.map'));
+      const esbuildMapFile = transformedByEsbuildPlugin.outputFiles?.find((f) => f.path.endsWith('.map'));
+      const esbuildJs = esbuildCodeFile?.text ?? '';
+      const esbuildMapRaw = esbuildMapFile?.text ?? 'null';
       const esbuildMap = JSON.parse(esbuildMapRaw);
       await expect(esbuildJs).toMatchFileSnapshot(snapshotPath('esbuild', fileName, 'output.jsx'));
       await expect(JSON.stringify(normalizeMapSources(esbuildMap), null, 2))
