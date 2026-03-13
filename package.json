@@ -19,7 +19,7 @@
     "test:core": "vitest run packages/react-pug-core/test",
     "test:ts-plugin": "vitest run packages/typescript-plugin-react-pug/test",
     "test:vscode:unit": "vitest run packages/vscode-react-pug-tsx/test/unit",
-    "test:unit": "npm run deps:example && vitest run",
+    "test:unit": "npm run deps:example && npm run build:plugin && vitest run",
     "test": "npm run test:unit && npm run test:vscode",
     "deps:example": "node scripts/ensure-workspace-deps.mjs example",
     "pretest:vscode": "npm run deps:example && npm run build",
