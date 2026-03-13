@@ -148,5 +148,6 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "repository": "https://github.com/startupjs/react-pug"
 }

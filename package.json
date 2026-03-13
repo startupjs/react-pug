@@ -50,5 +50,6 @@
     "neostandard": "^0.13.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
-  }
+  },
+  "repository": "https://github.com/startupjs/react-pug"
 }
