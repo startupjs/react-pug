@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { Linter } from 'eslint';
-import plugin, { createReactPugProcessor } from '../../src/index';
+import plugin from '../../src/index';
 import {
   COMPILER_JS_RUNTIME_SOURCE,
   COMPILER_STRESS_SOURCE_TSX,
   expectNoTsOnlyRuntimeSyntax,
 } from '../../../react-pug-core/test/fixtures/compiler-fixtures';
+
+const { createReactPugProcessor } = plugin;
 
 describe('eslint-plugin-react-pug processor', () => {
   it('preprocess transforms pug templates into lintable JSX/JS', () => {
@@ -14,7 +16,12 @@ describe('eslint-plugin-react-pug processor', () => {
     const blocks = processor.preprocess(input, 'file.jsx');
 
     expect(blocks).toHaveLength(1);
-    expect(blocks[0]).toMatchInlineSnapshot(`"const view = (<Button label="Save" />);"`);
+    expect(blocks[0]).toMatchInlineSnapshot(`
+      {
+        "filename": "../../../pug-react.jsx",
+        "text": "const view = (<Button label="Save" />);",
+      }
+    `);
   });
 
   it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
@@ -24,7 +31,8 @@ describe('eslint-plugin-react-pug processor', () => {
       'const active = { active: true };',
       'const view = pug`span.title(styleName=active)`;',
     ].join('\n');
-    const [code] = processor.preprocess(input, 'file.jsx');
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
     expect(code).toMatchInlineSnapshot(`
       "import "startupjs";             
       const active = { active: true };
@@ -37,21 +45,45 @@ describe('eslint-plugin-react-pug processor', () => {
       classShorthandProperty: 'class',
       classShorthandMerge: 'concatenate',
     });
-    const [code] = processor.preprocess('const view = pug`span.title(class=isActive)`;', 'file.jsx');
+    const [block] = processor.preprocess('const view = pug`span.title(class=isActive)`;', 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
     expect(code).toMatchInlineSnapshot(`"const view = (<span class={"title" + " " + (isActive)} />);"`);
   });
 
   it('preprocess output for JS/JSX is runtime-safe and TS-free', () => {
     const processor = createReactPugProcessor();
-    const [code] = processor.preprocess(COMPILER_JS_RUNTIME_SOURCE, 'file.jsx');
+    const [block] = processor.preprocess(COMPILER_JS_RUNTIME_SOURCE, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
     expect(code).toMatchInlineSnapshot(`"const view = ((() => {const __r = [];while (ready) {__r.push(<span>Ok</span>);}return __r;})());"`);
     expectNoTsOnlyRuntimeSyntax(code);
+  });
+
+  it('keeps non-pug files on the original lint path', () => {
+    const processor = createReactPugProcessor();
+    const blocks = processor.preprocess('const answer = 42;', 'file.js');
+    expect(blocks).toMatchInlineSnapshot(`
+      [
+        "const answer = 42;",
+      ]
+    `);
+  });
+
+  it('uses a TSX virtual filename for transformed TypeScript files', () => {
+    const processor = createReactPugProcessor();
+    const [block] = processor.preprocess('const view = pug`Button(label="Save")`;', 'file.ts');
+    expect(block).toMatchInlineSnapshot(`
+      {
+        "filename": "../../../pug-react.tsx",
+        "text": "const view = (<Button label="Save" />);",
+      }
+    `);
   });
 
   it('postprocess remaps locations to original source', () => {
     const processor = createReactPugProcessor();
     const input = ['const x = 1;', 'const view = pug`span= missingName`;'].join('\n');
-    const [code] = processor.preprocess(input, 'file.jsx');
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
 
     const generatedLine = code.slice(0, code.indexOf('missingName')).split('\n').length;
     const mapped = processor.postprocess([
@@ -71,7 +103,8 @@ describe('eslint-plugin-react-pug processor', () => {
       '`;',
     ].join('\n');
 
-    const [code] = processor.preprocess(input, 'file.jsx');
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
 
     const linter = new Linter({ configType: 'eslintrc' });
     const lintMessages = linter.verify(
@@ -107,6 +140,7 @@ describe('eslint-plugin-react-pug processor', () => {
     expect(plugin).toBeTruthy();
     expect(plugin.processors).toBeTruthy();
     expect(plugin.processors['pug-react']).toBeTruthy();
+    expect(plugin.createReactPugProcessor).toBe(createReactPugProcessor);
   });
 
   it('handles shared stress fixture and remaps no-undef from nested interpolation', () => {
@@ -115,7 +149,8 @@ describe('eslint-plugin-react-pug processor', () => {
       'tooltipText.toUpperCase()',
       'tooltipText.toUpperCase() + notDefinedInsideNestedPug',
     );
-    const [code] = processor.preprocess(input, 'file.tsx');
+    const [block] = processor.preprocess(input, 'file.tsx');
+    const code = typeof block === 'string' ? block : block.text;
 
     const linter = new Linter({ configType: 'eslintrc' });
     const lintMessages = linter.verify(

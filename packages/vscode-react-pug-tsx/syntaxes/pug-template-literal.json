@@ -119,7 +119,7 @@
           "name": "string.quoted.single.pug"
         }
       },
-      "end": "(?=`)",
+      "end": "^(?=\\s*`)",
       "name": "meta.embedded.block.stylus.pug",
       "contentName": "source.stylus",
       "patterns": [
@@ -147,7 +147,7 @@
           "name": "string.quoted.single.pug"
         }
       },
-      "end": "(?=`)",
+      "end": "^(?=\\s*`)",
       "name": "meta.embedded.block.scss.pug",
       "contentName": "source.css.scss",
       "patterns": [
@@ -175,7 +175,7 @@
           "name": "string.quoted.single.pug"
         }
       },
-      "end": "(?=`)",
+      "end": "^(?=\\s*`)",
       "name": "meta.embedded.block.sass.pug",
       "contentName": "source.css.sass",
       "patterns": [
@@ -203,7 +203,7 @@
           "name": "string.quoted.single.pug"
         }
       },
-      "end": "(?=`)",
+      "end": "^(?=\\s*`)",
       "name": "meta.embedded.block.css.pug",
       "contentName": "source.css",
       "patterns": [

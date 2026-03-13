@@ -8,7 +8,7 @@ import {
   transformSourceFile,
 } from '@react-pug/react-pug-core';
 
-export interface EslintReactPugProcessorOptions {
+interface EslintReactPugProcessorOptions {
   tagFunction?: string;
   requirePugImport?: boolean;
   classShorthandProperty?: ClassAttributeOption;
@@ -27,10 +27,21 @@ interface EslintLintMessage {
 
 type SourceTransformState = ReturnType<typeof transformSourceFile>;
 
-export interface EslintProcessorLike {
-  preprocess: (text: string, filename: string) => string[];
+interface EslintProcessorLike {
+  preprocess: (
+    text: string,
+    filename: string,
+  ) => Array<string | { text: string; filename: string }>;
   postprocess: (messages: EslintLintMessage[][], filename: string) => EslintLintMessage[];
   supportsAutofix: boolean;
+}
+
+function getVirtualLintFilename(filename: string): string {
+  // ESLint nests processor blocks under "<physical-file>/0_<block-filename>".
+  // We escape back to a sibling filename so flat-config globs see a clean
+  // ".jsx"/".tsx" path instead of ".../file.js/0_pug-react.jsx".
+  if (/\.(?:ts|tsx|mts|cts)$/i.test(filename)) return '../../../pug-react.tsx';
+  return '../../../pug-react.jsx';
 }
 
 function mapLintMessage(
@@ -64,13 +75,16 @@ function mapLintMessage(
   };
 }
 
-export function createReactPugProcessor(
+function createReactPugProcessor(
   options: EslintReactPugProcessorOptions = {},
 ): EslintProcessorLike {
   const cache = new Map<string, SourceTransformState>();
 
   return {
-    preprocess(text: string, filename: string): string[] {
+    preprocess(
+      text: string,
+      filename: string,
+    ): Array<string | { text: string; filename: string }> {
       const transformed = transformSourceFile(text, filename, {
         tagFunction: options.tagFunction ?? 'pug',
         compileMode: 'runtime',
@@ -81,7 +95,11 @@ export function createReactPugProcessor(
         componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
       });
       cache.set(filename, transformed);
-      return [transformed.code];
+      if (transformed.regions.length === 0) return [transformed.code];
+      return [{
+        text: transformed.code,
+        filename: getVirtualLintFilename(filename),
+      }];
     },
 
     postprocess(messages: EslintLintMessage[][], filename: string): EslintLintMessage[] {
@@ -105,6 +123,7 @@ const plugin = {
   processors: {
     'pug-react': defaultProcessor,
   },
+  createReactPugProcessor,
 };
 
-export default plugin;
+export = plugin;

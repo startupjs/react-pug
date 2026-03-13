@@ -178,6 +178,7 @@ describe('pug-tagged-template grammar rule', () => {
 
     for (const rule of [cssRule, stylRule, sassRule, scssRule]) {
       const includes = rule.patterns.map((p: any) => p.include);
+      expect(rule.end).toBe('^(?=\\s*`)');
       expect(includes).toContain('#js-template-interpolation');
     }
   });

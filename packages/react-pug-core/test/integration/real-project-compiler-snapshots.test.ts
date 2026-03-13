@@ -227,7 +227,8 @@ describe('real project fixtures compiler snapshots', () => {
 
       const eslintProcessor = createReactPugProcessor();
       const [eslintOutput] = eslintProcessor.preprocess(source, relativeFixture);
-      await expect(eslintOutput).toMatchFileSnapshot(snapshotPath('eslint', fileName, 'output.jsx'));
+      const eslintOutputText = typeof eslintOutput === 'string' ? eslintOutput : eslintOutput.text;
+      await expect(eslintOutputText).toMatchFileSnapshot(snapshotPath('eslint', fileName, 'output.jsx'));
 
       const shadowDoc = buildShadowDocument(source, relativeFixture, 1, 'pug');
       await expect(shadowDoc.shadowText).toMatchFileSnapshot(snapshotPath('shadow', fileName, 'output.tsx'));

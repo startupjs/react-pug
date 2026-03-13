@@ -828,6 +828,83 @@ suite('Extension Host Features (example workspace)', () => {
     );
   });
 
+  test('textmate highlighting resumes top-level ts scopes after a styl style block', async function () {
+    this.timeout(60000);
+    const doc = await createTempDoc(
+      '__vscode_test_style_block_no_scope_leak.tsx',
+      [
+        'declare function pug(strings: TemplateStringsArray, ...values: any[]): any;',
+        'const view = pug`',
+        '  Tabs.Screen(',
+        "    name='test'",
+        '    options={',
+        "      title: 'Dev Only',",
+        '      tabBarIcon: renderTestIcon',
+        '    }',
+        '  )',
+        "  style(lang='styl')",
+        '    +tablet()',
+        '      .screen',
+        '        &:part(tabBar)',
+        '          order -1',
+        '`;',
+        '',
+        'function renderEditEvent ({ $event }) {',
+        '  return pug`',
+        '    EditEvent($event=$event)',
+        '  `',
+        '}',
+      ].join('\n'),
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const text = doc.getText();
+    const functionIdx = text.indexOf('function renderEditEvent');
+    assert.ok(functionIdx > 0, 'Could not find TS function after styl style block');
+    const pos = doc.positionAt(functionIdx);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos));
+
+    const syntaxTokens = await retry(async () => {
+      const result = await vscode.commands.executeCommand('_workbench.captureSyntaxTokens', doc.uri);
+      return Array.isArray(result) && result.length > 0 ? result : null;
+    }, 45000, 500);
+
+    const tokenEntries = syntaxTokens
+      .map((token) => ({
+        text: typeof token?.c === 'string' ? token.c : '',
+        scopes: typeof token?.t === 'string' ? token.t : '',
+      }))
+      .filter((entry) => entry.text);
+    const renderTokenEntries = tokenEntries.filter((entry) => /function|renderEditEvent|\$event/.test(entry.text));
+    const renderEventToken = renderTokenEntries.find((entry) => /renderEditEvent/.test(entry.text));
+    const eventToken = renderTokenEntries.find((entry) => /\$event/.test(entry.text));
+    const backtickTokenIndex = tokenEntries.findIndex((entry) => entry.text.includes('`;'));
+    const tokensAfterStyleBlock = backtickTokenIndex >= 0 ? tokenEntries.slice(backtickTokenIndex + 1) : renderTokenEntries;
+    const leakedStylusTokens = tokensAfterStyleBlock.filter((entry) => /source\.stylus/.test(entry.scopes));
+
+    assert.ok(
+      renderEventToken,
+      `Expected to capture renderEditEvent token after styl block, got ${stringifySmall(renderTokenEntries.slice(0, 20), 800)}`,
+    );
+    assert.ok(
+      eventToken,
+      `Expected to capture $event token after styl block, got ${stringifySmall(renderTokenEntries.slice(0, 20), 800)}`,
+    );
+    assert.ok(
+      !/source\.stylus/.test(renderEventToken.scopes),
+      `Expected renderEditEvent after styl block not to carry stylus scopes, got ${stringifySmall(renderEventToken, 240)}`,
+    );
+    assert.ok(
+      !/source\.stylus/.test(eventToken.scopes),
+      `Expected top-level JS destructuring after styl block not to carry stylus scopes, got ${stringifySmall(eventToken, 240)}`,
+    );
+    assert.strictEqual(
+      leakedStylusTokens.length,
+      0,
+      `Expected no stylus-scoped tokens after closing template, got ${stringifySmall(leakedStylusTokens.slice(0, 20), 1200)}`,
+    );
+  });
+
   test('completion inside pug style block includes CSS language suggestions', async function () {
     this.timeout(60000);
     const doc = await createTempDoc(
