@@ -1,6 +1,6 @@
 // import { Platform } from 'react-native'
 import React from 'react'
-import { pug, observer, styl, $, useSub } from 'startupjs'
+import { pug, observer, $, useSub } from 'startupjs'
 import { useColors, Icon, Form, Modal, Button } from 'startupjs-ui'
 import { Tabs, useLocalSearchParams, Stack } from 'expo-router'
 import { faVenus as faWildBadge } from '@fortawesome/free-solid-svg-icons/faVenus'
@@ -70,15 +70,14 @@ export default observer(function TabLayout () {
           tabBarIcon: renderTestIcon
         }
       )
-  `
-  styl`
-    +tablet()
-      .screen
-        &:part(tabBar)
-          order -1
-          background-color transparent
-          border-bottom-width 1px
-          border-bottom-color rgba(0, 0, 0, 0.1)
+    style(lang='styl')
+      +tablet()
+        .screen
+          &:part(tabBar)
+            order -1
+            background-color transparent
+            border-bottom-width 1px
+            border-bottom-color rgba(0, 0, 0, 0.1)
   `
 })
 

@@ -34,9 +34,9 @@ describe('eslint-plugin-react-pug processor', () => {
     const [block] = processor.preprocess(input, 'file.jsx');
     const code = typeof block === 'string' ? block : block.text;
     expect(code).toMatchInlineSnapshot(`
-      "import "startupjs";             
+      "import "startupjs";
       const active = { active: true };
-      const view = (<span styleName={["title", active]} />);"
+      const view = (<span styleName={['title', active]} />);"
     `);
   });
 

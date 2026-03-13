@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import {observer,useSub,$,styl} from 'startupjs'    
+import { observer, useSub, $, styl } from 'startupjs'
 import {
   Link, Item, ScrollView, Form, useFormProps, Alert,
   Content, Tag, Br, Button, Modal, Div, confirm,
@@ -78,7 +78,6 @@ const SelectLikesInput = observer(({ $value, ...props }) => {
 })
 
 const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
-  
   styl`
     .item
       border-radius 1u
@@ -86,7 +85,7 @@ const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
         // FIXME: We can't use color var(--color-text-success-strong) here
         background-color var(--color-text-success-strong)
 
-  `;
-const $cats = useSub($.cats, { eventId, breed: oppositeBreed, $sort: { breed: 1, number: 1 } })
-  return ((() => {const __pugEachResult = [];for (const $cat of $cats) {__pugEachResult.push((() => {const catId = $cat.getId();return <Item styleName={["item", { selected: $likes[catId].get() }]} key={catId} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small /></Item>;})());}return __pugEachResult.length ? __pugEachResult : <Alert variant='info'>No cats with selected breed yet</Alert>;})())
+  `
+  const $cats = useSub($.cats, { eventId, breed: oppositeBreed, $sort: { breed: 1, number: 1 } })
+  return ((() => {const __pugEachResult = [];for (const $cat of $cats) {__pugEachResult.push((() => {const catId = $cat.getId();return <Item styleName={['item', { selected: $likes[catId].get() }]} key={catId} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small /></Item>;})());}return __pugEachResult.length ? __pugEachResult : <Alert variant='info'>No cats with selected breed yet</Alert>;})())
 })

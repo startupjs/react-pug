@@ -344,7 +344,7 @@ describe('pugReact.showShadowTsx command', () => {
     const provider = registeredProviders.get('pug-react-shadow');
     const uriArg = openTextDocument.mock.calls[0][0];
     const content = provider.provideTextDocumentContent(uriArg);
-    expect(content).toContain('styleName={["title", active]}');
+    expect(content).toContain("styleName={['title', active]}");
     expect(content).not.toContain('className="title"');
   });
 

@@ -39,9 +39,9 @@ describe('esbuild-plugin-react-pug', () => {
       'const view = pug`span.title(styleName=active)`;',
     ].join('\n'), 'fixture.tsx');
     expect(transformed.code).toMatchInlineSnapshot(`
-      "import "startupjs";             
+      "import "startupjs";
       const active = { active: true };
-      const view = (<span styleName={["title", active]} />);"
+      const view = (<span styleName={['title', active]} />);"
     `);
   });
 

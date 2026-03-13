@@ -297,7 +297,7 @@ describe('style scope and import analysis', () => {
 
     expect(analysis.styleScopeTargets).toHaveLength(1);
     expect(analysis.styleScopeTargets[0].kind).toBe('block');
-    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('const view'));
+    expect(analysis.styleScopeTargets[0].insertionOffset).toBe(text.indexOf('    const view'));
   });
 
   it('targets single-line statement bodies so they can be normalized into blocks', () => {

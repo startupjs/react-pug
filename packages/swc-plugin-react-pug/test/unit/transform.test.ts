@@ -34,7 +34,7 @@ describe('swc-plugin-react-pug transform', () => {
       'const view = pug`span.title(styleName=active)`;',
     ].join('\n');
     const result = transformReactPugSourceForSwc(source, 'fixture.tsx');
-    expect(result.code).toContain('styleName={["title", active]}');
+    expect(result.code).toContain("styleName={['title', active]}");
   });
 
   it('allows forcing class shorthand property and merge strategy', () => {

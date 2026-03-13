@@ -132,7 +132,7 @@ describe('single pug region', () => {
       'const v = pug`span.title(styleName=active)`;',
     ].join('\n');
     const doc = buildShadowDocument(text, 'test.tsx');
-    expect(doc.shadowText).toContain('styleName={["title", active]}');
+    expect(doc.shadowText).toContain("styleName={['title', active]}");
     expect(doc.shadowText).not.toContain('className="title"');
   });
 
@@ -179,16 +179,15 @@ describe('terminal style blocks in shadow document', () => {
     const doc = buildShadowDocument(text, 'app.tsx');
 
     expect(doc.shadowText).toMatchInlineSnapshot(`
-      "import {observer,styl} from 'startupjs';  
+      "import { observer, styl } from 'startupjs';
       function App() {
         if (visible) {
-          
           styl\`
             .title
               color red
 
-          \`;
-      const view = (<div styleName={["title"]}>Hello</div>);
+          \`
+          const view = (<div styleName={['title']}>Hello</div>);
         }
       }"
     `);
@@ -212,8 +211,8 @@ describe('terminal style blocks in shadow document', () => {
         css\`
           .title { color: red; }
 
-        \`;
-        return (<div styleName={["title"]}>Hello</div>);
+        \`
+        return (<div styleName={['title']}>Hello</div>);
       };"
     `);
   });
@@ -244,15 +243,15 @@ describe('terminal style blocks in shadow document', () => {
           css\`
             .one { color: red; }
 
-          \`;
-          return (<div styleName={["title"]}>One</div>)
+          \`
+          return (<div styleName={['title']}>One</div>)
         }
         else {
           css\`
             .two { color: blue; }
 
-          \`;
-          return (<div styleName={["title"]}>Two</div>)
+          \`
+          return (<div styleName={['title']}>Two</div>)
         }
       }"
     `);

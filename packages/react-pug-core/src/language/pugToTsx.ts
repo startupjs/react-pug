@@ -1049,14 +1049,14 @@ function emitMergedClassShorthandAttribute(
     emitter.emitSynthetic('={[');
     for (let i = 0; i < classNames.length; i += 1) {
       if (i > 0) emitter.emitSynthetic(', ');
-      emitter.emitSynthetic('"');
+      emitter.emitSynthetic('\'');
       emitter.emitDerived(
         classNames[i].name,
         classNames[i].offset,
         Math.max(1, classNames[i].sourceLength),
         CSS_CLASS,
       );
-      emitter.emitSynthetic('"');
+      emitter.emitSynthetic('\'');
     }
 
     if (existingAttr) {

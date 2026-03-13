@@ -1,0 +1,34 @@
+/Users/cray0000/ws/www/vscode-pug-react/test/fixtures/real-project/event-tabs-layout.js
+  22:3  error  Expected indentation of 2 space characters but found 4.  @stylistic/jsx-indent
+  23:5  error  Parentheses around JSX should be on separate lines  @stylistic/jsx-wrap-multilines
+  35:6  error  The closing bracket must be aligned with the opening tag (expected column 13 on the next line)  @stylistic/jsx-closing-bracket-location
+  30:7  error  Property should be placed on a new line  @stylistic/jsx-first-prop-new-line
+  41:5  error  The closing bracket must be aligned with the opening tag (expected column 8 on the next line)  @stylistic/jsx-closing-bracket-location
+  40:9  error  Property should be placed on a new line  @stylistic/jsx-first-prop-new-line
+  42:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  43:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  44:5  error  Expected indentation of 2 spaces but found 4.  @stylistic/indent
+  44:8  error  The closing bracket must be aligned with the opening tag (expected column 6 on the next line)  @stylistic/jsx-closing-bracket-location
+  47:9  error  Property should be placed on a new line  @stylistic/jsx-first-prop-new-line
+  49:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  50:5  error  Expected indentation of 2 spaces but found 4.  @stylistic/indent
+  46:8  error  The closing bracket must be aligned with the opening tag (expected column 10 on the next line)  @stylistic/jsx-closing-bracket-location
+  53:9  error  Property should be placed on a new line  @stylistic/jsx-first-prop-new-line
+  55:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  56:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  57:5  error  Expected indentation of 2 spaces but found 4.  @stylistic/indent
+  49:8  error  The closing bracket must be aligned with the opening tag (expected column 10 on the next line)  @stylistic/jsx-closing-bracket-location
+  60:9  error  Property should be placed on a new line  @stylistic/jsx-first-prop-new-line
+  62:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  63:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  64:5  error  Expected indentation of 2 spaces but found 4.  @stylistic/indent
+  52:8  error  The closing bracket must be aligned with the opening tag (expected column 10 on the next line)  @stylistic/jsx-closing-bracket-location
+  67:9  error  Property should be placed on a new line  @stylistic/jsx-first-prop-new-line
+  69:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  70:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  71:5  error  Expected indentation of 2 spaces but found 4.  @stylistic/indent
+  55:8  error  The closing bracket must be aligned with the opening tag (expected column 10 on the next line)  @stylistic/jsx-closing-bracket-location
+  55:10  error  Closing tag of a multiline JSX expression must be on its own line.  @stylistic/jsx-closing-tag-location
+  55:17  error  Closing tag of a multiline JSX expression must be on its own line.  @stylistic/jsx-closing-tag-location
+
+Found 31 errors in 1 files.

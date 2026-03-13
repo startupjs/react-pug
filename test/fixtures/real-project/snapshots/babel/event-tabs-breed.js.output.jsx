@@ -123,7 +123,7 @@ const SelectLikes = observer(({
     for (const $cat of $cats) {
       __pugEachResult.push((() => {
         const catId = $cat.getId();
-        return <Item styleName={["item", {
+        return <Item styleName={['item', {
           selected: $likes[catId].get()
         }]} key={catId} onPress={() => $likes[catId].get() ? $likes[catId].del() : $likes[catId].set(true)}><CatCard $cat={$cat} small /></Item>;
       })());

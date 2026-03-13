@@ -3,11 +3,13 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { transformSync as babelTransformSync } from '@babel/core';
+import { ESLint } from 'eslint';
+import neostandard from 'neostandard';
 import { TraceMap, eachMapping, originalPositionFor } from '@jridgewell/trace-mapping';
 import { build as esbuildBuild } from 'esbuild';
 import babelPluginReactPug from '../../../babel-plugin-react-pug/src/index';
 import { transformReactPugSourceForSwc } from '../../../swc-plugin-react-pug/src/index';
-import { createReactPugProcessor } from '../../../eslint-plugin-react-pug/src/index';
+import reactPugEslintPlugin, { createReactPugProcessor } from '../../../eslint-plugin-react-pug/src/index';
 import { reactPugEsbuildPlugin } from '../../../esbuild-plugin-react-pug/src/index';
 import { buildShadowDocument, createTransformSourceMap, transformSourceFile } from '../../src/index';
 import { lineColumnToOffset } from '../../src/language/diagnosticMapping';
@@ -36,6 +38,31 @@ function snapshotPath(compiler: string, fileName: string, suffix: string): strin
 
 function readFixture(fileName: string): string {
   return readFileSync(fixturePath(fileName), 'utf8');
+}
+
+function formatEslintResults(results: Awaited<ReturnType<ESLint['lintText']>>): string {
+  const lines: string[] = [];
+  let totalErrors = 0;
+  let fileCount = 0;
+
+  for (const result of results) {
+    if (result.messages.length === 0) continue;
+    fileCount += 1;
+    lines.push(result.filePath.replaceAll('\\', '/'));
+    for (const message of result.messages) {
+      totalErrors += message.severity === 2 ? 1 : 0;
+      const severity = message.severity === 2 ? 'error' : 'warning';
+      const location = `${message.line ?? 0}:${message.column ?? 0}`;
+      const rule = message.ruleId ?? '(no-rule)';
+      lines.push(`  ${location}  ${severity}  ${message.message}  ${rule}`);
+    }
+    lines.push('');
+  }
+
+  if (lines.length === 0) return 'Found 0 errors.';
+
+  lines.push(`Found ${totalErrors} errors in ${fileCount} files.`);
+  return lines.join('\n');
 }
 
 function normalizeMapSources(map: any): any {
@@ -133,6 +160,31 @@ function countMappingsInsidePugRegions(
 describe('real project fixtures compiler snapshots', () => {
   it('matches output snapshots for Babel, SWC, esbuild, ESLint preprocess, and shadow TSX', async () => {
     mkdirSync(SNAPSHOTS_DIR, { recursive: true });
+    const eslintForNeostandard = new ESLint({
+      cwd: REPO_ROOT,
+      ignore: false,
+      overrideConfigFile: true,
+      overrideConfig: [
+        ...neostandard({
+          ts: true,
+        }),
+        {
+          files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
+          languageOptions: {
+            parserOptions: {
+              ecmaFeatures: { jsx: true },
+              sourceType: 'module',
+            },
+          },
+        },
+        {
+          plugins: {
+            'react-pug': reactPugEslintPlugin as any,
+          },
+          processor: 'react-pug/pug-react',
+        },
+      ] as any,
+    });
 
     for (const fileName of FIXTURES) {
       const source = readFixture(fileName);
@@ -229,6 +281,12 @@ describe('real project fixtures compiler snapshots', () => {
       const [eslintOutput] = eslintProcessor.preprocess(source, relativeFixture);
       const eslintOutputText = typeof eslintOutput === 'string' ? eslintOutput : eslintOutput.text;
       await expect(eslintOutputText).toMatchFileSnapshot(snapshotPath('eslint', fileName, 'output.jsx'));
+
+      const eslintNeostandardResults = await eslintForNeostandard.lintText(source, {
+        filePath: fixturePath(fileName),
+      });
+      await expect(formatEslintResults(eslintNeostandardResults))
+        .toMatchFileSnapshot(snapshotPath('eslint-neostandard', fileName, 'diagnostics.txt'));
 
       const shadowDoc = buildShadowDocument(source, relativeFixture, 1, 'pug');
       await expect(shadowDoc.shadowText).toMatchFileSnapshot(snapshotPath('shadow', fileName, 'output.tsx'));

@@ -1,0 +1,14 @@
+/Users/cray0000/ws/www/vscode-pug-react/test/fixtures/real-project/cat-profile-link.js
+  34:5  error  Parentheses around JSX should be on separate lines  @stylistic/jsx-wrap-multilines
+  32:6  error  The closing bracket must be aligned with the opening tag (expected column 13 on the next line)  @stylistic/jsx-closing-bracket-location
+  32:45  error  Closing tag of a multiline JSX expression must be on its own line.  @stylistic/jsx-closing-tag-location
+  77:3  error  Unreachable code.  no-unreachable
+  88:3  error  Expected indentation of 2 space characters but found 0.  @stylistic/jsx-indent
+  89:5  error  Parentheses around JSX should be on separate lines  @stylistic/jsx-wrap-multilines
+  92:13  error  Expected indentation of 4 space characters but found 0.  @stylistic/jsx-indent
+  92:13  error  Expected indentation of 4 space characters but found 0.  @stylistic/jsx-indent
+  96:86  error  Closing tag of a multiline JSX expression must be on its own line.  @stylistic/jsx-closing-tag-location
+  57:81  error  Closing tag of a multiline JSX expression must be on its own line.  @stylistic/jsx-closing-tag-location
+  57:89  error  Closing tag of a multiline JSX expression must be on its own line.  @stylistic/jsx-closing-tag-location
+
+Found 11 errors in 1 files.

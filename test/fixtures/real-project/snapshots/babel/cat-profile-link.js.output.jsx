@@ -41,7 +41,7 @@ const Profile = observer(({
   const profileEditFields = useFormFields(CAT_PROFILE_EDIT_FORM, excludeNumber ? {
     exclude: ['number']
   } : {});
-  return <><Div row vAlign='center' gap={1}>{!hasContact($cat) ? <Tag color='error'>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color='error'>No photo</Tag> : null}{$cat.getMyStage() === STAGES.Profile ? <Div styleName={["hackSidePadding"]} /> : <Button variant='text' icon={faPen} onPress={() => $showEdit.set(true)}>{tablet ? 'Edit cat profile' : 'Edit'}</Button>}</Div><Modal title='Edit cat profile' $visible={$showEdit}><Form fields={profileEditFields} $value={$cat} /></Modal></>;
+  return <><Div row vAlign='center' gap={1}>{!hasContact($cat) ? <Tag color='error'>No contact</Tag> : null}{!$cat.photoFileId.get() ? <Tag color='error'>No photo</Tag> : null}{$cat.getMyStage() === STAGES.Profile ? <Div styleName={['hackSidePadding']} /> : <Button variant='text' icon={faPen} onPress={() => $showEdit.set(true)}>{tablet ? 'Edit cat profile' : 'Edit'}</Button>}</Div><Modal title='Edit cat profile' $visible={$showEdit}><Form fields={profileEditFields} $value={$cat} /></Modal></>;
   styl`
     .hackSidePadding
       width 1u

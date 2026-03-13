@@ -498,8 +498,8 @@ describe('pug-to-JSX transformation', () => {
     });
     const text = snapshotText(host.getScriptSnapshot('app.tsx'));
     expect(text).toMatchInlineSnapshot(`
-      "import "startupjs";             
-      const v = (<span styleName={["foo", active]} />);
+      "import "startupjs";
+      const v = (<span styleName={['foo', active]} />);
 
       /* [pug-react] startupjs/cssxjs extra react attributes */
       // extra props for cssxjs \`:part\` and \`styleName\` features

@@ -1,5 +1,5 @@
 import React from 'react';
-import { observer, styl, $, useSub } from 'startupjs';
+import { observer, $, useSub, styl } from 'startupjs';
 import { useColors, Icon, Form, Modal, Button } from 'startupjs-ui';
 import { Tabs, useLocalSearchParams, Stack } from 'expo-router';
 import { faVenus as faWildBadge } from '@fortawesome/free-solid-svg-icons/faVenus';
@@ -9,6 +9,15 @@ import { faPen } from '@fortawesome/free-solid-svg-icons/faPen';
 import { faToolbox } from '@fortawesome/free-solid-svg-icons/faToolbox';
 import { EVENT_FORM } from '@/model/events/schema';
 export default observer(function TabLayout() {
+  styl`
+  +tablet()
+    .screen
+      &:part(tabBar)
+        order -1
+        background-color transparent
+        border-bottom-width 1px
+        border-bottom-color rgba(0, 0, 0, 0.1)
+`;
   const getColor = useColors();
   const {
     eventId
@@ -41,15 +50,6 @@ export default observer(function TabLayout() {
         title: 'Dev Only',
         tabBarIcon: renderTestIcon
       }} /></Tabs></>;
-  styl`
-    +tablet()
-      .screen
-        &:part(tabBar)
-          order -1
-          background-color transparent
-          border-bottom-width 1px
-          border-bottom-color rgba(0, 0, 0, 0.1)
-  `;
 });
 function renderEditEvent({
   $event
