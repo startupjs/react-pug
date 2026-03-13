@@ -116,7 +116,15 @@ export function loadTypeScript (projectDir, cwd = process.cwd()) {
 }
 
 export function loadPlugin (projectDir, cwd = process.cwd()) {
-  return loadModuleFromLocations('@react-pug/typescript-plugin-react-pug', [projectDir, cwd, packageDir])
+  try {
+    return loadModuleFromLocations('@react-pug/typescript-plugin-react-pug', [projectDir, cwd, packageDir])
+  } catch (packageError) {
+    const monorepoPluginPath = path.resolve(packageDir, '../typescript-plugin-react-pug/dist/plugin.js')
+    if (fs.existsSync(monorepoPluginPath)) {
+      return require(monorepoPluginPath)
+    }
+    throw packageError
+  }
 }
 
 export function resolveTsconfigPath (ts, cwd, projectDirArg = '.', explicitProjectPath) {
