@@ -76,6 +76,35 @@ describe('eslint-plugin-react-pug processor', () => {
     `);
   });
 
+  it('uses a JSX virtual filename for plain .js files that already contain JSX', () => {
+    const processor = createReactPugProcessor();
+    const [block] = processor.preprocess(
+      "import BreedPage from './-breed'\n\nexport default function Domestic () { return <BreedPage breed='domestic' /> }\n",
+      'file.js',
+    );
+    expect(block).toMatchInlineSnapshot(`
+      {
+        "filename": "../../../pug-react.jsx",
+        "text": "import BreedPage from './-breed'
+
+      export default function Domestic () { return <BreedPage breed='domestic' /> }
+      ",
+      }
+    `);
+  });
+
+  it('can always virtualize .js files to JSX when jsxInJsFiles is forced', () => {
+    const processor = createReactPugProcessor({ jsxInJsFiles: 'always' });
+    const [block] = processor.preprocess('const answer = 42;\n', 'file.js');
+    expect(block).toMatchInlineSnapshot(`
+      {
+        "filename": "../../../pug-react.jsx",
+        "text": "const answer = 42;
+      ",
+      }
+    `);
+  });
+
   it('preserves surrounding JS formatting while reformatting only pug output', () => {
     const processor = createReactPugProcessor();
     const input = [
