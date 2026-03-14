@@ -3,7 +3,7 @@
   "private": true,
   "displayName": "React Pug TypeScript",
   "description": "Full React-Pug support in TypeScript/TSX with syntax highlight and IntelliSense",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "publisher": "startupjs",
   "icon": "logo.png",
   "license": "MIT",
@@ -144,7 +144,7 @@
     ]
   },
   "dependencies": {
-    "@react-pug/typescript-plugin-react-pug": "^0.1.5"
+    "@react-pug/typescript-plugin-react-pug": "^0.1.6"
   },
   "publishConfig": {
     "access": "public"
