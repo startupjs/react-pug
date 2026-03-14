@@ -20,6 +20,7 @@ interface EslintReactPugProcessorOptions {
   classShorthandMerge?: ClassMergeOption;
   startupjsCssxjs?: StartupjsCssxjsOption;
   componentPathFromUppercaseClassShorthand?: boolean;
+  jsxInJsFiles?: 'auto' | 'always';
 }
 
 interface EslintLintMessage {
@@ -108,9 +109,46 @@ function isTypeScriptLikeFilename(filename: string): boolean {
   return /\.(?:ts|tsx|mts|cts)$/i.test(filename);
 }
 
+function isJavaScriptLikeFilename(filename: string): boolean {
+  return /\.(?:js|jsx|mjs|cjs)$/i.test(filename);
+}
+
 function getVirtualLintFilename(filename: string): string {
   if (isTypeScriptLikeFilename(filename)) return '../../../pug-react.tsx';
   return '../../../pug-react.jsx';
+}
+
+function astContainsJsx(node: unknown): boolean {
+  if (node == null) return false;
+  if (Array.isArray(node)) return node.some(astContainsJsx);
+  if (typeof node !== 'object') return false;
+
+  const record = node as Record<string, unknown>;
+  if (record.type === 'JSXElement' || record.type === 'JSXFragment') return true;
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key === 'loc' || key === 'start' || key === 'end' || key === 'extra') continue;
+    if (astContainsJsx(value)) return true;
+  }
+
+  return false;
+}
+
+function containsJsxSyntax(text: string, filename: string): boolean {
+  try {
+    const ast = parse(text, {
+      sourceType: 'module',
+      plugins: [
+        'jsx',
+        'decorators-legacy',
+        ...(isTypeScriptLikeFilename(filename) ? ['typescript'] : []),
+      ] as any,
+      errorRecovery: false,
+    }) as any;
+    return astContainsJsx(ast.program);
+  } catch {
+    return false;
+  }
 }
 
 function getLineIndent(text: string, offset: number): string {
@@ -465,11 +503,23 @@ function createReactPugProcessor(
         startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
         componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
       });
-      const formatted = formatLintCode(transformed, filename);
+      const hasTransformedPug = transformed.regions.length > 0;
+      const jsLikeFilename = isJavaScriptLikeFilename(filename);
+      const shouldAlwaysVirtualizeJs = (
+        options.jsxInJsFiles === 'always'
+        && jsLikeFilename
+        && !isTypeScriptLikeFilename(filename)
+      );
+      const shouldUseVirtualJsxFilename = (
+        hasTransformedPug
+        || shouldAlwaysVirtualizeJs
+        || containsJsxSyntax(text, filename)
+      );
+      const formatted = hasTransformedPug ? formatLintCode(transformed, filename) : null;
       cache.set(filename, { transformed, formatted });
-      if (transformed.regions.length === 0) return [transformed.code];
+      if (!shouldUseVirtualJsxFilename) return [transformed.code];
       return [{
-        text: formatted?.code ?? transformed.code,
+        text: hasTransformedPug ? (formatted?.code ?? transformed.code) : transformed.code,
         filename: getVirtualLintFilename(filename),
       }];
     },

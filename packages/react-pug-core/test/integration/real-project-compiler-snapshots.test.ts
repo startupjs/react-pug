@@ -17,6 +17,7 @@ import { lineColumnToOffset } from '../../src/language/diagnosticMapping';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = join(dirname(THIS_FILE), '../../../..');
 const FIXTURES_DIR = join(REPO_ROOT, 'test/fixtures/real-project');
+const REGRESSION_FIXTURES_DIR = join(REPO_ROOT, 'test/fixtures/regression');
 const SNAPSHOTS_DIR = join(FIXTURES_DIR, 'snapshots');
 
 const FIXTURES = [
@@ -50,6 +51,42 @@ function snapshotPath(compiler: string, fileName: string, suffix: string): strin
 
 function readFixture(fileName: string): string {
   return readFileSync(fixturePath(fileName), 'utf8');
+}
+
+function regressionFixturePath(fileName: string): string {
+  return join(REGRESSION_FIXTURES_DIR, fileName);
+}
+
+function readRegressionFixture(fileName: string): string {
+  return readFileSync(regressionFixturePath(fileName), 'utf8');
+}
+
+function createNeostandardEslint(): ESLint {
+  return new ESLint({
+    cwd: REPO_ROOT,
+    ignore: false,
+    overrideConfigFile: true,
+    overrideConfig: [
+      ...neostandard({
+        ts: true,
+      }),
+      {
+        files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
+        languageOptions: {
+          parserOptions: {
+            ecmaFeatures: { jsx: true },
+            sourceType: 'module',
+          },
+        },
+      },
+      {
+        plugins: {
+          'react-pug': reactPugEslintPlugin as any,
+        },
+        processor: 'react-pug/pug-react',
+      },
+    ] as any,
+  });
 }
 
 function formatEslintResults(results: Awaited<ReturnType<ESLint['lintText']>>): string {
@@ -172,31 +209,7 @@ function countMappingsInsidePugRegions(
 describe('real project fixtures compiler snapshots', () => {
   it('matches output snapshots for Babel, SWC, esbuild, ESLint preprocess, and shadow TSX', async () => {
     mkdirSync(SNAPSHOTS_DIR, { recursive: true });
-    const eslintForNeostandard = new ESLint({
-      cwd: REPO_ROOT,
-      ignore: false,
-      overrideConfigFile: true,
-      overrideConfig: [
-        ...neostandard({
-          ts: true,
-        }),
-        {
-          files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
-          languageOptions: {
-            parserOptions: {
-              ecmaFeatures: { jsx: true },
-              sourceType: 'module',
-            },
-          },
-        },
-        {
-          plugins: {
-            'react-pug': reactPugEslintPlugin as any,
-          },
-          processor: 'react-pug/pug-react',
-        },
-      ] as any,
-    });
+    const eslintForNeostandard = createNeostandardEslint();
 
     for (const fileName of FIXTURES) {
       const source = readFixture(fileName);
@@ -327,5 +340,16 @@ describe('real project fixtures compiler snapshots', () => {
         },
       );
     }
+  });
+
+  it('keeps JSX imports marked as used in plain .js files under the neostandard processor config', async () => {
+    const eslintForNeostandard = createNeostandardEslint();
+    const fileName = 'domestic.js';
+    const source = readRegressionFixture(fileName);
+    const results = await eslintForNeostandard.lintText(source, {
+      filePath: regressionFixturePath(fileName),
+    });
+
+    expect(formatEslintResults(results)).toMatchInlineSnapshot(`"Found 0 errors."`);
   });
 });

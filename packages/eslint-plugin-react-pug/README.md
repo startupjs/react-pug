@@ -32,6 +32,11 @@ Use `createReactPugProcessor(...)` when you need custom options:
 - `classShorthandMerge`
 - `startupjsCssxjs`
 - `componentPathFromUppercaseClassShorthand`
+- `jsxInJsFiles`
+
+`jsxInJsFiles: 'always'` forces `.js` / `.mjs` / `.cjs` files onto the
+processor's virtual `.jsx` lint path. Use this if your ESLint config already
+treats JS files as JSX-capable and you want to skip JSX auto-detection.
 
 Used `pug` import bindings are removed from the processor's transformed view automatically.
 
