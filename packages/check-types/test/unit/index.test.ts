@@ -1,13 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import { checkTypes, formatDiagnosticOutput, formatSummary, parseArgs, resolveCliTargets, resolvePrettyOption, resolveTsconfigPath, runCli } from '../../src/index.js'
 import ts from 'typescript'
+import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createRequire } from 'node:module'
+import { execSync } from 'node:child_process'
 
 const repoRoot = resolve(__dirname, '../../../..')
 const require = createRequire(import.meta.url)
 const loadPluginModule = async () => {
-  const plugin = require(resolve(repoRoot, 'packages/typescript-plugin-react-pug/dist/plugin.js'))
+  const pluginDistPath = resolve(repoRoot, 'packages/typescript-plugin-react-pug/dist/plugin.js')
+  if (!existsSync(pluginDistPath)) {
+    execSync('npm run build:plugin', { cwd: repoRoot, stdio: 'pipe' })
+  }
+
+  let plugin
+  try {
+    plugin = require(pluginDistPath)
+  } catch (error: any) {
+    if (error?.code !== 'MODULE_NOT_FOUND') throw error
+    execSync('npm run build:plugin', { cwd: repoRoot, stdio: 'pipe' })
+    plugin = require(pluginDistPath)
+  }
+
   return plugin.default ?? plugin
 }
 const loadTypeScriptModule = async () => ts

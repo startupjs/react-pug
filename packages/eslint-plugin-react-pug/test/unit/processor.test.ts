@@ -150,7 +150,7 @@ describe('eslint-plugin-react-pug processor', () => {
       {
         "filename": "../../../pug-react.tsx",
         "text": "const variant = 'text' as const;
-      const view = null;",
+      const view = <Button variant={variant as 'text' | 'solid'} />;",
       }
     `);
   });

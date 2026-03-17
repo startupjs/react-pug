@@ -1513,3 +1513,89 @@ describe('component path from uppercase shorthand', () => {
     expect(result.tsx).not.toContain('<Modal.Header.Right');
   });
 });
+
+describe('typescript syntax inside pug expressions', () => {
+  it('keeps `as` casts intact inside attribute expressions', () => {
+    const result = compilePugToTsx('Comp(value=foo as string)');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Comp value={foo as string} />)');
+  });
+
+  it('keeps `as` casts intact inside spread attribute expressions', () => {
+    const result = compilePugToTsx('Comp(...(props as CardProps))');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Comp {...(props as CardProps)} />)');
+  });
+
+  it('supports inline handlers with typed parameters', () => {
+    const result = compilePugToTsx('Button(onPress=(event: PressEvent) => handle(event))');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Button onPress={(event: PressEvent) => handle(event)} />)');
+  });
+
+  it('supports inline handlers with explicit return types', () => {
+    const result = compilePugToTsx('Button(onPress=(): void => handle())');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Button onPress={(): void => handle()} />)');
+  });
+
+  it('supports inline handlers with generic type parameters', () => {
+    const result = compilePugToTsx('Button(onPress=<T extends Foo>(value: T) => value)');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Button onPress={<T extends Foo>(value: T) => value} />)');
+  });
+
+  it('supports inline handlers with typed destructured params', () => {
+    const result = compilePugToTsx('Button(onPress=({ nativeEvent }: PressEvent) => nativeEvent)');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Button onPress={({ nativeEvent }: PressEvent) => nativeEvent} />)');
+  });
+
+  it('supports non-null assertions in attribute expressions', () => {
+    const result = compilePugToTsx('Comp(value=foo!)');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Comp value={foo!} />)');
+  });
+
+  it('supports `as` casts in buffered code expressions', () => {
+    const result = compilePugToTsx('= foo as string');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(foo as string)');
+  });
+
+  it('supports `as` casts inside interpolations', () => {
+    const result = compilePugToTsx('p #{foo as string}');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<p>{foo as string}</p>)');
+  });
+
+  it('supports TypeScript syntax in conditional tests', () => {
+    const result = compilePugToTsx('if foo as boolean\n  span ok');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toContain('foo as boolean');
+  });
+
+  it('supports TypeScript syntax in each iterables', () => {
+    const result = compilePugToTsx('each item in (items as string[])\n  span= item');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toContain('for (const item of (items as string[]))');
+  });
+
+  it('keeps `satisfies` expressions intact inside attributes', () => {
+    const result = compilePugToTsx('Comp(value=config satisfies CardConfig)');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Comp value={config satisfies CardConfig} />)');
+  });
+
+  it('keeps attr names named `as` separate from a previous `as` cast', () => {
+    const result = compilePugToTsx("Button(title=myTitle as string, as='link')");
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Button title={myTitle as string} as=\'link\' />)');
+  });
+
+  it('keeps attr names named `satisfies` separate from a previous `satisfies` expression', () => {
+    const result = compilePugToTsx("Button(title=config.title satisfies CardTitle, satisfies='meta')");
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toBe('(<Button title={config.title satisfies CardTitle} satisfies=\'meta\' />)');
+  });
+});

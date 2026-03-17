@@ -178,19 +178,19 @@ suite('Extension Host Features (example workspace)', () => {
 
     const shadowText = shadowDoc.getText();
     assert.ok(
-      shadowText.includes('import React, { useState } from \'react\';'),
+      shadowText.includes('import React, { useState } from \'react\''),
       'Expected shadow TSX to keep normal TSX imports',
     );
     assert.ok(
-      shadowText.includes('import { Button } from \'./Button\';'),
+      shadowText.includes('import { Button } from \'./Button\''),
       'Expected shadow TSX to keep component imports used by generated JSX',
     );
     assert.ok(
-      !shadowText.includes('import { pug } from \'./helpers\';'),
+      !shadowText.includes('import { pug } from \'./helpers\''),
       'Expected shadow TSX to remove the explicit pug binding import',
     );
     assert.ok(
-      shadowText.includes('import { css } from \'./helpers\';'),
+      shadowText.includes('import { css } from \'./helpers\''),
       'Expected shadow TSX to replace the pug import with the injected css helper import',
     );
     assert.ok(
@@ -202,7 +202,7 @@ suite('Extension Host Features (example workspace)', () => {
       'Expected shadow TSX to contain transformed App JSX component output',
     );
     assert.ok(
-      shadowText.includes('label="Reset"'),
+      shadowText.includes("label='Reset'"),
       'Expected shadow TSX to contain transformed App JSX props',
     );
 

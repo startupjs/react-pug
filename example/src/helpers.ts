@@ -1,11 +1,7 @@
-export function pug(strings: TemplateStringsArray, ...values: any[]): any {
-  void strings;
-  void values;
-  return null;
+export function pug (_strings: TemplateStringsArray, ..._values: any[]): any {
+  return null
 }
 
-export function css(strings: TemplateStringsArray, ...values: any[]): any {
-  void strings;
-  void values;
-  return null;
+export function css (_strings: TemplateStringsArray, ..._values: any[]): any {
+  return null
 }

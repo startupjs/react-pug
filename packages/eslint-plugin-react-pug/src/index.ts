@@ -158,54 +158,98 @@ function getLineIndent(text: string, offset: number): string {
 }
 
 function indentFormattedRegion(text: string, baseIndent: string): string {
-  if (baseIndent.length === 0) return text;
-  return text.replace(/\n/g, `\n${baseIndent}`);
+  if (baseIndent.length === 0 || text.length === 0) return text;
+
+  const lines = text.split('\n');
+  if (lines.length === 1) return text;
+
+  const isParenthesizedMultilineExpression = (
+    lines[0].trim() === '('
+    && lines[lines.length - 1].trim() === ')'
+  );
+
+  const parenthesizedBodyIndent = isParenthesizedMultilineExpression
+    ? Math.min(...lines
+      .slice(1, -1)
+      .filter(line => line.trim().length > 0)
+      .map(line => line.match(/^[ \t]*/)?.[0].length ?? 0))
+    : 0;
+
+  return lines
+    .map((line, index) => {
+      if (index === 0) return line;
+
+      if (isParenthesizedMultilineExpression && index < lines.length - 1) {
+        return `${baseIndent}  ${line.slice(parenthesizedBodyIndent)}`;
+      }
+
+      if (isParenthesizedMultilineExpression) {
+        return `${baseIndent}${line.trimStart()}`;
+      }
+
+      return `${baseIndent}${line}`;
+    })
+    .join('\n');
 }
 
 function normalizeTernaryBranchIndent(text: string): string {
   const lines = text.split('\n');
   const stack: Array<{
-    baseIndent: number;
-    closeIndent: number;
-    jsxIndent: number;
-    valueIndent: number;
+    branchIndent: number;
+    iifeOpenIndex: number | null;
   }> = [];
+
+  const getIndent = (line: string) => line.match(/^[ \t]*/)?.[0].length ?? 0;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     const trimmed = line.trim();
-    const indent = line.match(/^[ \t]*/)?.[0].length ?? 0;
-
-    while (stack.length > 0 && indent < stack[stack.length - 1].baseIndent) {
-      stack.pop();
-    }
+    const indent = getIndent(line);
 
     if (/^[?:]\s*\($/.test(trimmed)) {
-      stack.push({
-        baseIndent: indent,
-        closeIndent: indent + 2,
-        jsxIndent: indent + 2,
-        valueIndent: indent + 4,
-      });
+      stack.push({ branchIndent: indent, iifeOpenIndex: null });
       continue;
     }
 
     const current = stack[stack.length - 1];
     if (!current) continue;
 
-    if (trimmed === ')' || trimmed === ')}') {
-      if (indent < current.closeIndent) {
-        lines[i] = `${' '.repeat(current.closeIndent)}${trimmed}`;
-      }
+    if (current.iifeOpenIndex == null && (trimmed === ')' || trimmed === ')}')) {
+      lines[i] = `${' '.repeat(current.branchIndent + 2)}${trimmed}`;
       stack.pop();
       continue;
     }
 
-    const expectedIndent = /^[<{}]/.test(trimmed)
-      ? current.jsxIndent
-      : current.valueIndent;
-    if (trimmed.length > 0 && indent < expectedIndent) {
-      lines[i] = `${' '.repeat(expectedIndent)}${trimmed}`;
+    if (trimmed.startsWith('(() => {') || trimmed.startsWith('{(() => {')) {
+      current.iifeOpenIndex = i;
+      lines[i] = `${' '.repeat(current.branchIndent + 4)}${trimmed}`;
+      continue;
+    }
+
+    if (current.iifeOpenIndex != null && trimmed.startsWith('})()')) {
+      const bodyLines = lines
+        .slice(current.iifeOpenIndex + 1, i)
+        .filter(branchLine => branchLine.trim().length > 0);
+      const bodyBaseIndent = bodyLines.length > 0
+        ? Math.min(...bodyLines.map(getIndent))
+        : current.branchIndent + 2;
+
+      for (let bodyIndex = current.iifeOpenIndex + 1; bodyIndex < i; bodyIndex += 1) {
+        const bodyLine = lines[bodyIndex];
+        const bodyTrimmed = bodyLine.trim();
+        if (bodyTrimmed.length === 0) continue;
+
+        const relativeIndent = Math.max(0, getIndent(bodyLine) - bodyBaseIndent);
+        lines[bodyIndex] = `${' '.repeat(current.branchIndent + 6 + relativeIndent)}${bodyTrimmed}`;
+      }
+
+      lines[i] = `${' '.repeat(current.branchIndent + 4)}${trimmed}`;
+      current.iifeOpenIndex = null;
+      continue;
+    }
+
+    if (current.iifeOpenIndex == null && trimmed.length > 0 && indent < current.branchIndent + 2) {
+      lines[i] = `${' '.repeat(current.branchIndent + 2)}${trimmed}`;
     }
   }
 
@@ -332,6 +376,12 @@ function formatPugRegionForLint(
   baseIndent: string,
   filename: string,
 ): { code: string; boundaryMap: number[] } {
+  const lintConfig = {
+    ...FORMAT_RULE_CONFIG,
+    ...(isTypeScriptLikeFilename(filename)
+      ? { parser: 'react-pug-typescript-parser' }
+      : {}),
+  }
   const wrapped = `${FORMAT_WRAPPER_PREFIX}${expr}\n`;
   const prettyWrapped = prettier.format(wrapped, {
     parser: isTypeScriptLikeFilename(filename) ? 'babel-ts' : 'babel',
@@ -342,12 +392,7 @@ function formatPugRegionForLint(
     bracketSameLine: false,
   });
 
-  const fixedWrapped = formatLinter.verifyAndFix(prettyWrapped, {
-    ...FORMAT_RULE_CONFIG,
-    ...(isTypeScriptLikeFilename(filename)
-      ? { parser: 'react-pug-typescript-parser' }
-      : {}),
-  }, 'pug-react.jsx').output;
+  const fixedWrapped = formatLinter.verifyAndFix(prettyWrapped, lintConfig, 'pug-react.jsx').output;
   let body = fixedWrapped.slice(FORMAT_WRAPPER_PREFIX.length);
   if (body.endsWith('\n')) body = body.slice(0, -1);
   body = indentFormattedRegion(body, baseIndent);
