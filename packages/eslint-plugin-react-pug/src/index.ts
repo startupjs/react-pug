@@ -28,6 +28,19 @@ interface EslintLintMessage {
   column?: number;
   endLine?: number;
   endColumn?: number;
+  fix?: {
+    range: [number, number];
+    text: string;
+  };
+  suggestions?: Array<{
+    desc?: string;
+    messageId?: string;
+    fix?: {
+      range: [number, number];
+      text: string;
+    };
+    [key: string]: unknown;
+  }>;
   [key: string]: unknown;
 }
 
@@ -489,6 +502,50 @@ function mapFormattedOffsetToTransformed(
   return null;
 }
 
+function intersectsTransformedPugRegion(
+  transformed: SourceTransformState,
+  generatedStart: number,
+  generatedEnd: number,
+): boolean {
+  const end = Math.max(generatedStart, generatedEnd);
+  return transformed.document.mappedRegions.some(region => (
+    region.kind === 'pug'
+    && generatedStart < region.shadowEnd
+    && end > region.shadowStart
+  ));
+}
+
+function mapLintFix(
+  fix: EslintLintMessage['fix'] | undefined,
+  cached: CachedLintState,
+): EslintLintMessage['fix'] | undefined {
+  if (!fix) return undefined;
+
+  const generatedStart = cached.formatted
+    ? mapFormattedOffsetToTransformed(cached.formatted, fix.range[0])
+    : fix.range[0];
+  const generatedEnd = cached.formatted
+    ? mapFormattedOffsetToTransformed(cached.formatted, fix.range[1])
+    : fix.range[1];
+
+  if (generatedStart == null || generatedEnd == null) return undefined;
+  if (intersectsTransformedPugRegion(cached.transformed, generatedStart, generatedEnd)) {
+    return undefined;
+  }
+
+  const mapped = mapGeneratedRangeToOriginal(
+    cached.transformed.document,
+    generatedStart,
+    Math.max(0, generatedEnd - generatedStart),
+  );
+  if (!mapped) return undefined;
+
+  return {
+    ...fix,
+    range: [mapped.start, mapped.end],
+  };
+}
+
 function mapLintMessage(
   message: EslintLintMessage,
   cached: CachedLintState,
@@ -525,6 +582,14 @@ function mapLintMessage(
 
   const startLc = offsetToLineColumn(cached.transformed.document.originalText, mapped.start);
   const endLc = offsetToLineColumn(cached.transformed.document.originalText, mapped.end);
+  const hasTransformedPug = cached.transformed.regions.length > 0;
+  const mappedFix = hasTransformedPug ? undefined : mapLintFix(message.fix, cached);
+  const mappedSuggestions = hasTransformedPug
+    ? undefined
+    : message.suggestions?.map((suggestion) => ({
+        ...suggestion,
+        fix: mapLintFix(suggestion.fix, cached),
+      }));
 
   return {
     ...message,
@@ -532,6 +597,8 @@ function mapLintMessage(
     column: startLc.column,
     endLine: endLc.line,
     endColumn: endLc.column,
+    ...(mappedFix ? { fix: mappedFix } : {}),
+    ...(mappedSuggestions ? { suggestions: mappedSuggestions } : {}),
   };
 }
 

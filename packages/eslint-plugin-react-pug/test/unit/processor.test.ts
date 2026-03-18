@@ -254,4 +254,222 @@ describe('eslint-plugin-react-pug processor', () => {
     expect(noUndef).toBeTruthy();
     expect(noUndef?.line).toBeGreaterThan(1);
   });
+
+  it('maps exact lint ranges for identifiers inside several pug expression contexts', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  Button(label=missingLabel onClick=() => missingHandler())',
+      '  p= missingText',
+      '  if missingCondition',
+      '    span= missingInsideIf',
+      '  each item in missingItems',
+      '    span= item.name + missingSuffix',
+      '`;',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.tsx');
+    const code = typeof block === 'string' ? block : block.text;
+
+    const identifiers = [
+      'missingLabel',
+      'missingHandler',
+      'missingText',
+      'missingCondition',
+      'missingInsideIf',
+      'missingItems',
+      'missingSuffix',
+    ];
+
+    const generatedMessages = identifiers.map((identifier) => {
+      const start = code.indexOf(identifier);
+      const before = code.slice(0, start).split('\n');
+      const line = before.length;
+      const column = before[before.length - 1].length + 1;
+      const endColumn = column + identifier.length;
+      return {
+        ruleId: 'no-undef',
+        message: `'${identifier}' is not defined.`,
+        line,
+        column,
+        endLine: line,
+        endColumn,
+      };
+    });
+
+    const mapped = processor.postprocess([generatedMessages as any], 'file.tsx');
+    expect(mapped).toMatchInlineSnapshot(`
+      [
+        {
+          "column": 19,
+          "endColumn": 29,
+          "endLine": 2,
+          "line": 2,
+          "message": "'missingLabel' is not defined.",
+          "ruleId": "no-undef",
+        },
+        {
+          "column": 41,
+          "endColumn": 53,
+          "endLine": 2,
+          "line": 2,
+          "message": "'missingHandler' is not defined.",
+          "ruleId": "no-undef",
+        },
+        {
+          "column": 4,
+          "endColumn": 13,
+          "endLine": 3,
+          "line": 3,
+          "message": "'missingText' is not defined.",
+          "ruleId": "no-undef",
+        },
+        {
+          "column": 6,
+          "endColumn": 19,
+          "endLine": 4,
+          "line": 4,
+          "message": "'missingCondition' is not defined.",
+          "ruleId": "no-undef",
+        },
+        {
+          "column": 6,
+          "endColumn": 18,
+          "endLine": 5,
+          "line": 5,
+          "message": "'missingInsideIf' is not defined.",
+          "ruleId": "no-undef",
+        },
+        {
+          "column": 11,
+          "endColumn": 21,
+          "endLine": 6,
+          "line": 6,
+          "message": "'missingItems' is not defined.",
+          "ruleId": "no-undef",
+        },
+        {
+          "column": 15,
+          "endColumn": 26,
+          "endLine": 7,
+          "line": 7,
+          "message": "'missingSuffix' is not defined.",
+          "ruleId": "no-undef",
+        },
+      ]
+    `);
+  });
+
+  it('drops autofix edits for files that contain transformed pug regions', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const  answer = 1;',
+      'const view = pug`Button(label="Save")`;',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.tsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const pugFixStart = code.indexOf("label='Save'");
+    const outsideFixStart = code.indexOf('const  answer');
+
+    const mapped = processor.postprocess([[
+      {
+        ruleId: '@stylistic/quotes',
+        message: 'Use single quotes.',
+        line: 2,
+        column: 28,
+        endLine: 2,
+        endColumn: 40,
+        fix: {
+          range: [pugFixStart, pugFixStart + "label='Save'".length],
+          text: "label='Save'",
+        },
+      },
+      {
+        ruleId: '@stylistic/no-multi-spaces',
+        message: 'Multiple spaces found before \'answer\'.',
+        line: 1,
+        column: 6,
+        endLine: 1,
+        endColumn: 8,
+        fix: {
+          range: [outsideFixStart + 5, outsideFixStart + 7],
+          text: ' ',
+        },
+      },
+    ] as any], 'file.tsx');
+
+    expect(mapped).toMatchInlineSnapshot(`
+      [
+        {
+          "column": 31,
+          "endColumn": 40,
+          "endLine": 2,
+          "fix": {
+            "range": [
+              40,
+              52,
+            ],
+            "text": "label='Save'",
+          },
+          "line": 2,
+          "message": "Use single quotes.",
+          "ruleId": "@stylistic/quotes",
+        },
+        {
+          "column": 6,
+          "endColumn": 8,
+          "endLine": 1,
+          "fix": {
+            "range": [
+              5,
+              7,
+            ],
+            "text": " ",
+          },
+          "line": 1,
+          "message": "Multiple spaces found before 'answer'.",
+          "ruleId": "@stylistic/no-multi-spaces",
+        },
+      ]
+    `);
+  });
+
+  it('preserves autofix edits for plain files without pug transforms', () => {
+    const processor = createReactPugProcessor();
+    const mapped = processor.postprocess([[
+      {
+        ruleId: '@stylistic/no-multi-spaces',
+        message: 'Multiple spaces found before \'answer\'.',
+        line: 1,
+        column: 6,
+        endLine: 1,
+        endColumn: 8,
+        fix: {
+          range: [5, 7],
+          text: ' ',
+        },
+      },
+    ] as any], 'file.tsx');
+
+    expect(mapped).toMatchInlineSnapshot(`
+      [
+        {
+          "column": 6,
+          "endColumn": 8,
+          "endLine": 1,
+          "fix": {
+            "range": [
+              5,
+              7,
+            ],
+            "text": " ",
+          },
+          "line": 1,
+          "message": "Multiple spaces found before 'answer'.",
+          "ruleId": "@stylistic/no-multi-spaces",
+        },
+      ]
+    `);
+  });
 });
