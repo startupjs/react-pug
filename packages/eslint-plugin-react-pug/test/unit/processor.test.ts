@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Linter } from 'eslint';
 import plugin from '../../src/index';
 import {
@@ -7,7 +10,44 @@ import {
   expectNoTsOnlyRuntimeSyntax,
 } from '../../../react-pug-core/test/fixtures/compiler-fixtures';
 
+const require = createRequire(import.meta.url);
+const tsParser = require('@typescript-eslint/parser');
+const tsEslintPlugin = require('@typescript-eslint/eslint-plugin');
 const { createReactPugProcessor } = plugin;
+const repoRoot = resolve(__dirname, '../../../..');
+
+function lintTypeScriptNoUnusedVars(code: string, filename = 'file.tsx') {
+  const linter = new Linter({ configType: 'eslintrc' });
+  linter.defineParser('@typescript-eslint/parser', tsParser);
+  for (const [name, rule] of Object.entries(tsEslintPlugin.rules)) {
+    linter.defineRule(`@typescript-eslint/${name}`, rule as any);
+  }
+  return linter.verify(
+    code,
+    {
+      parser: '@typescript-eslint/parser',
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+      rules: {
+        '@typescript-eslint/no-unused-vars': 'error',
+      },
+    },
+    filename,
+  );
+}
+
+function offsetToLineColumn(text: string, offset: number) {
+  const before = text.slice(0, offset).split('\n');
+  return {
+    line: before.length,
+    column: before[before.length - 1].length + 1,
+  };
+}
 
 describe('eslint-plugin-react-pug processor', () => {
   it('preprocess transforms pug templates into lintable JSX/JS', () => {
@@ -298,66 +338,77 @@ describe('eslint-plugin-react-pug processor', () => {
     });
 
     const mapped = processor.postprocess([generatedMessages as any], 'file.tsx');
-    expect(mapped).toMatchInlineSnapshot(`
+    for (const identifier of identifiers) {
+      const lintMessage = mapped.find((message) => message.message.includes(identifier));
+      expect(lintMessage, `Expected mapped lint message for ${identifier}`).toBeTruthy();
+      const expectedStart = input.indexOf(identifier);
+      const expected = offsetToLineColumn(input, expectedStart);
+      expect(lintMessage?.line).toBe(expected.line);
+      expect(lintMessage?.column).toBe(expected.column);
+      expect(lintMessage?.endLine).toBe(expected.line);
+      expect(lintMessage?.endColumn).toBe(expected.column + identifier.length);
+    }
+  });
+
+  it('maps @typescript-eslint/no-unused-vars inside nested inline handler blocks exactly', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  each todo in activeTodos',
+      '    .todo-item(key=todo.id)',
+      '      input(type="checkbox", checked=todo.done, onChange=() => {',
+      '        const myValue = 5',
+      '        return handleToggle(todo.id)',
+      '      })',
+      '`;',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.tsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const lintMessages = lintTypeScriptNoUnusedVars(code);
+    const mapped = processor.postprocess([lintMessages as any], 'file.tsx');
+    const unused = mapped.find((message) => (
+      message.ruleId === '@typescript-eslint/no-unused-vars'
+      && message.message.includes('myValue')
+    ));
+
+    expect(unused).toBeTruthy();
+    const expectedStart = input.indexOf('myValue');
+    const expected = offsetToLineColumn(input, expectedStart);
+    expect(unused?.line).toBe(expected.line);
+    expect(unused?.column).toBe(expected.column);
+    expect(unused?.endLine).toBe(expected.line);
+    expect(unused?.endColumn).toBe(expected.column + 'myValue'.length);
+  });
+
+  it('maps @typescript-eslint/no-unused-vars correctly for the real example App inline handler shape', () => {
+    const processor = createReactPugProcessor();
+    const input = readFileSync(resolve(repoRoot, 'example/src/App.tsx'), 'utf8').replace(
+      "input(type='checkbox', checked=todo.done, onChange=() => handleToggle(todo.id))",
       [
-        {
-          "column": 19,
-          "endColumn": 29,
-          "endLine": 2,
-          "line": 2,
-          "message": "'missingLabel' is not defined.",
-          "ruleId": "no-undef",
-        },
-        {
-          "column": 41,
-          "endColumn": 53,
-          "endLine": 2,
-          "line": 2,
-          "message": "'missingHandler' is not defined.",
-          "ruleId": "no-undef",
-        },
-        {
-          "column": 4,
-          "endColumn": 13,
-          "endLine": 3,
-          "line": 3,
-          "message": "'missingText' is not defined.",
-          "ruleId": "no-undef",
-        },
-        {
-          "column": 6,
-          "endColumn": 19,
-          "endLine": 4,
-          "line": 4,
-          "message": "'missingCondition' is not defined.",
-          "ruleId": "no-undef",
-        },
-        {
-          "column": 6,
-          "endColumn": 18,
-          "endLine": 5,
-          "line": 5,
-          "message": "'missingInsideIf' is not defined.",
-          "ruleId": "no-undef",
-        },
-        {
-          "column": 11,
-          "endColumn": 21,
-          "endLine": 6,
-          "line": 6,
-          "message": "'missingItems' is not defined.",
-          "ruleId": "no-undef",
-        },
-        {
-          "column": 15,
-          "endColumn": 26,
-          "endLine": 7,
-          "line": 7,
-          "message": "'missingSuffix' is not defined.",
-          "ruleId": "no-undef",
-        },
-      ]
-    `);
+        "input(type='checkbox', checked=todo.done, onChange=() => {",
+        '                const myValue = 5',
+        '                return handleToggle(todo.id)',
+        '              })',
+      ].join('\n'),
+    );
+
+    const [block] = processor.preprocess(input, 'App.tsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const lintMessages = lintTypeScriptNoUnusedVars(code, 'App.tsx');
+    const mapped = processor.postprocess([lintMessages as any], 'App.tsx');
+    const unused = mapped.find((message) => (
+      message.ruleId === '@typescript-eslint/no-unused-vars'
+      && message.message.includes('myValue')
+    ));
+
+    expect(unused).toBeTruthy();
+    const expectedStart = input.indexOf('myValue');
+    const expected = offsetToLineColumn(input, expectedStart);
+    expect(unused?.line).toBe(expected.line);
+    expect(unused?.column).toBe(expected.column);
+    expect(unused?.endLine).toBe(expected.line);
+    expect(unused?.endColumn).toBe(expected.column + 'myValue'.length);
   });
 
   it('drops autofix edits for files that contain transformed pug regions', () => {

@@ -316,15 +316,97 @@ function parseExpressionTokens(expr: string, filename: string) {
   const prefixLength = FORMAT_WRAPPER_PREFIX.length;
   const endLimit = wrapped.length - 1;
   const tokens = (ast.tokens ?? [])
-    .filter((token: any) => token.start >= prefixLength && token.end <= endLimit)
+    .filter((token: any) => {
+      if (token.start < prefixLength || token.end > endLimit) return false;
+      const rawText = wrapped.slice(token.start, token.end);
+      if (token.type?.label === 'jsxText' && rawText.trim().length === 0) return false;
+      return true;
+    })
     .map((token: any) => ({
       start: token.start - prefixLength,
       end: token.end - prefixLength,
       label: token.type?.label ?? token.type,
       value: token.value,
+      raw: wrapped.slice(token.start, token.end),
     }));
 
   return tokens;
+}
+
+function tokenAlignmentKey(token: {
+  label: string;
+  value?: unknown;
+  raw: string;
+}): string {
+  switch (token.label) {
+    case 'name':
+    case 'jsxName':
+    case 'privateName':
+      return `${token.label}:${token.raw}`;
+    case 'string':
+      return `${token.label}:${String(token.value ?? token.raw)}`;
+    case 'num':
+    case 'bigint':
+    case 'decimal':
+    case 'regexp':
+      return `${token.label}:${token.raw}`;
+    case 'jsxText':
+      return `${token.label}:${token.raw.trim()}`;
+    default:
+      return token.label;
+  }
+}
+
+function alignExpressionTokens(
+  originalTokens: Array<{
+    start: number;
+    end: number;
+    label: string;
+    value?: unknown;
+    raw: string;
+  }>,
+  formattedTokens: Array<{
+    start: number;
+    end: number;
+    label: string;
+    value?: unknown;
+    raw: string;
+  }>,
+): Array<[number, number]> {
+  const originalKeys = originalTokens.map(tokenAlignmentKey);
+  const formattedKeys = formattedTokens.map(tokenAlignmentKey);
+  const dp = Array.from({ length: originalKeys.length + 1 }, () => (
+    new Array<number>(formattedKeys.length + 1).fill(0)
+  ));
+
+  for (let i = originalKeys.length - 1; i >= 0; i -= 1) {
+    for (let j = formattedKeys.length - 1; j >= 0; j -= 1) {
+      if (originalKeys[i] === formattedKeys[j]) {
+        dp[i][j] = dp[i + 1][j + 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+  }
+
+  const matches: Array<[number, number]> = [];
+  let i = 0;
+  let j = 0;
+  while (i < originalKeys.length && j < formattedKeys.length) {
+    if (originalKeys[i] === formattedKeys[j]) {
+      matches.push([i, j]);
+      i += 1;
+      j += 1;
+      continue;
+    }
+    if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+
+  return matches;
 }
 
 function buildBoundaryMap(
@@ -335,17 +417,13 @@ function buildBoundaryMap(
   try {
     const originalTokens = parseExpressionTokens(originalExpr, filename);
     const formattedTokens = parseExpressionTokens(formattedExpr, filename);
-
-    if (originalTokens.length !== formattedTokens.length) {
-      throw new Error('token-count-mismatch');
-    }
+    const matchedTokens = alignExpressionTokens(originalTokens, formattedTokens);
+    if (matchedTokens.length === 0) throw new Error('token-alignment-empty');
 
     const anchors = [{ formatted: 0, original: 0 }];
-    for (let i = 0; i < originalTokens.length; i += 1) {
-      const original = originalTokens[i];
-      const formatted = formattedTokens[i];
-      if (original.label !== formatted.label) throw new Error('token-label-mismatch');
-
+    for (const [originalIndex, formattedIndex] of matchedTokens) {
+      const original = originalTokens[originalIndex];
+      const formatted = formattedTokens[formattedIndex];
       anchors.push({ formatted: formatted.start, original: original.start });
       anchors.push({ formatted: formatted.end, original: original.end });
     }
