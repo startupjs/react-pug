@@ -66,6 +66,7 @@ describe('eslint --fix integration for react-pug processor', () => {
       'src/App.tsx',
       'src/Button.tsx',
       'src/Card.tsx',
+      'src/TypeScriptErrorsInPug.tsx',
       'src/TypeScriptInPug.tsx',
       'src/helpers.ts',
     ]

@@ -5,6 +5,7 @@ import * as fs from 'fs';
 
 const FIXTURES_DIR = path.resolve(__dirname, '../fixtures/spike');
 const BUTTON_FILE = path.join(FIXTURES_DIR, 'Button.tsx');
+const EXAMPLE_UNFORMATTED_DIR = path.resolve(__dirname, '../../../../test/fixtures/example-unformatted');
 
 async function loadPlugin() {
   const mod = await import('../../src/index.ts');
@@ -671,6 +672,64 @@ describe('complex pug expression diagnostics map to exact symbol ranges', () => 
     const syntactic = ls.getSyntacticDiagnostics(file);
     const problematic = syntactic.filter((d) => d.code === 1136 || d.code === 1109);
     expect(problematic).toHaveLength(0);
+  });
+});
+
+describe('example-unformatted TS-in-pug diagnostics map to exact symbol ranges', () => {
+  let ls: ts.LanguageService;
+  let file: string;
+  let text: string;
+
+  beforeAll(async () => {
+    const init = await loadPlugin();
+
+    file = path.join(EXAMPLE_UNFORMATTED_DIR, 'src', 'TypeScriptErrorsInPug.tsx');
+    text = fs.readFileSync(file, 'utf8');
+    const rootFiles = fs.readdirSync(path.join(EXAMPLE_UNFORMATTED_DIR, 'src'))
+      .filter(name => /\.(ts|tsx)$/.test(name))
+      .map(name => path.join(EXAMPLE_UNFORMATTED_DIR, 'src', name));
+
+    const result = createLanguageServiceWithPlugin(
+      init, rootFiles, EXAMPLE_UNFORMATTED_DIR,
+    );
+    ls = result.ls;
+  });
+
+  it('maps missing names inside pug attrs, handlers, interpolation, if, and each exactly', () => {
+    const diags = ls.getSemanticDiagnostics(file);
+
+    for (const name of [
+      'missingTitleValue',
+      'missingInlineHandler',
+      'missingInterpolationValue',
+      'missingConditionFlag',
+      'missingItemsSource',
+    ]) {
+      const expectedStart = text.indexOf(name);
+      expect(expectedStart).toBeGreaterThanOrEqual(0);
+
+      const diag = diags.find((d) => {
+        const msg = typeof d.messageText === 'string' ? d.messageText : '';
+        return d.code === 2304 && msg.includes(name);
+      });
+
+      expect(diag, `Expected TS2304 diagnostic for ${name}`).toBeDefined();
+      expect(diag!.start, `Unexpected mapped start for ${name}`).toBe(expectedStart);
+      expect(diag!.length, `Unexpected mapped length for ${name}`).toBe(name.length);
+    }
+  });
+
+  it('maps prop type errors inside pug attrs onto the prop name span', () => {
+    const diags = ls.getSemanticDiagnostics(file);
+    const propName = 'onClick';
+    const propNameStart = text.indexOf(propName);
+    expect(propNameStart).toBeGreaterThanOrEqual(0);
+
+    const diag = diags.find((d) => d.code === 2322 && d.start === propNameStart);
+
+    expect(diag).toBeDefined();
+    expect(diag!.start).toBe(propNameStart);
+    expect(diag!.length).toBe(propName.length);
   });
 });
 

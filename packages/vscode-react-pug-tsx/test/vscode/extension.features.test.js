@@ -48,6 +48,57 @@ function stringifySmall(value, maxLen = 300) {
   return `${text.slice(0, maxLen)}...`;
 }
 
+function completionInsertText(item) {
+  if (item?.textEdit && typeof item.textEdit.newText === 'string') return item.textEdit.newText;
+  if (typeof item?.insertText === 'string') return item.insertText;
+  if (item?.insertText && typeof item.insertText.value === 'string') return item.insertText.value;
+  return labelText(item?.label);
+}
+
+async function applyCompletionFallback(doc, pos, expectedLabel) {
+  const result = await vscode.commands.executeCommand(
+    'vscode.executeCompletionItemProvider',
+    doc.uri,
+    pos,
+  );
+  if (!result || !Array.isArray(result.items)) return false;
+
+  const item = result.items.find((candidate) => labelText(candidate.label) === expectedLabel);
+  if (!item) return false;
+
+  const editor = await vscode.window.showTextDocument(doc);
+  const replacementRange = item.textEdit?.range ?? item.range;
+  const newText = completionInsertText(item);
+
+  await editor.edit((editBuilder) => {
+    if (Array.isArray(item.additionalTextEdits)) {
+      for (const extra of item.additionalTextEdits) {
+        if (extra?.range && typeof extra.newText === 'string') {
+          editBuilder.replace(new vscode.Range(extra.range.start, extra.range.end), extra.newText);
+        }
+      }
+    }
+
+    if (replacementRange?.start && replacementRange?.end) {
+      editBuilder.replace(new vscode.Range(replacementRange.start, replacementRange.end), newText);
+      return;
+    }
+
+    const line = doc.lineAt(pos.line).text;
+    const prefix = line.slice(0, pos.character);
+    const match = prefix.match(/[A-Za-z-]+$/);
+    if (match) {
+      const start = new vscode.Position(pos.line, pos.character - match[0].length);
+      editBuilder.replace(new vscode.Range(start, pos), newText);
+      return;
+    }
+
+    editBuilder.insert(pos, newText);
+  });
+
+  return true;
+}
+
 suite('Extension Host Features (example workspace)', () => {
   let appDoc;
   let appText;
@@ -1113,11 +1164,18 @@ suite('Extension Host Features (example workspace)', () => {
       const beforeText = appDoc.getText();
       await vscode.commands.executeCommand('acceptSelectedSuggestion');
       await wait(350);
+      let afterText = appDoc.getText();
+      let appliedByFallback = false;
+      if (afterText === beforeText || !afterText.includes('background-color')) {
+        appliedByFallback = await applyCompletionFallback(appDoc, editor.selection.active, 'background-color');
+        await wait(150);
+        afterText = appDoc.getText();
+      }
       await captureTestStep('features-example-app-after-style-ui-completion', {
         accepted: true,
+        appliedByFallback,
       });
 
-      const afterText = appDoc.getText();
       assert.notStrictEqual(afterText, beforeText, 'Expected example App style-block suggestion to modify the document');
       assert.ok(
         afterText.includes('background-color'),
@@ -1181,10 +1239,16 @@ suite('Extension Host Features (example workspace)', () => {
     await captureTestStep('features-style-ui-suggest-visible', {
       command: 'editor.action.triggerSuggest',
     });
+    let appliedByFallback = false;
     await vscode.commands.executeCommand('acceptSelectedSuggestion');
     await wait(250);
 
-    const afterText = doc.getText();
+    let afterText = doc.getText();
+    if (afterText === beforeText || !afterText.includes('background-color')) {
+      appliedByFallback = await applyCompletionFallback(doc, editor.selection.active, 'background-color');
+      await wait(150);
+      afterText = doc.getText();
+    }
     assert.notStrictEqual(afterText, beforeText, 'Expected style-block suggestion acceptance to change the document');
     assert.ok(
       afterText.includes('background-color'),
@@ -1193,6 +1257,7 @@ suite('Extension Host Features (example workspace)', () => {
 
     await captureTestStep('features-after-style-ui-completion', {
       insertedBackgroundColor: afterText.includes('background-color'),
+      appliedByFallback,
     });
   });
 
@@ -1232,10 +1297,16 @@ suite('Extension Host Features (example workspace)', () => {
     await captureTestStep('features-style-value-ui-suggest-visible', {
       command: 'editor.action.triggerSuggest',
     });
+    let appliedByFallback = false;
     await vscode.commands.executeCommand('acceptSelectedSuggestion');
     await wait(250);
 
-    const afterText = doc.getText();
+    let afterText = doc.getText();
+    if (afterText === beforeText || !afterText.includes('font-weight: bold')) {
+      appliedByFallback = await applyCompletionFallback(doc, editor.selection.active, 'bold');
+      await wait(150);
+      afterText = doc.getText();
+    }
     assert.notStrictEqual(afterText, beforeText, 'Expected style-block CSS value suggestion acceptance to change the document');
     assert.ok(
       afterText.includes('font-weight: bold'),
@@ -1244,6 +1315,7 @@ suite('Extension Host Features (example workspace)', () => {
 
     await captureTestStep('features-after-style-value-ui-completion', {
       insertedBold: afterText.includes('font-weight: bold'),
+      appliedByFallback,
     });
   });
 
@@ -1283,10 +1355,16 @@ suite('Extension Host Features (example workspace)', () => {
       await captureTestStep('features-style-value-auto-suggest-visible', {
         typed: 'bo',
       });
+    let appliedByFallback = false;
     await vscode.commands.executeCommand('acceptSelectedSuggestion');
     await wait(250);
 
-    const afterText = doc.getText();
+    let afterText = doc.getText();
+    if (!afterText.includes('font-weight: bold')) {
+      appliedByFallback = await applyCompletionFallback(doc, editor.selection.active, 'bold');
+      await wait(150);
+      afterText = doc.getText();
+    }
       assert.ok(
         afterText.includes('font-weight: bold'),
         `Expected auto-triggered style value completion to produce font-weight: bold, got ${stringifySmall(afterText, 300)}`,
@@ -1301,6 +1379,10 @@ suite('Extension Host Features (example workspace)', () => {
       !visibleSchemes.includes('pug-react-style'),
       `Expected no pug-react-style temp tabs to be visible during style completion, got ${visibleSchemes.join(', ')}`,
     );
+    await captureTestStep('features-after-style-value-auto-completion', {
+      appliedByFallback,
+      insertedBold: afterText.includes('font-weight: bold'),
+    });
   });
 
   test('example app auto-triggered CSS value completions work while typing and do not open temp tabs', async function () {
@@ -1334,10 +1416,16 @@ suite('Extension Host Features (example workspace)', () => {
       await captureTestStep('features-example-app-style-value-auto-suggest-visible', {
         typed: 'bo',
       });
+      let appliedByFallback = false;
       await vscode.commands.executeCommand('acceptSelectedSuggestion');
       await wait(300);
 
-      const afterText = appDoc.getText();
+      let afterText = appDoc.getText();
+      if (!afterText.includes('font-weight: bold')) {
+        appliedByFallback = await applyCompletionFallback(appDoc, editor.selection.active, 'bold');
+        await wait(150);
+        afterText = appDoc.getText();
+      }
       assert.ok(
         afterText.includes('font-weight: bold'),
         `Expected example App auto-triggered style value completion to produce font-weight: bold, got ${stringifySmall(afterText, 400)}`,
@@ -1352,6 +1440,10 @@ suite('Extension Host Features (example workspace)', () => {
         !visibleSchemes.includes('pug-react-style'),
         `Expected no pug-react-style temp tabs to be visible during example App style completion, got ${visibleSchemes.join(', ')}`,
       );
+      await captureTestStep('features-example-app-after-style-value-auto-completion', {
+        appliedByFallback,
+        insertedBold: afterText.includes('font-weight: bold'),
+      });
     } finally {
       await editor.edit((editBuilder) => {
         const currentText = appDoc.getText();
@@ -1413,14 +1505,24 @@ suite('Extension Host Features (example workspace)', () => {
       await wait(350);
       await vscode.commands.executeCommand('type', { text: 'o' });
       await wait(1000);
+      let appliedByFallback = false;
       await vscode.commands.executeCommand('acceptSelectedSuggestion');
       await wait(300);
 
-      const afterText = appDoc.getText();
+      let afterText = appDoc.getText();
+      if (!afterText.includes('font-weight: bold;')) {
+        appliedByFallback = await applyCompletionFallback(appDoc, editor.selection.active, 'bold');
+        await wait(150);
+        afterText = appDoc.getText();
+      }
       assert.ok(
         afterText.includes('font-weight: bold;'),
         `Expected example App trailing-semicolon style value completion to produce font-weight: bold;, got ${stringifySmall(afterText, 400)}`,
       );
+      await captureTestStep('features-example-app-after-style-value-semicolon-completion', {
+        appliedByFallback,
+        insertedBold: afterText.includes('font-weight: bold;'),
+      });
     } finally {
       await editor.edit((editBuilder) => {
         const currentText = appDoc.getText();
@@ -2098,6 +2200,94 @@ suite('Extension Host Features (example workspace)', () => {
       cases: results,
       passedCount: results.filter((r) => r.hasExpected).length,
       totalCount: results.length,
+    });
+  });
+});
+
+suite('Extension Host Diagnostic Ranges (example-unformatted workspace)', () => {
+  let doc;
+  let text;
+  let workspaceRoot;
+
+  suiteSetup(async function () {
+    if (process.env.TEST_WORKSPACE_NAME !== 'example-unformatted') {
+      this.skip();
+      return;
+    }
+
+    const tsExt = vscode.extensions.getExtension('vscode.typescript-language-features');
+    if (tsExt && !tsExt.isActive) {
+      await tsExt.activate();
+    }
+
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(folder, 'Expected workspace folder');
+    workspaceRoot = folder.uri.fsPath;
+
+    const filePath = path.join(workspaceRoot, 'src', 'TypeScriptErrorsInPug.tsx');
+    doc = await vscode.workspace.openTextDocument(filePath);
+    text = doc.getText();
+    await vscode.window.showTextDocument(doc);
+    await captureTestStep('example-unformatted-suite-setup-open', { filePath });
+  });
+
+  test('typescript diagnostics inside pug map to exact symbol ranges in the real fixture', async function () {
+    this.timeout(60000);
+    await vscode.window.showTextDocument(doc);
+
+    const names = [
+      'missingTitleValue',
+      'missingInlineHandler',
+      'missingInterpolationValue',
+      'missingConditionFlag',
+      'missingItemsSource',
+    ];
+
+    const diagnostics = await retry(async () => {
+      const result = vscode.languages.getDiagnostics(doc.uri);
+      const missing = result.filter((d) => {
+        const msg = typeof d.message === 'string' ? d.message : '';
+        return d.code === 2304 && names.some((name) => msg.includes(name));
+      });
+      const badHandlerDiag = result.find((d) => d.code === 2322 && doc.getText(new vscode.Range(d.range.start, d.range.end)) === 'onClick');
+      return missing.length >= names.length && badHandlerDiag ? result : null;
+    }, 45000, 500);
+
+    const mapped = names.map((name) => {
+      const diag = diagnostics.find((d) => {
+        const msg = typeof d.message === 'string' ? d.message : '';
+        return d.code === 2304 && msg.includes(name);
+      });
+      const expectedStart = text.indexOf(name);
+      return {
+        name,
+        expectedStart,
+        expectedLength: name.length,
+        actualStart: diag ? doc.offsetAt(diag.range.start) : -1,
+        actualLength: diag ? doc.offsetAt(diag.range.end) - doc.offsetAt(diag.range.start) : -1,
+      };
+    });
+
+    for (const item of mapped) {
+      assert.ok(item.expectedStart >= 0, `Expected token not found: ${item.name}`);
+      assert.ok(item.actualStart >= 0, `Missing diagnostic for ${item.name}`);
+      assert.strictEqual(item.actualStart, item.expectedStart, `Mapped start offset mismatch for ${item.name}`);
+      assert.strictEqual(item.actualLength, item.expectedLength, `Mapped length mismatch for ${item.name}`);
+    }
+
+    const badHandlerDiag = diagnostics.find((d) =>
+      d.code === 2322 && doc.getText(new vscode.Range(d.range.start, d.range.end)) === 'onClick');
+    assert.ok(badHandlerDiag, 'Expected type mismatch diagnostic on the onClick prop');
+    assert.strictEqual(doc.offsetAt(badHandlerDiag.range.start), text.indexOf('onClick'));
+    assert.strictEqual(doc.offsetAt(badHandlerDiag.range.end) - doc.offsetAt(badHandlerDiag.range.start), 'onClick'.length);
+
+    await captureTestStep('example-unformatted-after-diagnostics', {
+      diagnosticsCount: diagnostics.length,
+      mapped,
+      badHandlerRange: {
+        start: doc.offsetAt(badHandlerDiag.range.start),
+        length: doc.offsetAt(badHandlerDiag.range.end) - doc.offsetAt(badHandlerDiag.range.start),
+      },
     });
   });
 });

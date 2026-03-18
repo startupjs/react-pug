@@ -1,13 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import { checkTypes, formatDiagnosticOutput, formatSummary, parseArgs, resolveCliTargets, resolvePrettyOption, resolveTsconfigPath, runCli } from '../../src/index.js'
 import ts from 'typescript'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { execSync } from 'node:child_process'
 
 const repoRoot = resolve(__dirname, '../../../..')
 const require = createRequire(import.meta.url)
+function lineAndColumnAt (text: string, offset: number) {
+  let line = 1
+  let column = 1
+  for (let i = 0; i < offset; i += 1) {
+    if (text[i] === '\n') {
+      line += 1
+      column = 1
+    } else {
+      column += 1
+    }
+  }
+  return { line, column }
+}
+
 const loadPluginModule = async () => {
   const pluginDistPath = resolve(repoRoot, 'packages/typescript-plugin-react-pug/dist/plugin.js')
   if (!existsSync(pluginDistPath)) {
@@ -93,6 +107,54 @@ describe('@react-pug/check-types', () => {
     expect(result.ok).toBe(true)
     expect(result.fileCount).toBe(1)
     expect(result.selectedFiles).toEqual([resolve(projectRoot, 'src/App.tsx')])
+  })
+
+  it('reports exact pug diagnostic positions for the broken example-unformatted fixture', async () => {
+    const projectRoot = resolve(repoRoot, 'test/fixtures/example-unformatted')
+    const filePath = resolve(projectRoot, 'src/TypeScriptErrorsInPug.tsx')
+    const text = readFileSync(filePath, 'utf8')
+
+    const result = await checkTypes({
+      cwd: projectRoot,
+      filePaths: ['src/TypeScriptErrorsInPug.tsx'],
+      loadPluginModule,
+      loadTypeScriptModule
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.fileCount).toBe(1)
+
+    const expected = [
+      ['missingTitleValue', 2304],
+      ['missingInlineHandler', 2304],
+      ['missingInterpolationValue', 2304],
+      ['missingConditionFlag', 2304],
+      ['missingItemsSource', 2304]
+    ] as const
+
+    for (const [name, code] of expected) {
+      const start = text.indexOf(name)
+      expect(start).toBeGreaterThanOrEqual(0)
+      const { line, column } = lineAndColumnAt(text, start)
+
+      const diag = result.errors.find((item: any) => item.code === code && String(item.messageText).includes(name))
+      expect(diag, `Expected diagnostic for ${name}`).toBeDefined()
+      expect(diag!.file?.fileName).toBe(filePath)
+      expect(diag!.start).toBe(start)
+      expect(diag!.length).toBe(name.length)
+
+      const formatted = result.formattedErrors.find((lineText: string) => lineText.includes(name))
+      expect(formatted).toContain(`src/TypeScriptErrorsInPug.tsx:${line}:${column} - error TS${code}:`)
+    }
+
+    const wrongHandler = result.errors.find((item: any) =>
+      item.code === 2322
+      && item.start === text.indexOf('onClick')
+      && item.length === 'onClick'.length)
+    expect(wrongHandler).toBeDefined()
+    expect(wrongHandler!.file?.fileName).toBe(filePath)
+    expect(wrongHandler!.start).toBe(text.indexOf('onClick'))
+    expect(wrongHandler!.length).toBe('onClick'.length)
   })
 
   it('formats summary close to tsc style', () => {

@@ -27,4 +27,12 @@ export default defineConfig([
       TEST_WORKSPACE_NAME: 'example',
     },
   },
+  {
+    ...common,
+    label: 'example-unformatted',
+    workspaceFolder: path.join(repoRoot, 'test', 'fixtures', 'example-unformatted'),
+    env: {
+      TEST_WORKSPACE_NAME: 'example-unformatted',
+    },
+  },
 ]);
