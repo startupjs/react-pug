@@ -248,8 +248,14 @@ function normalizeTernaryBranchIndent(text: string): string {
       continue;
     }
 
-    if (current.iifeOpenIndex == null && trimmed.length > 0 && indent < current.branchIndent + 2) {
-      lines[i] = `${' '.repeat(current.branchIndent + 2)}${trimmed}`;
+    if (current.iifeOpenIndex == null && trimmed.length > 0) {
+      const expectedIndent = /^[<>{]/.test(trimmed)
+        ? current.branchIndent + 2
+        : current.branchIndent + 4;
+
+      if (indent < expectedIndent) {
+        lines[i] = `${' '.repeat(expectedIndent)}${trimmed}`;
+      }
     }
   }
 
