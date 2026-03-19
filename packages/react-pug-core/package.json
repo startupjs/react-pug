@@ -1,7 +1,7 @@
 {
   "name": "@react-pug/react-pug-core",
   "main": "./dist/index.js",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "types": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
@@ -13,7 +13,7 @@
   "dependencies": {
     "@babel/parser": "^7.0.0",
     "@jridgewell/gen-mapping": "^0.3.13",
-    "@react-pug/pug-lexer": "^0.1.6",
+    "@react-pug/pug-lexer": "^0.1.7",
     "@volar/source-map": "^2.4.28",
     "pug-parser": "^6.0.0",
     "pug-strip-comments": "^2.0.0"

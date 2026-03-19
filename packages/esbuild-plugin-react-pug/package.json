@@ -1,6 +1,6 @@
 {
   "name": "@react-pug/esbuild-plugin-react-pug",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "publishConfig": {
@@ -11,7 +11,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@react-pug/react-pug-core": "^0.1.6"
+    "@react-pug/react-pug-core": "^0.1.7"
   },
   "peerDependencies": {
     "esbuild": "*"

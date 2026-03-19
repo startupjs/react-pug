@@ -1,6 +1,6 @@
 {
   "name": "@react-pug/pug-lexer",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publishConfig": {
     "access": "public"
   },
@@ -9,8 +9,8 @@
     "pug"
   ],
   "dependencies": {
+    "@react-pug/is-expression": "^0.1.7",
     "character-parser": "^4.0.0",
-    "@react-pug/is-expression": "^0.1.6",
     "pug-error": "^1.3.3"
   },
   "devDependencies": {
