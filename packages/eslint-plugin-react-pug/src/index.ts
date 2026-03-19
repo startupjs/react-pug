@@ -28,6 +28,19 @@ interface EslintLintMessage {
   column?: number;
   endLine?: number;
   endColumn?: number;
+  fix?: {
+    range: [number, number];
+    text: string;
+  };
+  suggestions?: Array<{
+    desc?: string;
+    messageId?: string;
+    fix?: {
+      range: [number, number];
+      text: string;
+    };
+    [key: string]: unknown;
+  }>;
   [key: string]: unknown;
 }
 
@@ -158,54 +171,104 @@ function getLineIndent(text: string, offset: number): string {
 }
 
 function indentFormattedRegion(text: string, baseIndent: string): string {
-  if (baseIndent.length === 0) return text;
-  return text.replace(/\n/g, `\n${baseIndent}`);
+  if (baseIndent.length === 0 || text.length === 0) return text;
+
+  const lines = text.split('\n');
+  if (lines.length === 1) return text;
+
+  const isParenthesizedMultilineExpression = (
+    lines[0].trim() === '('
+    && lines[lines.length - 1].trim() === ')'
+  );
+
+  const parenthesizedBodyIndent = isParenthesizedMultilineExpression
+    ? Math.min(...lines
+      .slice(1, -1)
+      .filter(line => line.trim().length > 0)
+      .map(line => line.match(/^[ \t]*/)?.[0].length ?? 0))
+    : 0;
+
+  return lines
+    .map((line, index) => {
+      if (index === 0) return line;
+
+      if (isParenthesizedMultilineExpression && index < lines.length - 1) {
+        return `${baseIndent}  ${line.slice(parenthesizedBodyIndent)}`;
+      }
+
+      if (isParenthesizedMultilineExpression) {
+        return `${baseIndent}${line.trimStart()}`;
+      }
+
+      return `${baseIndent}${line}`;
+    })
+    .join('\n');
 }
 
 function normalizeTernaryBranchIndent(text: string): string {
   const lines = text.split('\n');
   const stack: Array<{
-    baseIndent: number;
-    closeIndent: number;
-    jsxIndent: number;
-    valueIndent: number;
+    branchIndent: number;
+    iifeOpenIndex: number | null;
   }> = [];
+
+  const getIndent = (line: string) => line.match(/^[ \t]*/)?.[0].length ?? 0;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     const trimmed = line.trim();
-    const indent = line.match(/^[ \t]*/)?.[0].length ?? 0;
-
-    while (stack.length > 0 && indent < stack[stack.length - 1].baseIndent) {
-      stack.pop();
-    }
+    const indent = getIndent(line);
 
     if (/^[?:]\s*\($/.test(trimmed)) {
-      stack.push({
-        baseIndent: indent,
-        closeIndent: indent + 2,
-        jsxIndent: indent + 2,
-        valueIndent: indent + 4,
-      });
+      stack.push({ branchIndent: indent, iifeOpenIndex: null });
       continue;
     }
 
     const current = stack[stack.length - 1];
     if (!current) continue;
 
-    if (trimmed === ')' || trimmed === ')}') {
-      if (indent < current.closeIndent) {
-        lines[i] = `${' '.repeat(current.closeIndent)}${trimmed}`;
-      }
+    if (current.iifeOpenIndex == null && (trimmed === ')' || trimmed === ')}')) {
+      lines[i] = `${' '.repeat(current.branchIndent + 2)}${trimmed}`;
       stack.pop();
       continue;
     }
 
-    const expectedIndent = /^[<{}]/.test(trimmed)
-      ? current.jsxIndent
-      : current.valueIndent;
-    if (trimmed.length > 0 && indent < expectedIndent) {
-      lines[i] = `${' '.repeat(expectedIndent)}${trimmed}`;
+    if (trimmed.startsWith('(() => {') || trimmed.startsWith('{(() => {')) {
+      current.iifeOpenIndex = i;
+      lines[i] = `${' '.repeat(current.branchIndent + 4)}${trimmed}`;
+      continue;
+    }
+
+    if (current.iifeOpenIndex != null && trimmed.startsWith('})()')) {
+      const bodyLines = lines
+        .slice(current.iifeOpenIndex + 1, i)
+        .filter(branchLine => branchLine.trim().length > 0);
+      const bodyBaseIndent = bodyLines.length > 0
+        ? Math.min(...bodyLines.map(getIndent))
+        : current.branchIndent + 2;
+
+      for (let bodyIndex = current.iifeOpenIndex + 1; bodyIndex < i; bodyIndex += 1) {
+        const bodyLine = lines[bodyIndex];
+        const bodyTrimmed = bodyLine.trim();
+        if (bodyTrimmed.length === 0) continue;
+
+        const relativeIndent = Math.max(0, getIndent(bodyLine) - bodyBaseIndent);
+        lines[bodyIndex] = `${' '.repeat(current.branchIndent + 6 + relativeIndent)}${bodyTrimmed}`;
+      }
+
+      lines[i] = `${' '.repeat(current.branchIndent + 4)}${trimmed}`;
+      current.iifeOpenIndex = null;
+      continue;
+    }
+
+    if (current.iifeOpenIndex == null && trimmed.length > 0) {
+      const expectedIndent = /^[<>{]/.test(trimmed)
+        ? current.branchIndent + 2
+        : current.branchIndent + 4;
+
+      if (indent < expectedIndent) {
+        lines[i] = `${' '.repeat(expectedIndent)}${trimmed}`;
+      }
     }
   }
 
@@ -253,15 +316,97 @@ function parseExpressionTokens(expr: string, filename: string) {
   const prefixLength = FORMAT_WRAPPER_PREFIX.length;
   const endLimit = wrapped.length - 1;
   const tokens = (ast.tokens ?? [])
-    .filter((token: any) => token.start >= prefixLength && token.end <= endLimit)
+    .filter((token: any) => {
+      if (token.start < prefixLength || token.end > endLimit) return false;
+      const rawText = wrapped.slice(token.start, token.end);
+      if (token.type?.label === 'jsxText' && rawText.trim().length === 0) return false;
+      return true;
+    })
     .map((token: any) => ({
       start: token.start - prefixLength,
       end: token.end - prefixLength,
       label: token.type?.label ?? token.type,
       value: token.value,
+      raw: wrapped.slice(token.start, token.end),
     }));
 
   return tokens;
+}
+
+function tokenAlignmentKey(token: {
+  label: string;
+  value?: unknown;
+  raw: string;
+}): string {
+  switch (token.label) {
+    case 'name':
+    case 'jsxName':
+    case 'privateName':
+      return `${token.label}:${token.raw}`;
+    case 'string':
+      return `${token.label}:${String(token.value ?? token.raw)}`;
+    case 'num':
+    case 'bigint':
+    case 'decimal':
+    case 'regexp':
+      return `${token.label}:${token.raw}`;
+    case 'jsxText':
+      return `${token.label}:${token.raw.trim()}`;
+    default:
+      return token.label;
+  }
+}
+
+function alignExpressionTokens(
+  originalTokens: Array<{
+    start: number;
+    end: number;
+    label: string;
+    value?: unknown;
+    raw: string;
+  }>,
+  formattedTokens: Array<{
+    start: number;
+    end: number;
+    label: string;
+    value?: unknown;
+    raw: string;
+  }>,
+): Array<[number, number]> {
+  const originalKeys = originalTokens.map(tokenAlignmentKey);
+  const formattedKeys = formattedTokens.map(tokenAlignmentKey);
+  const dp = Array.from({ length: originalKeys.length + 1 }, () => (
+    new Array<number>(formattedKeys.length + 1).fill(0)
+  ));
+
+  for (let i = originalKeys.length - 1; i >= 0; i -= 1) {
+    for (let j = formattedKeys.length - 1; j >= 0; j -= 1) {
+      if (originalKeys[i] === formattedKeys[j]) {
+        dp[i][j] = dp[i + 1][j + 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+  }
+
+  const matches: Array<[number, number]> = [];
+  let i = 0;
+  let j = 0;
+  while (i < originalKeys.length && j < formattedKeys.length) {
+    if (originalKeys[i] === formattedKeys[j]) {
+      matches.push([i, j]);
+      i += 1;
+      j += 1;
+      continue;
+    }
+    if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+
+  return matches;
 }
 
 function buildBoundaryMap(
@@ -272,17 +417,13 @@ function buildBoundaryMap(
   try {
     const originalTokens = parseExpressionTokens(originalExpr, filename);
     const formattedTokens = parseExpressionTokens(formattedExpr, filename);
-
-    if (originalTokens.length !== formattedTokens.length) {
-      throw new Error('token-count-mismatch');
-    }
+    const matchedTokens = alignExpressionTokens(originalTokens, formattedTokens);
+    if (matchedTokens.length === 0) throw new Error('token-alignment-empty');
 
     const anchors = [{ formatted: 0, original: 0 }];
-    for (let i = 0; i < originalTokens.length; i += 1) {
-      const original = originalTokens[i];
-      const formatted = formattedTokens[i];
-      if (original.label !== formatted.label) throw new Error('token-label-mismatch');
-
+    for (const [originalIndex, formattedIndex] of matchedTokens) {
+      const original = originalTokens[originalIndex];
+      const formatted = formattedTokens[formattedIndex];
       anchors.push({ formatted: formatted.start, original: original.start });
       anchors.push({ formatted: formatted.end, original: original.end });
     }
@@ -332,6 +473,12 @@ function formatPugRegionForLint(
   baseIndent: string,
   filename: string,
 ): { code: string; boundaryMap: number[] } {
+  const lintConfig = {
+    ...FORMAT_RULE_CONFIG,
+    ...(isTypeScriptLikeFilename(filename)
+      ? { parser: 'react-pug-typescript-parser' }
+      : {}),
+  }
   const wrapped = `${FORMAT_WRAPPER_PREFIX}${expr}\n`;
   const prettyWrapped = prettier.format(wrapped, {
     parser: isTypeScriptLikeFilename(filename) ? 'babel-ts' : 'babel',
@@ -342,12 +489,7 @@ function formatPugRegionForLint(
     bracketSameLine: false,
   });
 
-  const fixedWrapped = formatLinter.verifyAndFix(prettyWrapped, {
-    ...FORMAT_RULE_CONFIG,
-    ...(isTypeScriptLikeFilename(filename)
-      ? { parser: 'react-pug-typescript-parser' }
-      : {}),
-  }, 'pug-react.jsx').output;
+  const fixedWrapped = formatLinter.verifyAndFix(prettyWrapped, lintConfig, 'pug-react.jsx').output;
   let body = fixedWrapped.slice(FORMAT_WRAPPER_PREFIX.length);
   if (body.endsWith('\n')) body = body.slice(0, -1);
   body = indentFormattedRegion(body, baseIndent);
@@ -438,6 +580,50 @@ function mapFormattedOffsetToTransformed(
   return null;
 }
 
+function intersectsTransformedPugRegion(
+  transformed: SourceTransformState,
+  generatedStart: number,
+  generatedEnd: number,
+): boolean {
+  const end = Math.max(generatedStart, generatedEnd);
+  return transformed.document.mappedRegions.some(region => (
+    region.kind === 'pug'
+    && generatedStart < region.shadowEnd
+    && end > region.shadowStart
+  ));
+}
+
+function mapLintFix(
+  fix: EslintLintMessage['fix'] | undefined,
+  cached: CachedLintState,
+): EslintLintMessage['fix'] | undefined {
+  if (!fix) return undefined;
+
+  const generatedStart = cached.formatted
+    ? mapFormattedOffsetToTransformed(cached.formatted, fix.range[0])
+    : fix.range[0];
+  const generatedEnd = cached.formatted
+    ? mapFormattedOffsetToTransformed(cached.formatted, fix.range[1])
+    : fix.range[1];
+
+  if (generatedStart == null || generatedEnd == null) return undefined;
+  if (intersectsTransformedPugRegion(cached.transformed, generatedStart, generatedEnd)) {
+    return undefined;
+  }
+
+  const mapped = mapGeneratedRangeToOriginal(
+    cached.transformed.document,
+    generatedStart,
+    Math.max(0, generatedEnd - generatedStart),
+  );
+  if (!mapped) return undefined;
+
+  return {
+    ...fix,
+    range: [mapped.start, mapped.end],
+  };
+}
+
 function mapLintMessage(
   message: EslintLintMessage,
   cached: CachedLintState,
@@ -474,6 +660,14 @@ function mapLintMessage(
 
   const startLc = offsetToLineColumn(cached.transformed.document.originalText, mapped.start);
   const endLc = offsetToLineColumn(cached.transformed.document.originalText, mapped.end);
+  const hasTransformedPug = cached.transformed.regions.length > 0;
+  const mappedFix = hasTransformedPug ? undefined : mapLintFix(message.fix, cached);
+  const mappedSuggestions = hasTransformedPug
+    ? undefined
+    : message.suggestions?.map((suggestion) => ({
+        ...suggestion,
+        fix: mapLintFix(suggestion.fix, cached),
+      }));
 
   return {
     ...message,
@@ -481,6 +675,8 @@ function mapLintMessage(
     column: startLc.column,
     endLine: endLc.line,
     endColumn: endLc.column,
+    ...(mappedFix ? { fix: mappedFix } : {}),
+    ...(mappedSuggestions ? { suggestions: mappedSuggestions } : {}),
   };
 }
 

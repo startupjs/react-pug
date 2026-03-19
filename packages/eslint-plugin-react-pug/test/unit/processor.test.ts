@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Linter } from 'eslint';
 import plugin from '../../src/index';
 import {
@@ -7,7 +10,44 @@ import {
   expectNoTsOnlyRuntimeSyntax,
 } from '../../../react-pug-core/test/fixtures/compiler-fixtures';
 
+const require = createRequire(import.meta.url);
+const tsParser = require('@typescript-eslint/parser');
+const tsEslintPlugin = require('@typescript-eslint/eslint-plugin');
 const { createReactPugProcessor } = plugin;
+const repoRoot = resolve(__dirname, '../../../..');
+
+function lintTypeScriptNoUnusedVars(code: string, filename = 'file.tsx') {
+  const linter = new Linter({ configType: 'eslintrc' });
+  linter.defineParser('@typescript-eslint/parser', tsParser);
+  for (const [name, rule] of Object.entries(tsEslintPlugin.rules)) {
+    linter.defineRule(`@typescript-eslint/${name}`, rule as any);
+  }
+  return linter.verify(
+    code,
+    {
+      parser: '@typescript-eslint/parser',
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+      rules: {
+        '@typescript-eslint/no-unused-vars': 'error',
+      },
+    },
+    filename,
+  );
+}
+
+function offsetToLineColumn(text: string, offset: number) {
+  const before = text.slice(0, offset).split('\n');
+  return {
+    line: before.length,
+    column: before[before.length - 1].length + 1,
+  };
+}
 
 describe('eslint-plugin-react-pug processor', () => {
   it('preprocess transforms pug templates into lintable JSX/JS', () => {
@@ -150,7 +190,7 @@ describe('eslint-plugin-react-pug processor', () => {
       {
         "filename": "../../../pug-react.tsx",
         "text": "const variant = 'text' as const;
-      const view = null;",
+      const view = <Button variant={variant as 'text' | 'solid'} />;",
       }
     `);
   });
@@ -253,5 +293,234 @@ describe('eslint-plugin-react-pug processor', () => {
     const noUndef = mapped.find((m) => m.ruleId === 'no-undef' && m.message.includes('notDefinedInsideNestedPug'));
     expect(noUndef).toBeTruthy();
     expect(noUndef?.line).toBeGreaterThan(1);
+  });
+
+  it('maps exact lint ranges for identifiers inside several pug expression contexts', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  Button(label=missingLabel onClick=() => missingHandler())',
+      '  p= missingText',
+      '  if missingCondition',
+      '    span= missingInsideIf',
+      '  each item in missingItems',
+      '    span= item.name + missingSuffix',
+      '`;',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.tsx');
+    const code = typeof block === 'string' ? block : block.text;
+
+    const identifiers = [
+      'missingLabel',
+      'missingHandler',
+      'missingText',
+      'missingCondition',
+      'missingInsideIf',
+      'missingItems',
+      'missingSuffix',
+    ];
+
+    const generatedMessages = identifiers.map((identifier) => {
+      const start = code.indexOf(identifier);
+      const before = code.slice(0, start).split('\n');
+      const line = before.length;
+      const column = before[before.length - 1].length + 1;
+      const endColumn = column + identifier.length;
+      return {
+        ruleId: 'no-undef',
+        message: `'${identifier}' is not defined.`,
+        line,
+        column,
+        endLine: line,
+        endColumn,
+      };
+    });
+
+    const mapped = processor.postprocess([generatedMessages as any], 'file.tsx');
+    for (const identifier of identifiers) {
+      const lintMessage = mapped.find((message) => message.message.includes(identifier));
+      expect(lintMessage, `Expected mapped lint message for ${identifier}`).toBeTruthy();
+      const expectedStart = input.indexOf(identifier);
+      const expected = offsetToLineColumn(input, expectedStart);
+      expect(lintMessage?.line).toBe(expected.line);
+      expect(lintMessage?.column).toBe(expected.column);
+      expect(lintMessage?.endLine).toBe(expected.line);
+      expect(lintMessage?.endColumn).toBe(expected.column + identifier.length);
+    }
+  });
+
+  it('maps @typescript-eslint/no-unused-vars inside nested inline handler blocks exactly', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  each todo in activeTodos',
+      '    .todo-item(key=todo.id)',
+      '      input(type="checkbox", checked=todo.done, onChange=() => {',
+      '        const myValue = 5',
+      '        return handleToggle(todo.id)',
+      '      })',
+      '`;',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.tsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const lintMessages = lintTypeScriptNoUnusedVars(code);
+    const mapped = processor.postprocess([lintMessages as any], 'file.tsx');
+    const unused = mapped.find((message) => (
+      message.ruleId === '@typescript-eslint/no-unused-vars'
+      && message.message.includes('myValue')
+    ));
+
+    expect(unused).toBeTruthy();
+    const expectedStart = input.indexOf('myValue');
+    const expected = offsetToLineColumn(input, expectedStart);
+    expect(unused?.line).toBe(expected.line);
+    expect(unused?.column).toBe(expected.column);
+    expect(unused?.endLine).toBe(expected.line);
+    expect(unused?.endColumn).toBe(expected.column + 'myValue'.length);
+  });
+
+  it('maps @typescript-eslint/no-unused-vars correctly for the real example App inline handler shape', () => {
+    const processor = createReactPugProcessor();
+    const input = readFileSync(resolve(repoRoot, 'example/src/App.tsx'), 'utf8').replace(
+      "input(type='checkbox', checked=todo.done, onChange=() => handleToggle(todo.id))",
+      [
+        "input(type='checkbox', checked=todo.done, onChange=() => {",
+        '                const myValue = 5',
+        '                return handleToggle(todo.id)',
+        '              })',
+      ].join('\n'),
+    );
+
+    const [block] = processor.preprocess(input, 'App.tsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const lintMessages = lintTypeScriptNoUnusedVars(code, 'App.tsx');
+    const mapped = processor.postprocess([lintMessages as any], 'App.tsx');
+    const unused = mapped.find((message) => (
+      message.ruleId === '@typescript-eslint/no-unused-vars'
+      && message.message.includes('myValue')
+    ));
+
+    expect(unused).toBeTruthy();
+    const expectedStart = input.indexOf('myValue');
+    const expected = offsetToLineColumn(input, expectedStart);
+    expect(unused?.line).toBe(expected.line);
+    expect(unused?.column).toBe(expected.column);
+    expect(unused?.endLine).toBe(expected.line);
+    expect(unused?.endColumn).toBe(expected.column + 'myValue'.length);
+  });
+
+  it('drops autofix edits for files that contain transformed pug regions', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const  answer = 1;',
+      'const view = pug`Button(label="Save")`;',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.tsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const pugFixStart = code.indexOf("label='Save'");
+    const outsideFixStart = code.indexOf('const  answer');
+
+    const mapped = processor.postprocess([[
+      {
+        ruleId: '@stylistic/quotes',
+        message: 'Use single quotes.',
+        line: 2,
+        column: 28,
+        endLine: 2,
+        endColumn: 40,
+        fix: {
+          range: [pugFixStart, pugFixStart + "label='Save'".length],
+          text: "label='Save'",
+        },
+      },
+      {
+        ruleId: '@stylistic/no-multi-spaces',
+        message: 'Multiple spaces found before \'answer\'.',
+        line: 1,
+        column: 6,
+        endLine: 1,
+        endColumn: 8,
+        fix: {
+          range: [outsideFixStart + 5, outsideFixStart + 7],
+          text: ' ',
+        },
+      },
+    ] as any], 'file.tsx');
+
+    expect(mapped).toMatchInlineSnapshot(`
+      [
+        {
+          "column": 31,
+          "endColumn": 40,
+          "endLine": 2,
+          "fix": {
+            "range": [
+              40,
+              52,
+            ],
+            "text": "label='Save'",
+          },
+          "line": 2,
+          "message": "Use single quotes.",
+          "ruleId": "@stylistic/quotes",
+        },
+        {
+          "column": 6,
+          "endColumn": 8,
+          "endLine": 1,
+          "fix": {
+            "range": [
+              5,
+              7,
+            ],
+            "text": " ",
+          },
+          "line": 1,
+          "message": "Multiple spaces found before 'answer'.",
+          "ruleId": "@stylistic/no-multi-spaces",
+        },
+      ]
+    `);
+  });
+
+  it('preserves autofix edits for plain files without pug transforms', () => {
+    const processor = createReactPugProcessor();
+    const mapped = processor.postprocess([[
+      {
+        ruleId: '@stylistic/no-multi-spaces',
+        message: 'Multiple spaces found before \'answer\'.',
+        line: 1,
+        column: 6,
+        endLine: 1,
+        endColumn: 8,
+        fix: {
+          range: [5, 7],
+          text: ' ',
+        },
+      },
+    ] as any], 'file.tsx');
+
+    expect(mapped).toMatchInlineSnapshot(`
+      [
+        {
+          "column": 6,
+          "endColumn": 8,
+          "endLine": 1,
+          "fix": {
+            "range": [
+              5,
+              7,
+            ],
+            "text": " ",
+          },
+          "line": 1,
+          "message": "Multiple spaces found before 'answer'.",
+          "ruleId": "@stylistic/no-multi-spaces",
+        },
+      ]
+    `);
   });
 });

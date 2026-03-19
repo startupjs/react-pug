@@ -136,7 +136,7 @@ Fallback regex extraction is used when AST parse fails.
 
 `pugToTsx.ts` pipeline:
 
-1. lex (`@startupjs/pug-lexer`)
+1. lex (`@react-pug/pug-lexer`)
 2. strip comments
 3. parse Pug AST
 4. emit JSX/TSX text and mapping segments
