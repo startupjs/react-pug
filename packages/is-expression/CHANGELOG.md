@@ -4,6 +4,13 @@ Version 4.0.0 onwards are documented in [Releases](https://github.com/pugjs/is-e
 
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## 0.1.6 - 2026-03-19
+### Changed
+- Vendored into the `react-pug` monorepo and republished as `@react-pug/is-expression`.
+- Reset version numbering under the new `@react-pug/*` namespace.
+- Switched expression parsing to `@babel/parser` with TypeScript and JSX support.
+- Updated the package contract to validate modern JS/TS/JSX expressions for `react-pug` use cases.
+
 ## 3.0.0 - 2016-09-11
 ### Added
 - Updated to acorn ~4.0.0

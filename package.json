@@ -5,7 +5,6 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "patch-package",
     "clean:dist": "rm -rf packages/vscode-react-pug-tsx/dist packages/typescript-plugin-react-pug/dist",
     "build": "npm run clean:dist && node esbuild.config.mjs",
     "build:extension": "node esbuild.config.mjs extension",
@@ -21,9 +20,10 @@
     "test:core": "vitest run packages/react-pug-core/test",
     "test:ts-plugin": "vitest run packages/typescript-plugin-react-pug/test",
     "test:vscode:unit": "vitest run packages/vscode-react-pug-tsx/test/unit",
+    "test:vendored": "npm test --workspace @react-pug/is-expression && npm test --workspace @react-pug/pug-lexer",
     "test:unit": "npm run deps:example && npm run deps:example-unformatted && npm run build:plugin && vitest run",
     "test:example": "npm run deps:example && npm run build:plugin && npm run build:eslint-plugin && npm run check:pug:example && npm run lint:example",
-    "test": "npm run test:unit && npm run test:example && npm run test:vscode",
+    "test": "npm run test:unit && npm run test:vendored && npm run test:example && npm run test:vscode",
     "deps:example": "node scripts/ensure-workspace-deps.mjs example",
     "deps:example-unformatted": "node scripts/ensure-workspace-deps.mjs test/fixtures/example-unformatted",
     "pretest:vscode": "npm run deps:example && npm run deps:example-unformatted && npm run build",
@@ -54,7 +54,6 @@
     "eslint": "^9.39.3",
     "lerna": "^9.0.5",
     "neostandard": "^0.13.0",
-    "patch-package": "^8.0.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },

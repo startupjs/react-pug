@@ -1,3 +1,11 @@
+0.1.6 / 2026-03-19
+==================
+
+  * Vendor into the `react-pug` monorepo and republish as `@react-pug/pug-lexer`
+  * Reset version numbering under the new `@react-pug/*` namespace
+  * Switch to `@react-pug/is-expression`
+  * Add TypeScript-aware attribute and spread parsing for `react-pug`
+
 2.3.0 / 2016-09-11
 ==================
 

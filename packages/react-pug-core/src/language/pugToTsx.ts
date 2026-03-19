@@ -1824,7 +1824,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
   const classMerge = options.classMerge ?? 'concatenate';
   const componentPathFromUppercaseClassShorthand = options.componentPathFromUppercaseClassShorthand ?? true;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const lex = require('@startupjs/pug-lexer');
+  const lex = require('@react-pug/pug-lexer');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const parse = require('pug-parser');
   // eslint-disable-next-line @typescript-eslint/no-require-imports

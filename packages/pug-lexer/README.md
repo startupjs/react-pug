@@ -1,6 +1,6 @@
-# pug-lexer
+# @react-pug/pug-lexer
 
-The pug lexer.  This module is responsible for taking a string and converting it into an array of tokens.
+The Pug lexer. This module is responsible for taking a string and converting it into an array of tokens.
 
 [![Build Status](https://img.shields.io/travis/pugjs/pug-lexer/master.svg)](https://travis-ci.org/pugjs/pug-lexer)
 [![Dependencies Status](https://david-dm.org/pugjs/pug/status.svg?path=packages/pug-lexer)](https://david-dm.org/pugjs/pug?path=packages/pug-lexer)
@@ -10,12 +10,12 @@ The pug lexer.  This module is responsible for taking a string and converting it
 
 ## Installation
 
-    npm install pug-lexer
+    npm install @react-pug/pug-lexer
 
 ## Usage
 
 ```js
-var lex = require('pug-lexer');
+var lex = require('@react-pug/pug-lexer');
 ```
 
 ### `lex(str, options)`
@@ -26,6 +26,8 @@ Convert Pug string to an array of tokens.
 
 - `filename` (string): The name of the Pug file; it is used in error handling if provided.
 - `plugins` (array): An array of plugins, in the order they should be applied.
+
+For `react-pug` usage, this fork also supports modern TypeScript expression syntax inside Pug expressions and attributes, including `as`, `satisfies`, typed inline handlers, and spread attrs with TS casts.
 
 ```js
 console.log(JSON.stringify(lex('div(data-foo="bar")', {filename: 'my-file.pug'}), null, '  '))
@@ -71,3 +73,15 @@ Constructor for a Lexer class. This is not meant to be used directly unless you 
 ## License
 
   MIT
+
+## Notes
+
+- This package is maintained in the `react-pug` monorepo.
+- It is a forked, vendored copy aligned with `react-pug`'s TypeScript-in-Pug requirements.
+- Version numbering was reset under the `@react-pug/*` namespace, so `0.1.6` is newer than the older upstream-derived `4.x` package line previously used here.
+
+## Attribution
+
+This package is derived from the original `pug-lexer` package in the `pugjs/pug` monorepo:
+
+https://github.com/pugjs/pug/tree/master/packages/pug-lexer

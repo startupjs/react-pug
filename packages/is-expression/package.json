@@ -1,6 +1,6 @@
 {
-  "name": "@startupjs/is-expression",
-  "version": "4.0.0-0",
+  "name": "@react-pug/is-expression",
+  "version": "0.1.6",
   "publishConfig": {
     "access": "public"
   },
@@ -10,10 +10,12 @@
   "description": "Check if a string is a valid JavaScript expression",
   "keywords": [
     "javascript",
+    "typescript",
+    "jsx",
     "expression"
   ],
   "dependencies": {
-    "acorn": "^8.8.2",
+    "@babel/parser": "^7.0.0",
     "object-assign": "^4.1.1"
   },
   "devDependencies": {

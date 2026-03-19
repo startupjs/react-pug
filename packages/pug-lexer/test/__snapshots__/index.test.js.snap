@@ -144,7 +144,7 @@ Object {
   "code": "PUG:SYNTAX_ERROR",
   "column": 5,
   "line": 2,
-  "msg": "Syntax Error: Unterminated string constant",
+  "msg": "Syntax Error: Unterminated string constant.",
 }
 `;
 

@@ -1,7 +1,7 @@
 'use strict';
 
 var assert = require('assert');
-var isExpression = require('@startupjs/is-expression');
+var isExpression = require('@react-pug/is-expression');
 var characterParser = require('character-parser');
 var error = require('pug-error');
 
@@ -10,6 +10,24 @@ module.exports.Lexer = Lexer;
 function lex(str, options) {
   var lexer = new Lexer(str, options);
   return JSON.parse(JSON.stringify(lexer.getTokens()));
+}
+
+function startsWithTypeScriptContinuation(str, index, whitespaceRe) {
+  var rest = str.substr(index);
+  var match = /^(as|satisfies)\b/.exec(rest);
+  if (!match) return false;
+
+  var cursor = index + match[0].length;
+  while (cursor < str.length && whitespaceRe.test(str[cursor])) {
+    cursor++;
+  }
+
+  if (cursor >= str.length) return false;
+
+  var next = str[cursor];
+  if (next === '=' || next === ',' || next === ')') return false;
+
+  return true;
 }
 
 /**
@@ -1235,6 +1253,84 @@ Lexer.prototype = {
 
     var tok = this.tok('attribute');
 
+    if (!quoteRe.test(str[i]) && str.substr(i, 3) === '...') {
+      var spreadState = characterParser.defaultState();
+      var spreadValue = '';
+      var done, x;
+
+      for (; i < str.length; i++) {
+        if (!(spreadState.isNesting() || spreadState.isString())) {
+          if (this.whitespaceRe.test(str[i])) {
+            done = false;
+
+            for (x = i; x < str.length; x++) {
+              if (!this.whitespaceRe.test(str[x])) {
+                if (startsWithTypeScriptContinuation(str, x, this.whitespaceRe)) {
+                  break;
+                }
+                const isNotPunctuator = !characterParser.isPunctuator(str[x]);
+                const isQuote = quoteRe.test(str[x]);
+                const isColon = str[x] === ':';
+                const isSpreadOperator =
+                  str[x] + str[x + 1] + str[x + 2] === '...';
+                if (
+                  (isNotPunctuator || isQuote || isColon || isSpreadOperator) &&
+                  this.assertExpression(spreadValue.substr(3), true)
+                ) {
+                  done = true;
+                }
+                break;
+              }
+            }
+
+            if (done || x === str.length) {
+              break;
+            }
+          }
+
+          if (str[i] === ',' && this.assertExpression(spreadValue.substr(3), true)) {
+            break;
+          }
+        }
+
+        key += str[i];
+        spreadValue += str[i];
+
+        spreadState = characterParser.parseChar(str[i], spreadState);
+
+        if (str[i] === '\n') {
+          this.incrementLine(1);
+        } else {
+          this.incrementColumn(1);
+        }
+      }
+
+      this.assertExpression(key.substr(3));
+      tok.name = key;
+      tok.val = true;
+      tok.mustEscape = true;
+      str = str.substr(i);
+      this.tokens.push(this.tokEnd(tok));
+
+      for (i = 0; i < str.length; i++) {
+        if (!this.whitespaceRe.test(str[i])) {
+          break;
+        }
+        if (str[i] === '\n') {
+          this.incrementLine(1);
+        } else {
+          this.incrementColumn(1);
+        }
+      }
+
+      if (str[i] === ',') {
+        this.incrementColumn(1);
+        i++;
+      }
+
+      return str.substr(i);
+    }
+
     // quote?
     if (quoteRe.test(str[i])) {
       quote = str[i];
@@ -1383,6 +1479,9 @@ Lexer.prototype = {
           // find the first non-whitespace character
           for (x = i; x < str.length; x++) {
             if (!this.whitespaceRe.test(str[x])) {
+              if (startsWithTypeScriptContinuation(str, x, this.whitespaceRe)) {
+                break;
+              }
               // if it is a JavaScript punctuator, then assume that it is
               // a part of the value
               const isNotPunctuator = !characterParser.isPunctuator(str[x]);

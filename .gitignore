@@ -1,4 +1,6 @@
 node_modules
+packages/*/.nyc_output
+packages/*/coverage
 dist
 packages/*/dist
 out

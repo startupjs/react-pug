@@ -1,6 +1,6 @@
-# is-expression
+# @react-pug/is-expression
 
-Validates a string as a JavaScript expression
+Validates a string as a JavaScript, TypeScript, or JSX expression.
 
 [![Build Status](https://img.shields.io/github/workflow/status/pugjs/is-expression/Test/master)](https://github.com/pugjs/is-expression/actions?query=branch%3Amaster+workflow%3ATest)
 [![Dependency Status](https://img.shields.io/david/pugjs/is-expression.svg)](https://david-dm.org/pugjs/is-expression)
@@ -9,35 +9,25 @@ Validates a string as a JavaScript expression
 
 ## Installation
 
-    npm install is-expression
+    npm install @react-pug/is-expression
 
 ## Usage
 
 ### `isExpression(src[, options])`
 
-Validates a string as a JavaScript expression.
+Validates a string as a JavaScript, TypeScript, or JSX expression.
 
 `src` contains the source.
 
-`options` can contain any Acorn options (since we use Acorn under-the-hood),
-or any of the following:
+`options` currently supports:
 
-- `throw`: Throw an error if the string is not an expression. The error can
-  be an Acorn error, with location information in `err.loc` and `err.pos`.
+- `throw`: Throw the parser error if the string is not a valid expression.
   Defaults to `false`.
-- `strict`: Use strict mode when trying to parse the string. Defaults to
-  `false`. Even if this option is `false`, if you have provided
-  `options.sourceType === 'module'` which imples strict mode under ES2015,
-  strict mode will be used.
-- `lineComment`: When `true`, allows line comments in the expression.
-  Defaults to `false` for safety.
-
-See the examples below for usage.
 
 ## Examples
 
 ```js
-var isExpression = require('is-expression')
+var isExpression = require('@react-pug/is-expression')
 
 isExpression('myVar')
 //=> true
@@ -46,21 +36,30 @@ isExpression('var')
 isExpression('["an", "array", "\'s"].indexOf("index")')
 //=> true
 
-isExpression('var', {throw: true})
-// SyntaxError: Unexpected token (1:0)
-//     at Parser.pp.raise (acorn/dist/acorn.js:940:13)
-//     at ...
-
-isExpression('public')
+isExpression('value as string')
 //=> true
-isExpression('public', {strict: true})
-//=> false
+
+isExpression('<Button label="ok" />')
+//=> true
 
 isExpression('abc // my comment')
-//=> false
-isExpression('abc // my comment', {lineComment: true})
 //=> true
+
+isExpression('var', {throw: true})
+// SyntaxError: Unexpected token (1:0)
 ```
+
+## Notes
+
+- This package is maintained in the `react-pug` monorepo.
+- It intentionally validates modern JavaScript, TypeScript, and JSX expression syntax.
+- This fork reset version numbering under the `@react-pug/*` namespace, so `0.1.6` is newer than the old upstream-style `4.x` line used before vendoring.
+
+## Attribution
+
+This package is derived from the original `pugjs/is-expression` project:
+
+https://github.com/pugjs/is-expression
 
 ## License
 

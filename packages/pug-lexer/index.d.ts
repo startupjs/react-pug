@@ -1,4 +1,4 @@
-declare module 'pug-lexer' {
+declare module '@react-pug/pug-lexer' {
   namespace lex {
     export interface Loc {
       start: {line: number; column: number};
