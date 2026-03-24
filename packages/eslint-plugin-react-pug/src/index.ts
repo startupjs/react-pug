@@ -8,7 +8,7 @@ import {
   transformSourceFile,
 } from '@react-pug/react-pug-core';
 import { parse } from '@babel/parser';
-import { Linter } from 'eslint';
+import { Linter, SourceCode } from 'eslint';
 import stylisticPlugin from '@stylistic/eslint-plugin';
 import prettier from '@prettier/sync';
 const tsParser = require('@typescript-eslint/parser');
@@ -82,17 +82,22 @@ interface EslintProcessorLike {
 }
 
 const FORMAT_WRAPPER_PREFIX = 'const __pug = ';
-const FORMAT_RULE_CONFIG: Linter.LegacyConfig = {
-  parserOptions: {
+const FLAT_LINT_FILES = ['**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}'];
+const FORMAT_RULE_CONFIG: any = {
+  languageOptions: {
     ecmaVersion: 2022 as const,
     sourceType: 'module' as const,
-    ecmaFeatures: {
-      jsx: true,
+    parserOptions: {
+      ecmaFeatures: {
+        jsx: true,
+      },
     },
+  },
+  plugins: {
+    '@stylistic': stylisticPlugin,
   },
   rules: {
     '@stylistic/indent': ['error', 2, { SwitchCase: 1 }],
-    '@stylistic/jsx-indent': ['error', 2],
     '@stylistic/jsx-indent-props': ['error', 2],
     '@stylistic/jsx-wrap-multilines': ['error', {
       declaration: 'parens-new-line',
@@ -112,11 +117,15 @@ const FORMAT_RULE_CONFIG: Linter.LegacyConfig = {
   },
 };
 
-const formatLinter = new Linter({ configType: 'eslintrc' });
-for (const [ruleName, rule] of Object.entries(stylisticPlugin.rules)) {
-  formatLinter.defineRule(`@stylistic/${ruleName}`, rule as any);
+const formatLinter = new Linter({ configType: 'flat' });
+
+// @stylistic still calls the pre-ESLint-10 SourceCode helper. Provide the alias
+// so the latest published plugin remains usable under ESLint 10.
+if (typeof (SourceCode as any).prototype.isSpaceBetweenTokens !== 'function') {
+  (SourceCode as any).prototype.isSpaceBetweenTokens = function isSpaceBetweenTokens(left: unknown, right: unknown) {
+    return this.isSpaceBetween(left, right);
+  };
 }
-formatLinter.defineParser('react-pug-typescript-parser', tsParser as any);
 
 function isTypeScriptLikeFilename(filename: string): boolean {
   return /\.(?:ts|tsx|mts|cts)$/i.test(filename);
@@ -129,6 +138,11 @@ function isJavaScriptLikeFilename(filename: string): boolean {
 function getVirtualLintFilename(filename: string): string {
   if (isTypeScriptLikeFilename(filename)) return '../../../pug-react.tsx';
   return '../../../pug-react.jsx';
+}
+
+function getFormatterLintFilename(filename: string): string {
+  if (isTypeScriptLikeFilename(filename)) return 'pug-react.tsx';
+  return 'pug-react.jsx';
 }
 
 function astContainsJsx(node: unknown): boolean {
@@ -473,12 +487,18 @@ function formatPugRegionForLint(
   baseIndent: string,
   filename: string,
 ): { code: string; boundaryMap: number[] } {
-  const lintConfig = {
+  const lintConfig: any[] = [{
+    files: FLAT_LINT_FILES,
     ...FORMAT_RULE_CONFIG,
     ...(isTypeScriptLikeFilename(filename)
-      ? { parser: 'react-pug-typescript-parser' }
+      ? {
+        languageOptions: {
+          ...FORMAT_RULE_CONFIG.languageOptions,
+          parser: tsParser as any,
+        },
+      }
       : {}),
-  }
+  }];
   const wrapped = `${FORMAT_WRAPPER_PREFIX}${expr}\n`;
   const prettyWrapped = prettier.format(wrapped, {
     parser: isTypeScriptLikeFilename(filename) ? 'babel-ts' : 'babel',
@@ -489,7 +509,7 @@ function formatPugRegionForLint(
     bracketSameLine: false,
   });
 
-  const fixedWrapped = formatLinter.verifyAndFix(prettyWrapped, lintConfig, 'pug-react.jsx').output;
+  const fixedWrapped = formatLinter.verifyAndFix(prettyWrapped, lintConfig, getFormatterLintFilename(filename)).output;
   let body = fixedWrapped.slice(FORMAT_WRAPPER_PREFIX.length);
   if (body.endsWith('\n')) body = body.slice(0, -1);
   body = indentFormattedRegion(body, baseIndent);
@@ -670,7 +690,7 @@ function mapLintMessage(
       }));
 
   return {
-    ...message,
+    ...Object.fromEntries(Object.entries(message).filter(([key]) => key !== 'fix' && key !== 'suggestions')),
     line: startLc.line,
     column: startLc.column,
     endLine: endLc.line,
