@@ -26,7 +26,7 @@ function createExampleEslint(cwd: string, fix: boolean): ESLint {
         plugins: {
           'react-pug': reactPugPlugin as any,
         },
-        processor: 'react-pug/pug-react',
+        processor: 'react-pug/react-pug',
       },
     ] as any,
   })

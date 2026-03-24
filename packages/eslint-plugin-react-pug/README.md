@@ -17,7 +17,7 @@ export default [
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
     plugins: { 'react-pug': reactPugPlugin },
-    processor: 'react-pug/pug-react'
+    processor: 'react-pug/react-pug'
   }
 ]
 ```

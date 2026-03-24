@@ -258,7 +258,8 @@ describe('eslint-plugin-react-pug processor', () => {
   it('exports plugin with default processor', () => {
     expect(plugin).toBeTruthy();
     expect(plugin.processors).toBeTruthy();
-    expect(plugin.processors['pug-react']).toBeTruthy();
+    expect(plugin.processors['react-pug']).toBeTruthy();
+    expect(plugin.processors['pug-react']).toBeFalsy();
     expect(plugin.createReactPugProcessor).toBe(createReactPugProcessor);
   });
 

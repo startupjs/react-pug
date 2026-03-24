@@ -12,6 +12,6 @@ export default [
     plugins: {
       'react-pug': reactPugPlugin
     },
-    processor: 'react-pug/pug-react'
+    processor: 'react-pug/react-pug'
   }
 ]

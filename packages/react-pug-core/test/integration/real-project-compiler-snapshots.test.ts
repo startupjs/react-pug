@@ -83,7 +83,7 @@ function createNeostandardEslint(): ESLint {
         plugins: {
           'react-pug': reactPugEslintPlugin as any,
         },
-        processor: 'react-pug/pug-react',
+        processor: 'react-pug/react-pug',
       },
     ] as any,
   });

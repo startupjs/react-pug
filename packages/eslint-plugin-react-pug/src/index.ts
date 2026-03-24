@@ -759,7 +759,7 @@ const defaultProcessor = createReactPugProcessor();
 
 const plugin = {
   processors: {
-    'pug-react': defaultProcessor,
+    'react-pug': defaultProcessor,
   },
   createReactPugProcessor,
 };
