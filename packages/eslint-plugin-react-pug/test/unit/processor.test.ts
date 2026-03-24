@@ -15,28 +15,31 @@ const tsParser = require('@typescript-eslint/parser');
 const tsEslintPlugin = require('@typescript-eslint/eslint-plugin');
 const { createReactPugProcessor } = plugin;
 const repoRoot = resolve(__dirname, '../../../..');
+const FLAT_LINT_FILES = ['**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}'];
 
 function lintTypeScriptNoUnusedVars(code: string, filename = 'file.tsx') {
-  const linter = new Linter({ configType: 'eslintrc' });
-  linter.defineParser('@typescript-eslint/parser', tsParser);
-  for (const [name, rule] of Object.entries(tsEslintPlugin.rules)) {
-    linter.defineRule(`@typescript-eslint/${name}`, rule as any);
-  }
+  const linter = new Linter({ configType: 'flat' });
   return linter.verify(
     code,
-    {
-      parser: '@typescript-eslint/parser',
-      parserOptions: {
+    [{
+      files: FLAT_LINT_FILES,
+      plugins: {
+        '@typescript-eslint': tsEslintPlugin,
+      },
+      languageOptions: {
+        parser: tsParser,
         ecmaVersion: 2022,
         sourceType: 'module',
-        ecmaFeatures: {
-          jsx: true,
+        parserOptions: {
+          ecmaFeatures: {
+            jsx: true,
+          },
         },
       },
       rules: {
         '@typescript-eslint/no-unused-vars': 'error',
       },
-    },
+    }],
     filename,
   );
 }
@@ -222,24 +225,24 @@ describe('eslint-plugin-react-pug processor', () => {
     const [block] = processor.preprocess(input, 'file.jsx');
     const code = typeof block === 'string' ? block : block.text;
 
-    const linter = new Linter({ configType: 'eslintrc' });
+    const linter = new Linter({ configType: 'flat' });
     const lintMessages = linter.verify(
       code,
-      {
-        parserOptions: {
+      [{
+        files: FLAT_LINT_FILES,
+        languageOptions: {
           ecmaVersion: 2022,
           sourceType: 'module',
-          ecmaFeatures: {
-            jsx: true,
+          parserOptions: {
+            ecmaFeatures: {
+              jsx: true,
+            },
           },
-        },
-        env: {
-          es2022: true,
         },
         rules: {
           'no-undef': 'error',
         },
-      },
+      }],
       'file.jsx',
     );
 
@@ -268,24 +271,24 @@ describe('eslint-plugin-react-pug processor', () => {
     const [block] = processor.preprocess(input, 'file.tsx');
     const code = typeof block === 'string' ? block : block.text;
 
-    const linter = new Linter({ configType: 'eslintrc' });
+    const linter = new Linter({ configType: 'flat' });
     const lintMessages = linter.verify(
       code,
-      {
-        parserOptions: {
+      [{
+        files: FLAT_LINT_FILES,
+        languageOptions: {
           ecmaVersion: 2022,
           sourceType: 'module',
-          ecmaFeatures: {
-            jsx: true,
+          parserOptions: {
+            ecmaFeatures: {
+              jsx: true,
+            },
           },
-        },
-        env: {
-          es2022: true,
         },
         rules: {
           'no-undef': 'error',
         },
-      },
+      }],
       'file.tsx',
     );
 
@@ -456,13 +459,6 @@ describe('eslint-plugin-react-pug processor', () => {
           "column": 31,
           "endColumn": 40,
           "endLine": 2,
-          "fix": {
-            "range": [
-              40,
-              52,
-            ],
-            "text": "label='Save'",
-          },
           "line": 2,
           "message": "Use single quotes.",
           "ruleId": "@stylistic/quotes",
@@ -471,13 +467,6 @@ describe('eslint-plugin-react-pug processor', () => {
           "column": 6,
           "endColumn": 8,
           "endLine": 1,
-          "fix": {
-            "range": [
-              5,
-              7,
-            ],
-            "text": " ",
-          },
           "line": 1,
           "message": "Multiple spaces found before 'answer'.",
           "ruleId": "@stylistic/no-multi-spaces",
