@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { transformSourceFile } from '../../src/language/sourceTransform';
+import { hasTagFunctionCall } from '../../src/language/tagFunctionPresence';
 
 describe('transformSourceFile', () => {
+  it('detects matching tag function calls with a fast source-text check', () => {
+    expect(hasTagFunctionCall('const view = pug`div`;', 'pug')).toBe(true);
+    expect(hasTagFunctionCall('const view = html`div`;', 'html')).toBe(true);
+    expect(hasTagFunctionCall('const value = obj.pug`div`;', 'pug')).toBe(false);
+    expect(hasTagFunctionCall('const value = pugs`div`;', 'pug')).toBe(false);
+  });
+
   it('returns passthrough when no pug templates exist', () => {
     const source = 'const answer = 42;\nexport default answer;\n';
     const result = transformSourceFile(source, 'file.tsx');
@@ -10,6 +18,14 @@ describe('transformSourceFile', () => {
     expect(result.regions).toHaveLength(0);
     expect(result.mapGeneratedOffsetToOriginal(5)).toBe(5);
     expect(result.mapOriginalOffsetToGenerated(5)).toBe(5);
+  });
+
+  it('returns passthrough when the configured custom tag function is absent', () => {
+    const source = 'const answer = 42;\nconst view = pug`span`;\n';
+    const result = transformSourceFile(source, 'file.tsx', { tagFunction: 'html' });
+
+    expect(result.code).toBe(source);
+    expect(result.regions).toHaveLength(0);
   });
 
   it('transforms a single pug template region', () => {

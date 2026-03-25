@@ -2,6 +2,7 @@ import type ts from 'typescript';
 import {
   type PugDocument,
   buildShadowDocument,
+  hasTagFunctionCall,
   findRegionAtOriginalOffset,
   originalToShadow,
   shadowToOriginal,
@@ -151,6 +152,15 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
         try {
           const text = original.getText(0, original.getLength());
+          if (!hasTagFunctionCall(text, tagFunction)) {
+            if (docCache.has(fileName)) {
+              docCache.delete(fileName);
+              fileExtraTypesState.delete(fileName);
+              fileClassShorthandState.delete(fileName);
+            }
+            return original;
+          }
+
           const cached = docCache.get(fileName);
           const extraTypesEnabled = shouldInjectExtraReactAttributes(fileName, text);
           const classOptions = resolveClassShorthandOptions(text);

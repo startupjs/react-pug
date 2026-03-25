@@ -4,6 +4,7 @@ import type { ParseResult } from '@babel/parser';
 import type { File, TaggedTemplateExpression } from '@babel/types';
 import {
   createTransformSourceMap,
+  hasTagFunctionCall,
   mapGeneratedDiagnosticToOriginal,
   type ClassAttributeOption,
   type ClassMergeOption,
@@ -269,6 +270,7 @@ export default function babelPluginReactPug(
       Program(path: any, state: PluginPass) {
         const sourceText = state?.file?.code as string | undefined;
         if (!sourceText) return;
+        if (!hasTagFunctionCall(sourceText, tagFunction)) return;
 
         const fileName = (state?.filename as string | undefined)
           ?? (state?.file?.opts?.filename as string | undefined)
@@ -387,6 +389,9 @@ export default function babelPluginReactPug(
       parseWithBabel: (code: string, parserOpts: object) => ParseResult<File>,
     ) => {
       const fileName = parserOpts.sourceFileName ?? parserOpts.sourceFilename ?? 'file.tsx';
+      if (!hasTagFunctionCall(sourceText, tagFunction)) {
+        return parseWithBabel(sourceText, parserOpts);
+      }
       const transformed = transformReactPugSourceForBabel(sourceText, fileName, {
         tagFunction,
         mode,

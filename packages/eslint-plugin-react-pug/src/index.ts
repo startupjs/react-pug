@@ -1,6 +1,7 @@
 import {
   type ClassAttributeOption,
   type ClassMergeOption,
+  hasTagFunctionCall,
   lineColumnToOffset,
   mapGeneratedRangeToOriginal,
   offsetToLineColumn,
@@ -710,8 +711,28 @@ function createReactPugProcessor(
       text: string,
       filename: string,
     ): Array<string | { text: string; filename: string }> {
+      const configuredTagFunction = options.tagFunction ?? 'pug';
+      if (!hasTagFunctionCall(text, configuredTagFunction)) {
+        cache.delete(filename);
+        const jsLikeFilename = isJavaScriptLikeFilename(filename);
+        const shouldAlwaysVirtualizeJs = (
+          options.jsxInJsFiles === 'always'
+          && jsLikeFilename
+          && !isTypeScriptLikeFilename(filename)
+        );
+        const shouldUseVirtualJsxFilename = (
+          shouldAlwaysVirtualizeJs
+          || containsJsxSyntax(text, filename)
+        );
+        if (!shouldUseVirtualJsxFilename) return [text];
+        return [{
+          text,
+          filename: getVirtualLintFilename(filename),
+        }];
+      }
+
       const transformed = transformSourceFile(text, filename, {
-        tagFunction: options.tagFunction ?? 'pug',
+        tagFunction: configuredTagFunction,
         compileMode: 'runtime',
         requirePugImport: options.requirePugImport ?? false,
         classAttribute: options.classShorthandProperty ?? 'auto',

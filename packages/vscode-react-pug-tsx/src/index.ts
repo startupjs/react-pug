@@ -3,6 +3,7 @@ import type { StyleTagLang } from '../../react-pug-core/src/language/mapping';
 import { extractPugAnalysis } from '../../react-pug-core/src/language/extractRegions';
 import { compilePugToTsx } from '../../react-pug-core/src/language/pugToTsx';
 import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDocument';
+import { hasTagFunctionCall } from '../../react-pug-core/src/language/tagFunctionPresence';
 
 const SCHEME = 'pug-react-shadow';
 const STYLE_SCHEME = 'pug-react-style';
@@ -394,6 +395,10 @@ export function activate(context: vscode.ExtensionContext): void {
         const text = doc.getText();
         const pluginConfig = readPluginConfig();
         const tagFunction = pluginConfig.tagFunction;
+        if (!hasTagFunctionCall(text, tagFunction)) {
+          vscode.window.showInformationMessage('No pug templates found in the current file');
+          return;
+        }
         const classOptions = resolveClassShorthandOptions(text, pluginConfig);
 
         const shadow = buildShadowDocument(text, doc.fileName, 1, tagFunction, {

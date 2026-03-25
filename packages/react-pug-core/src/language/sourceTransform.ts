@@ -3,6 +3,7 @@ import { buildShadowDocument } from './shadowDocument';
 import { originalToShadow, shadowToOriginal } from './positionMapping';
 import type { ClassAttributeName, ClassMergeMode, CompileMode } from './pugToTsx';
 import { offsetToLineColumn } from './diagnosticMapping';
+import { hasTagFunctionCall } from './tagFunctionPresence';
 import {
   addSegment,
   GenMapping,
@@ -112,6 +113,41 @@ export function transformSourceFile(
   options: SourceTransformOptions = {},
 ): SourceTransformResult {
   const tagFunction = options.tagFunction ?? 'pug';
+  if (!hasTagFunctionCall(sourceText, tagFunction)) {
+    const document: PugDocument = {
+      originalText: sourceText,
+      uri: fileName,
+      regions: [],
+      importCleanups: [],
+      copySegments: [{
+        originalStart: 0,
+        originalEnd: sourceText.length,
+        shadowStart: 0,
+        shadowEnd: sourceText.length,
+      }],
+      mappedRegions: [],
+      insertions: [],
+      shadowText: sourceText,
+      version: 1,
+      regionDeltas: [],
+      usesTagFunction: false,
+      hasTagImport: false,
+      missingTagImport: null,
+    };
+
+    return {
+      code: sourceText,
+      document,
+      regions: [],
+      mapGeneratedOffsetToOriginal: (offset: number) => (
+        offset >= 0 && offset <= sourceText.length ? offset : null
+      ),
+      mapOriginalOffsetToGenerated: (offset: number) => (
+        offset >= 0 && offset <= sourceText.length ? offset : null
+      ),
+    };
+  }
+
   const startupjsCssxjs = options.startupjsCssxjs === true
     || (options.startupjsCssxjs !== false && STARTUPJS_OR_CSSXJS_RE.test(sourceText));
   const classAttribute: ClassAttributeName = (

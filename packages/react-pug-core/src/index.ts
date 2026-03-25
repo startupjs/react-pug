@@ -5,3 +5,4 @@ export * from './language/shadowDocument';
 export * from './language/positionMapping';
 export * from './language/sourceTransform';
 export * from './language/diagnosticMapping';
+export * from './language/tagFunctionPresence';

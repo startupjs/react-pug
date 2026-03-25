@@ -17,6 +17,7 @@ import {
   type StyleScopeTarget,
 } from './extractRegions';
 import { compilePugToTsx, type CompileOptions } from './pugToTsx';
+import { hasTagFunctionCall } from './tagFunctionPresence';
 
 const STARTUPJS_OR_CSSXJS_RE = /['"](?:startupjs|cssxjs)['"]/;
 
@@ -316,6 +317,29 @@ export function buildShadowDocument(
   tagName: string = 'pug',
   compileOptions: CompileOptions & { requirePugImport?: boolean; removeTagImport?: boolean } = {},
 ): PugDocument {
+  if (!hasTagFunctionCall(originalText, tagName)) {
+    return {
+      originalText,
+      uri,
+      regions: [],
+      importCleanups: [],
+      copySegments: [{
+        originalStart: 0,
+        originalEnd: originalText.length,
+        shadowStart: 0,
+        shadowEnd: originalText.length,
+      }],
+      mappedRegions: [],
+      insertions: [],
+      shadowText: originalText,
+      version,
+      regionDeltas: [],
+      usesTagFunction: false,
+      hasTagImport: false,
+      missingTagImport: null,
+    };
+  }
+
   const resolvedCompileOptions = resolveCompileOptions(originalText, compileOptions);
   const analysis = extractPugAnalysis(originalText, uri, tagName);
   const regions = analysis.regions;

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { transformSync } from '@babel/core';
+import { parse } from '@babel/parser';
 import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping';
 import babelPluginTransformReactJsx from '@babel/plugin-transform-react-jsx';
 import babelPluginReactPug, {
@@ -91,6 +92,30 @@ describe('babel-plugin-react-pug transform', () => {
   it('replaces pug tagged template with JSX expression', () => {
     const out = transform('const view = pug`Button(label=\"Save\")`;');
     expect(out).toMatchInlineSnapshot(`"const view = <Button label="Save" />;"`);
+  });
+
+  it('skips parser-time react-pug processing for files without the configured tag function', () => {
+    const plugin = babelPluginReactPug({ types: {} as any }, {
+      mode: 'runtime',
+      sourceMaps: 'detailed',
+      tagFunction: 'pug',
+    });
+    const source = 'export const answer = 42;\n';
+    const parseWithBabel = vi.fn((code: string, parserOpts: object) => parse(code, {
+      sourceType: 'module',
+      plugins: ['typescript', 'jsx'],
+      ...(parserOpts as object),
+    }));
+
+    const result = plugin.parserOverride?.(
+      source,
+      { sourceFileName: 'fixture.tsx' },
+      parseWithBabel,
+    );
+
+    expect(parseWithBabel).toHaveBeenCalledTimes(1);
+    expect(parseWithBabel).toHaveBeenCalledWith(source, { sourceFileName: 'fixture.tsx' });
+    expect(result).toBeTruthy();
   });
 
   it('supports interpolated expressions in attributes', () => {
