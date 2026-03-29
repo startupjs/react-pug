@@ -1,0 +1,16 @@
+1:19  error  @stylistic/quotes  Strings must use singlequote.
+1:26  error  @stylistic/semi  Extra semicolon.
+6:13  error  @stylistic/quotes  Strings must use singlequote.
+6:25  error  @stylistic/quotes  Strings must use singlequote.
+11:23  error  @stylistic/space-before-function-paren  Missing space before function parentheses.
+11:33  error  @stylistic/comma-spacing  A space is required after ','.
+11:39  error  @stylistic/comma-spacing  A space is required after ','.
+11:50  error  @stylistic/quotes  Strings must use singlequote.
+11:59  error  @stylistic/comma-spacing  A space is required after ','.
+11:68  error  @stylistic/comma-spacing  A space is required after ','.
+11:93  error  @stylistic/space-before-blocks  Missing space before opening brace.
+12:1  error  @stylistic/indent  Expected indentation of 2 spaces but found 0.
+13:1  error  @stylistic/jsx-indent  Expected indentation of 2 space characters but found 0.
+14:3  error  @stylistic/jsx-curly-spacing  There should be no space after '{'
+14:23  error  @stylistic/jsx-curly-spacing  There should be no space before '}'
+16:1  error  @stylistic/indent  Expected indentation of 2 spaces but found 0.

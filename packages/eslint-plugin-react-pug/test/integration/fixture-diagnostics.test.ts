@@ -1,0 +1,58 @@
+import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { ESLint } from 'eslint'
+import neostandard from 'neostandard'
+import reactPugPlugin from '../../src/index'
+
+const repoRoot = resolve(__dirname, '../../../..')
+const fixtureRoot = resolve(repoRoot, 'test/fixtures/example-unformatted')
+const diagnosticsSnapshotRoot = resolve(fixtureRoot, 'snapshots/diagnostics')
+
+function createExampleEslint(): ESLint {
+  return new ESLint({
+    cwd: fixtureRoot,
+    fix: false,
+    ignore: false,
+    overrideConfigFile: true,
+    overrideConfig: [
+      ...neostandard({
+        ts: true,
+      }),
+      {
+        plugins: {
+          'react-pug': reactPugPlugin as any,
+        },
+        processor: 'react-pug/react-pug',
+      },
+    ] as any,
+  })
+}
+
+function formatMessagesForSnapshot(messages: Awaited<ReturnType<ESLint['lintFiles']>>[number]['messages']): string {
+  if (messages.length === 0) return 'No diagnostics.\n'
+
+  const lines = messages.map(message => {
+    const line = message.line ?? 0
+    const column = message.column ?? 0
+    const severity = message.severity === 2 ? 'error' : 'warning'
+    const ruleId = message.ruleId ?? '(no rule)'
+    return `${line}:${column}  ${severity}  ${ruleId}  ${message.message}`
+  })
+
+  return `${lines.join('\n')}\n`
+}
+
+describe('eslint diagnostics for example-unformatted fixture', () => {
+  it('snapshots pre-fix diagnostics per file and suppresses synthetic style-call warnings', async () => {
+    const results = await createExampleEslint().lintFiles(['src/**/*.{ts,tsx}'])
+
+    for (const result of results) {
+      const relativePath = result.filePath.replace(/.*\/src\//, 'src/')
+      await expect(formatMessagesForSnapshot(result.messages))
+        .toMatchFileSnapshot(resolve(diagnosticsSnapshotRoot, `${relativePath}.txt`))
+    }
+
+    const modalScreen = results.find(result => result.filePath.endsWith('/src/ModalScreen.tsx'))
+    expect(modalScreen?.messages.some(message => message.ruleId === 'no-unused-expressions')).toBe(false)
+  }, 30000)
+})

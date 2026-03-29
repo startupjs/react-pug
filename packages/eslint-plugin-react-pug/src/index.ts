@@ -645,10 +645,22 @@ function mapLintFix(
   };
 }
 
+function isSyntheticStyleCallRange(
+  cached: CachedLintState,
+  generatedStart: number,
+  generatedEnd: number,
+): boolean {
+  return cached.transformed.document.insertions.some(insertion => (
+    insertion.kind === 'style-call'
+    && generatedStart >= insertion.shadowStart
+    && generatedEnd <= insertion.shadowEnd
+  ));
+}
+
 function mapLintMessage(
   message: EslintLintMessage,
   cached: CachedLintState,
-): EslintLintMessage {
+): EslintLintMessage | null {
   if (message.line == null || message.column == null) return message;
 
   const generatedStart = cached.formatted
@@ -670,6 +682,10 @@ function mapLintMessage(
       )
     : generatedStart + 1;
   if (generatedEnd == null) return message;
+
+  if (isSyntheticStyleCallRange(cached, generatedStart, generatedEnd)) {
+    return null;
+  }
 
   const mapped = mapGeneratedRangeToOriginal(
     cached.transformed.document,
@@ -769,7 +785,9 @@ function createReactPugProcessor(
       if (!cached) return flat;
       if (cached.transformed.regions.length === 0) return flat;
 
-      return flat.map((msg) => mapLintMessage(msg, cached));
+      return flat
+        .map((msg) => mapLintMessage(msg, cached))
+        .filter((msg): msg is EslintLintMessage => msg != null);
     },
 
     supportsAutofix: true,

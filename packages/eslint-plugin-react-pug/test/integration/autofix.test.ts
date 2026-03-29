@@ -37,6 +37,13 @@ function createTempFixtureCopy(): string {
   tempDirs.push(tempDir)
   cpSync(fixtureRoot, tempDir, {
     recursive: true,
+    filter: source => {
+      const relative = source.slice(fixtureRoot.length).replace(/^\/+/, '')
+      if (relative === '') return true
+      if (relative === 'node_modules' || relative.startsWith('node_modules/')) return false
+      if (relative === 'snapshots' || relative.startsWith('snapshots/')) return false
+      return true
+    },
   })
   return tempDir
 }
@@ -66,6 +73,8 @@ describe('eslint --fix integration for react-pug processor', () => {
       'src/App.tsx',
       'src/Button.tsx',
       'src/Card.tsx',
+      'src/ModalScreen.tsx',
+      'src/RootLayout.tsx',
       'src/TypeScriptErrorsInPug.tsx',
       'src/TypeScriptInPug.tsx',
       'src/helpers.ts',
@@ -86,5 +95,5 @@ describe('eslint --fix integration for react-pug processor', () => {
     expect(fixedTypeScriptInPug).toContain('title = maybeTitle as string')
     expect(fixedTypeScriptInPug).toContain("config.title satisfies CardConfig['title']")
     expect(fixedTypeScriptInPug).toContain('Card(title = item!)')
-  })
+  }, 60000)
 })

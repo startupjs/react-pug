@@ -1,0 +1,12 @@
+1:82  error  @stylistic/semi  Extra semicolon.
+2:36  error  @stylistic/semi  Extra semicolon.
+3:44  error  @stylistic/semi  Extra semicolon.
+5:33  error  @stylistic/semi  Extra semicolon.
+7:58  error  @stylistic/semi  Extra semicolon.
+12:2  error  @stylistic/semi  Extra semicolon.
+14:35  error  @stylistic/space-before-function-paren  Missing space before function parentheses.
+15:39  error  @stylistic/semi  Extra semicolon.
+21:30  error  @stylistic/jsx-quotes  Unexpected usage of doublequote.
+22:30  error  @stylistic/jsx-quotes  Unexpected usage of doublequote.
+24:26  error  @stylistic/jsx-quotes  Unexpected usage of doublequote.
+27:4  error  @stylistic/semi  Extra semicolon.
