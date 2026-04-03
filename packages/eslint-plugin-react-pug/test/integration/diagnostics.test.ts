@@ -16,6 +16,100 @@ function offsetToLineColumn(text: string, offset: number) {
 }
 
 describe('eslint processor diagnostic mapping', () => {
+  it('suppresses legacy styl tagged-template statement warnings', async () => {
+    const filePath = resolve(repoRoot, 'legacy-styl.js')
+    const input = [
+      "import { pug, styl } from 'startupjs'",
+      '',
+      'export default function Demo () {',
+      '  return pug`',
+      '    div Hello',
+      '  `',
+      '  styl`',
+      '    .root',
+      '      color red',
+      '  `',
+      '}',
+      '',
+    ].join('\n')
+
+    const eslint = new ESLint({
+      cwd: repoRoot,
+      fix: false,
+      ignore: false,
+      overrideConfigFile: true,
+      overrideConfig: [
+        ...neostandard({
+          ts: true,
+        }),
+        {
+          plugins: {
+            'react-pug': reactPugPlugin as any,
+          },
+          processor: 'react-pug/react-pug',
+        },
+      ] as any,
+    })
+
+    const [result] = await eslint.lintText(input, { filePath })
+    expect(result.messages.some(message => message.ruleId === 'no-unused-expressions')).toBe(false)
+    expect(result.messages.some(message => message.ruleId === 'no-unreachable')).toBe(false)
+  })
+
+  it('formats transformed pug control flow without stylistic indent diagnostics', async () => {
+    const filePath = resolve(repoRoot, 'indent-artifact.js')
+    const input = [
+      "import { pug, observer, styl } from 'startupjs'",
+      "import { Button, Tag } from 'startupjs-ui'",
+      '',
+      'const providers = [\'github\']',
+      '',
+      'export default observer(function Demo () {',
+      '  const auth = { github: { scopes: { get: () => [\'read:user\'] } } }',
+      '  return pug`',
+      '    each provider in providers',
+      '      Button(',
+      '        key=provider',
+      '      ) Press',
+      "      if provider === 'github'",
+      "        if auth.github.scopes.get()?.includes('read:user')",
+      "          Tag(color='success') ok",
+      '        else',
+      '          Button(',
+      "            key=provider + '_grant'",
+      "            onPress=() => provider",
+      '          ) Grant',
+      '  `',
+      '  styl`',
+      '    .button',
+      '      width 30u',
+      '  `',
+      '})',
+      '',
+    ].join('\n')
+
+    const eslint = new ESLint({
+      cwd: repoRoot,
+      fix: false,
+      ignore: false,
+      overrideConfigFile: true,
+      overrideConfig: [
+        ...neostandard({
+          ts: true,
+        }),
+        {
+          plugins: {
+            'react-pug': reactPugPlugin as any,
+          },
+          processor: 'react-pug/react-pug',
+        },
+      ] as any,
+    })
+
+    const [result] = await eslint.lintText(input, { filePath })
+    expect(result.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
+  })
+
   it('maps no-unused-vars in the real example App inline handler block to the exact pug location', async () => {
     const filePath = resolve(repoRoot, 'example/src/App.tsx')
     const input = readFileSync(filePath, 'utf8').replace(

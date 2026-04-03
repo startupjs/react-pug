@@ -5,3 +5,7 @@ export function pug(_strings: TemplateStringsArray,..._values:any[]): any{
 export function css(_strings: TemplateStringsArray,..._values:any[]): any{
   return null;
 }
+
+export function styl(_strings: TemplateStringsArray,..._values:any[]): any{
+  return null;
+}

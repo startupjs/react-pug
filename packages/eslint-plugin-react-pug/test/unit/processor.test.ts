@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Linter } from 'eslint';
+import stylisticPlugin from '@stylistic/eslint-plugin';
 import plugin from '../../src/index';
 import {
   COMPILER_JS_RUNTIME_SOURCE,
@@ -38,6 +39,88 @@ function lintTypeScriptNoUnusedVars(code: string, filename = 'file.tsx') {
       },
       rules: {
         '@typescript-eslint/no-unused-vars': 'error',
+      },
+    }],
+    filename,
+  );
+}
+
+function lintStylisticIndent(code: string, filename = 'file.jsx') {
+  const linter = new Linter({ configType: 'flat' });
+  return linter.verify(
+    code,
+    [{
+      files: FLAT_LINT_FILES,
+      plugins: {
+        '@stylistic': stylisticPlugin as any,
+      },
+      languageOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        parserOptions: {
+          ecmaFeatures: {
+            jsx: true,
+          },
+        },
+      },
+      rules: {
+        '@stylistic/indent': ['error', 2, {
+          SwitchCase: 1,
+          VariableDeclarator: 1,
+          outerIIFEBody: 1,
+          MemberExpression: 1,
+          FunctionDeclaration: {
+            parameters: 1,
+            body: 1,
+          },
+          FunctionExpression: {
+            parameters: 1,
+            body: 1,
+          },
+          CallExpression: {
+            arguments: 1,
+          },
+          ArrayExpression: 1,
+          ObjectExpression: 1,
+          ImportDeclaration: 1,
+          flatTernaryExpressions: false,
+          ignoreComments: false,
+          ignoredNodes: [
+            'TemplateLiteral *',
+            'JSXElement',
+            'JSXElement > *',
+            'JSXAttribute',
+            'JSXIdentifier',
+            'JSXNamespacedName',
+            'JSXMemberExpression',
+            'JSXSpreadAttribute',
+            'JSXExpressionContainer',
+            'JSXOpeningElement',
+            'JSXClosingElement',
+            'JSXFragment',
+            'JSXOpeningFragment',
+            'JSXClosingFragment',
+            'JSXText',
+            'JSXEmptyExpression',
+            'JSXSpreadChild',
+          ],
+          offsetTernaryExpressions: true,
+        }],
+        '@stylistic/jsx-indent': ['error', 2],
+        '@stylistic/jsx-indent-props': ['error', 2],
+        '@stylistic/jsx-wrap-multilines': ['error', {
+          declaration: 'parens-new-line',
+          assignment: 'parens-new-line',
+          return: 'parens-new-line',
+          arrow: 'parens-new-line',
+          condition: 'parens-new-line',
+          logical: 'parens-new-line',
+          prop: 'ignore',
+        }],
+        '@stylistic/jsx-first-prop-new-line': ['error', 'multiline-multiprop'],
+        '@stylistic/jsx-closing-bracket-location': ['error', 'tag-aligned'],
+        '@stylistic/jsx-closing-tag-location': 'error',
+        '@stylistic/multiline-ternary': ['error', 'always-multiline'],
       },
     }],
     filename,
@@ -168,6 +251,41 @@ describe('eslint-plugin-react-pug processor', () => {
         return <Card title='Hello' subtitle={condition ? value : fallback} />
       }"
     `);
+  });
+
+  it('suppresses legacy styl warnings without hiding normal linting', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      "import { pug, styl } from 'startupjs'",
+      '',
+      'export default function Demo () {',
+      '  return pug`',
+      '    div Hello',
+      '  `',
+      '  styl`',
+      '    .root',
+      '      color red',
+      '  `',
+      '}',
+    ].join('\n');
+
+    processor.preprocess(input, 'file.js');
+    const stylStart = input.indexOf('styl`');
+    const stylEnd = input.lastIndexOf('`') + 1;
+    const start = offsetToLineColumn(input, stylStart);
+    const end = offsetToLineColumn(input, stylEnd);
+    const mapped = processor.postprocess([[
+      {
+        ruleId: 'no-unused-expressions',
+        message: 'Expected an assignment or function call and instead saw an expression.',
+        line: start.line,
+        column: start.column,
+        endLine: end.line,
+        endColumn: end.column,
+      },
+    ] as any], 'file.js');
+
+    expect(mapped).toEqual([]);
   });
 
   it('uses a TSX virtual filename for transformed TypeScript files', () => {
@@ -413,6 +531,45 @@ describe('eslint-plugin-react-pug processor', () => {
     expect(unused?.column).toBe(expected.column);
     expect(unused?.endLine).toBe(expected.line);
     expect(unused?.endColumn).toBe(expected.column + 'myValue'.length);
+  });
+
+  it('formats nested ternary branches from pug control flow without stylistic indent errors', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      "import { pug, observer, styl } from 'startupjs'",
+      "import { Button, Tag } from 'startupjs-ui'",
+      '',
+      "const providers = ['github']",
+      '',
+      'export default observer(function Demo () {',
+      "  const auth = { github: { scopes: { get: () => ['read:user'] } } }",
+      '  return pug`',
+      '    each provider in providers',
+      '      Button(',
+      '        key=provider',
+      '      ) Press',
+      "      if provider === 'github'",
+      "        if auth.github.scopes.get()?.includes('read:user')",
+      "          Tag(color='success') ok",
+      '        else',
+      '          Button(',
+      "            key=provider + '_grant'",
+      "            onPress=() => login('github', { extraScopes: ['read:user'] })",
+      '          ) Grant',
+      '  `',
+      '  styl`',
+      '    .button',
+      '      width 30u',
+      '  `',
+      '})',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.js');
+    const code = typeof block === 'string' ? block : block.text;
+    const lintMessages = lintStylisticIndent(code, 'file.jsx');
+    const mapped = processor.postprocess([lintMessages as any], 'file.js');
+
+    expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
   });
 
   it('drops autofix edits for files that contain transformed pug regions', () => {

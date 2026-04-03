@@ -62,10 +62,10 @@ describe('eslint --fix integration for react-pug processor', () => {
   it('does not corrupt files and produces lint-clean output for an unformatted example fixture', async () => {
     const tempDir = createTempFixtureCopy()
 
-    const firstPass = await createExampleEslint(tempDir, true).lintFiles(['src/**/*.{ts,tsx}'])
+    const firstPass = await createExampleEslint(tempDir, true).lintFiles(['src/**/*.{js,jsx,ts,tsx}'])
     await ESLint.outputFixes(firstPass)
 
-    const secondPass = await createExampleEslint(tempDir, false).lintFiles(['src/**/*.{ts,tsx}'])
+    const secondPass = await createExampleEslint(tempDir, false).lintFiles(['src/**/*.{js,jsx,ts,tsx}'])
     const allMessages = secondPass.flatMap(result => result.messages)
     expect(allMessages).toEqual([])
 
@@ -75,6 +75,8 @@ describe('eslint --fix integration for react-pug processor', () => {
       'src/Card.tsx',
       'src/ModalScreen.tsx',
       'src/RootLayout.tsx',
+      'src/StartupjsLogin.js',
+      'src/StartupjsTabThree.js',
       'src/TypeScriptErrorsInPug.tsx',
       'src/TypeScriptInPug.tsx',
       'src/helpers.ts',
