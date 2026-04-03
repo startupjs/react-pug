@@ -44,7 +44,7 @@ function formatMessagesForSnapshot(messages: Awaited<ReturnType<ESLint['lintFile
 
 describe('eslint diagnostics for example-unformatted fixture', () => {
   it('snapshots pre-fix diagnostics per file and suppresses synthetic style-call warnings', async () => {
-    const results = await createExampleEslint().lintFiles(['src/**/*.{ts,tsx}'])
+    const results = await createExampleEslint().lintFiles(['src/**/*.{js,jsx,ts,tsx}'])
 
     for (const result of results) {
       const relativePath = result.filePath.replace(/.*\/src\//, 'src/')
@@ -54,5 +54,11 @@ describe('eslint diagnostics for example-unformatted fixture', () => {
 
     const modalScreen = results.find(result => result.filePath.endsWith('/src/ModalScreen.tsx'))
     expect(modalScreen?.messages.some(message => message.ruleId === 'no-unused-expressions')).toBe(false)
+
+    const startupjsTabThree = results.find(result => result.filePath.endsWith('/src/StartupjsTabThree.js'))
+    expect(startupjsTabThree?.messages.some(message => message.ruleId === '@stylistic/jsx-indent')).toBe(false)
+
+    const startupjsLogin = results.find(result => result.filePath.endsWith('/src/StartupjsLogin.js'))
+    expect(startupjsLogin?.messages.some(message => message.ruleId === '@stylistic/jsx-indent')).toBe(false)
   }, 30000)
 })

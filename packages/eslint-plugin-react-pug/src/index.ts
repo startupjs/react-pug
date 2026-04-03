@@ -68,9 +68,16 @@ interface FormattedLintCode {
   regionSegments: FormattedRegionSegment[];
 }
 
+interface OffsetRange {
+  start: number;
+  end: number;
+}
+
 interface CachedLintState {
-  transformed: SourceTransformState;
+  originalText: string;
+  transformed: SourceTransformState | null;
   formatted: FormattedLintCode | null;
+  legacyStyleStatementRanges: OffsetRange[];
 }
 
 interface EslintProcessorLike {
@@ -84,6 +91,8 @@ interface EslintProcessorLike {
 
 const FORMAT_WRAPPER_PREFIX = 'const __pug = ';
 const FLAT_LINT_FILES = ['**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}'];
+const LEGACY_STYLE_HELPERS = new Set(['styl', 'css', 'sass', 'scss']);
+const LEGACY_STYLE_SUPPRESSED_RULES = new Set(['no-unused-expressions', 'no-unreachable']);
 const FORMAT_RULE_CONFIG: any = {
   languageOptions: {
     ecmaVersion: 2022 as const,
@@ -98,7 +107,49 @@ const FORMAT_RULE_CONFIG: any = {
     '@stylistic': stylisticPlugin,
   },
   rules: {
-    '@stylistic/indent': ['error', 2, { SwitchCase: 1 }],
+    '@stylistic/indent': ['error', 2, {
+      SwitchCase: 1,
+      VariableDeclarator: 1,
+      outerIIFEBody: 1,
+      MemberExpression: 1,
+      FunctionDeclaration: {
+        parameters: 1,
+        body: 1,
+      },
+      FunctionExpression: {
+        parameters: 1,
+        body: 1,
+      },
+      CallExpression: {
+        arguments: 1,
+      },
+      ArrayExpression: 1,
+      ObjectExpression: 1,
+      ImportDeclaration: 1,
+      flatTernaryExpressions: false,
+      ignoreComments: false,
+      ignoredNodes: [
+        'TemplateLiteral *',
+        'JSXElement',
+        'JSXElement > *',
+        'JSXAttribute',
+        'JSXIdentifier',
+        'JSXNamespacedName',
+        'JSXMemberExpression',
+        'JSXSpreadAttribute',
+        'JSXExpressionContainer',
+        'JSXOpeningElement',
+        'JSXClosingElement',
+        'JSXFragment',
+        'JSXOpeningFragment',
+        'JSXClosingFragment',
+        'JSXText',
+        'JSXEmptyExpression',
+        'JSXSpreadChild',
+      ],
+      offsetTernaryExpressions: true,
+    }],
+    '@stylistic/jsx-indent': ['error', 2],
     '@stylistic/jsx-indent-props': ['error', 2],
     '@stylistic/jsx-wrap-multilines': ['error', {
       declaration: 'parens-new-line',
@@ -179,6 +230,49 @@ function containsJsxSyntax(text: string, filename: string): boolean {
   }
 }
 
+function collectLegacyStyleStatementRanges(text: string, filename: string): OffsetRange[] {
+  try {
+    const ast = parse(text, {
+      sourceType: 'module',
+      plugins: [
+        'jsx',
+        'decorators-legacy',
+        ...(isTypeScriptLikeFilename(filename) ? ['typescript'] : []),
+      ] as any,
+      errorRecovery: false,
+    }) as any;
+
+    const ranges: OffsetRange[] = [];
+    const visit = (node: any) => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        for (const child of node) visit(child);
+        return;
+      }
+
+      if (
+        node.type === 'ExpressionStatement'
+        && node.expression?.type === 'TaggedTemplateExpression'
+        && node.expression.tag?.type === 'Identifier'
+        && LEGACY_STYLE_HELPERS.has(node.expression.tag.name)
+        && typeof node.start === 'number'
+        && typeof node.end === 'number'
+      ) {
+        ranges.push({ start: node.start, end: node.end });
+      }
+
+      for (const value of Object.values(node)) {
+        visit(value);
+      }
+    };
+
+    visit(ast.program);
+    return ranges;
+  } catch {
+    return [];
+  }
+}
+
 function getLineIndent(text: string, offset: number): string {
   const lineStart = text.lastIndexOf('\n', Math.max(0, offset - 1)) + 1;
   const lineText = text.slice(lineStart, text.indexOf('\n', lineStart) >= 0 ? text.indexOf('\n', lineStart) : text.length);
@@ -191,12 +285,15 @@ function indentFormattedRegion(text: string, baseIndent: string): string {
   const lines = text.split('\n');
   if (lines.length === 1) return text;
 
-  const isParenthesizedMultilineExpression = (
-    lines[0].trim() === '('
-    && lines[lines.length - 1].trim() === ')'
+  const firstTrimmed = lines[0].trim();
+  const lastTrimmed = lines[lines.length - 1].trim();
+  const isStructuredMultilineExpression = (
+    (firstTrimmed === '(' && lastTrimmed === ')')
+    || (firstTrimmed.startsWith('(() => {') && lastTrimmed.startsWith('})()'))
+    || (firstTrimmed.startsWith('<') && (lastTrimmed.startsWith('</') || lastTrimmed === '/>' || lastTrimmed === '>'))
   );
 
-  const parenthesizedBodyIndent = isParenthesizedMultilineExpression
+  const structuredBodyIndent = isStructuredMultilineExpression
     ? Math.min(...lines
       .slice(1, -1)
       .filter(line => line.trim().length > 0)
@@ -207,11 +304,11 @@ function indentFormattedRegion(text: string, baseIndent: string): string {
     .map((line, index) => {
       if (index === 0) return line;
 
-      if (isParenthesizedMultilineExpression && index < lines.length - 1) {
-        return `${baseIndent}  ${line.slice(parenthesizedBodyIndent)}`;
+      if (isStructuredMultilineExpression && index < lines.length - 1) {
+        return `${baseIndent}  ${line.slice(structuredBodyIndent)}`;
       }
 
-      if (isParenthesizedMultilineExpression) {
+      if (isStructuredMultilineExpression) {
         return `${baseIndent}${line.trimStart()}`;
       }
 
@@ -513,9 +610,17 @@ function formatPugRegionForLint(
   const fixedWrapped = formatLinter.verifyAndFix(prettyWrapped, lintConfig, getFormatterLintFilename(filename)).output;
   let body = fixedWrapped.slice(FORMAT_WRAPPER_PREFIX.length);
   if (body.endsWith('\n')) body = body.slice(0, -1);
-  body = indentFormattedRegion(body, baseIndent);
   body = normalizeTernaryBranchIndent(body);
   body = normalizeJsxClosingBracketIndent(body);
+  const normalizedWrapped = `${FORMAT_WRAPPER_PREFIX}${body}\n`;
+  const refixedWrapped = formatLinter.verifyAndFix(
+    normalizedWrapped,
+    lintConfig,
+    getFormatterLintFilename(filename),
+  ).output;
+  body = refixedWrapped.slice(FORMAT_WRAPPER_PREFIX.length);
+  if (body.endsWith('\n')) body = body.slice(0, -1);
+  body = indentFormattedRegion(body, baseIndent);
 
   return {
     code: body,
@@ -602,10 +707,11 @@ function mapFormattedOffsetToTransformed(
 }
 
 function intersectsTransformedPugRegion(
-  transformed: SourceTransformState,
+  transformed: SourceTransformState | null,
   generatedStart: number,
   generatedEnd: number,
 ): boolean {
+  if (!transformed) return false;
   const end = Math.max(generatedStart, generatedEnd);
   return transformed.document.mappedRegions.some(region => (
     region.kind === 'pug'
@@ -619,6 +725,7 @@ function mapLintFix(
   cached: CachedLintState,
 ): EslintLintMessage['fix'] | undefined {
   if (!fix) return undefined;
+  if (!cached.transformed) return undefined;
 
   const generatedStart = cached.formatted
     ? mapFormattedOffsetToTransformed(cached.formatted, fix.range[0])
@@ -645,11 +752,33 @@ function mapLintFix(
   };
 }
 
+function overlapsRangeList(ranges: OffsetRange[], start: number, end: number): boolean {
+  return ranges.some(range => start < range.end && end > range.start);
+}
+
+function shouldSuppressOriginalRangeMessage(
+  cached: CachedLintState,
+  message: EslintLintMessage,
+  start: number,
+  end: number,
+): boolean {
+  if (
+    typeof message.ruleId === 'string'
+    && LEGACY_STYLE_SUPPRESSED_RULES.has(message.ruleId)
+    && overlapsRangeList(cached.legacyStyleStatementRanges, start, end)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function isSyntheticStyleCallRange(
   cached: CachedLintState,
   generatedStart: number,
   generatedEnd: number,
 ): boolean {
+  if (!cached.transformed) return false;
   return cached.transformed.document.insertions.some(insertion => (
     insertion.kind === 'style-call'
     && generatedStart >= insertion.shadowStart
@@ -657,10 +786,33 @@ function isSyntheticStyleCallRange(
   ));
 }
 
+function shouldSuppressGeneratedRangeMessage(
+  cached: CachedLintState,
+  message: EslintLintMessage,
+  generatedStart: number,
+  generatedEnd: number,
+): boolean {
+  if (isSyntheticStyleCallRange(cached, generatedStart, generatedEnd)) {
+    return true;
+  }
+  return false;
+}
+
 function mapLintMessage(
   message: EslintLintMessage,
   cached: CachedLintState,
 ): EslintLintMessage | null {
+  if (!cached.transformed) {
+    if (message.line == null || message.column == null) return message;
+    const start = lineColumnToOffset(cached.originalText, message.line, message.column);
+    const end = (message.endLine != null && message.endColumn != null)
+      ? lineColumnToOffset(cached.originalText, message.endLine, message.endColumn)
+      : start + 1;
+    return shouldSuppressOriginalRangeMessage(cached, message, start, Math.max(start + 1, end))
+      ? null
+      : message;
+  }
+
   if (message.line == null || message.column == null) return message;
 
   const generatedStart = cached.formatted
@@ -683,7 +835,7 @@ function mapLintMessage(
     : generatedStart + 1;
   if (generatedEnd == null) return message;
 
-  if (isSyntheticStyleCallRange(cached, generatedStart, generatedEnd)) {
+  if (shouldSuppressGeneratedRangeMessage(cached, message, generatedStart, generatedEnd)) {
     return null;
   }
 
@@ -694,9 +846,12 @@ function mapLintMessage(
   );
 
   if (!mapped) return message;
+  if (shouldSuppressOriginalRangeMessage(cached, message, mapped.start, mapped.end)) {
+    return null;
+  }
 
-  const startLc = offsetToLineColumn(cached.transformed.document.originalText, mapped.start);
-  const endLc = offsetToLineColumn(cached.transformed.document.originalText, mapped.end);
+  const startLc = offsetToLineColumn(cached.originalText, mapped.start);
+  const endLc = offsetToLineColumn(cached.originalText, mapped.end);
   const hasTransformedPug = cached.transformed.regions.length > 0;
   const mappedFix = hasTransformedPug ? undefined : mapLintFix(message.fix, cached);
   const mappedSuggestions = hasTransformedPug
@@ -728,8 +883,8 @@ function createReactPugProcessor(
       filename: string,
     ): Array<string | { text: string; filename: string }> {
       const configuredTagFunction = options.tagFunction ?? 'pug';
+      const legacyStyleStatementRanges = collectLegacyStyleStatementRanges(text, filename);
       if (!hasTagFunctionCall(text, configuredTagFunction)) {
-        cache.delete(filename);
         const jsLikeFilename = isJavaScriptLikeFilename(filename);
         const shouldAlwaysVirtualizeJs = (
           options.jsxInJsFiles === 'always'
@@ -740,6 +895,16 @@ function createReactPugProcessor(
           shouldAlwaysVirtualizeJs
           || containsJsxSyntax(text, filename)
         );
+        if (legacyStyleStatementRanges.length > 0) {
+          cache.set(filename, {
+            originalText: text,
+            transformed: null,
+            formatted: null,
+            legacyStyleStatementRanges,
+          });
+        } else {
+          cache.delete(filename);
+        }
         if (!shouldUseVirtualJsxFilename) return [text];
         return [{
           text,
@@ -769,7 +934,12 @@ function createReactPugProcessor(
         || containsJsxSyntax(text, filename)
       );
       const formatted = hasTransformedPug ? formatLintCode(transformed, filename) : null;
-      cache.set(filename, { transformed, formatted });
+      cache.set(filename, {
+        originalText: text,
+        transformed,
+        formatted,
+        legacyStyleStatementRanges,
+      });
       if (!shouldUseVirtualJsxFilename) return [transformed.code];
       return [{
         text: hasTransformedPug ? (formatted?.code ?? transformed.code) : transformed.code,
@@ -783,7 +953,6 @@ function createReactPugProcessor(
 
       const flat = messages.flat();
       if (!cached) return flat;
-      if (cached.transformed.regions.length === 0) return flat;
 
       return flat
         .map((msg) => mapLintMessage(msg, cached))

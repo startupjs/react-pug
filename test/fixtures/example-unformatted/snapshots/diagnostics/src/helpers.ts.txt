@@ -6,3 +6,7 @@
 5:51  error  @stylistic/comma-spacing  A space is required after ','.
 5:74  error  @stylistic/space-before-blocks  Missing space before opening brace.
 6:14  error  @stylistic/semi  Extra semicolon.
+9:21  error  @stylistic/space-before-function-paren  Missing space before function parentheses.
+9:52  error  @stylistic/comma-spacing  A space is required after ','.
+9:75  error  @stylistic/space-before-blocks  Missing space before opening brace.
+10:14  error  @stylistic/semi  Extra semicolon.
