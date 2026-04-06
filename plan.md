@@ -1,4 +1,4 @@
-# ESLint / Core Architecture Revamp Plan
+# Core / ESLint / TS / VSCode Architecture Revamp Plan
 
 ## Context
 We found recurring false positives in real consumer repos (`../startupjs`, `../startupjs-ui`) even when the runtime transform was semantically correct:
@@ -238,6 +238,178 @@ The specific implementation target for this branch is:
   - local expression token alignment helpers
 - core lint transform now also exposes structural `formattingContext` metadata per rewritten Pug region, and the ESLint plugin consumes that instead of inferring ternary/property placement from raw line-prefix regexes
 - core now also owns the structural formatting wrapper contract:
+
+## TS Plugin / VS Code / Syntax Architecture Review
+
+### Why this matters
+The TypeScript plugin and the VS Code extension are now the other major consumers of the same
+shadow-document mapping model. They have not had the same cleanup pass yet.
+
+Current symptoms:
+- `packages/typescript-plugin-react-pug/src/index.ts` mixes:
+  - generic original/shadow coordinate mapping
+  - TS-language-service-specific method overrides
+  - TS-result remapping
+  - synthetic-diagnostic filtering
+- `packages/vscode-react-pug-tsx/src/index.ts` duplicates low-level raw/stripped offset helpers
+  just to support embedded style completions
+- syntax highlighting is a separate TextMate grammar path with very little overlap with shadow
+  mapping logic, so we should be careful not to invent fake unification where there is none
+
+### Main architectural observation
+The core already has the right backbone:
+- `PugDocument`
+- copied segments
+- mapped regions
+- synthetic insertions
+- original/shadow offset conversion
+
+The missing piece is a stable **query/coordinate helper layer** on top of that model.
+
+Right now, multiple consumers reimplement variants of:
+- raw-region offset <-> stripped-region offset
+- original span -> shadow span
+- shadow span -> original span
+- encoded classification span remapping
+- "nearby mapped position" fallback for editor typing
+
+These are not TS-specific. They are generic consequences of the shadow-document model and belong in
+`react-pug-core`.
+
+### Architectural decision for TS/VSCode work
+We are **not** doing a whole new editor architecture or a whole-file AST rewrite.
+
+We are keeping:
+- the text-and-mapping shadow-document model
+- the TS plugin as a TS-language-service adapter
+- the VS Code extension as a thin consumer of core transforms and extension APIs
+- the syntax-highlighting path as a separate TextMate grammar path
+
+We are changing:
+- duplicated coordinate/query logic should move into core
+- the TS plugin should get thinner by using generic core helpers
+- the VS Code extension should stop owning raw/stripped offset math when core can provide it
+
+### Non-goals
+- do not try to merge TextMate syntax highlighting with TS shadow mapping
+- do not move TS-language-service result-shape code into core when it depends on TS types
+- do not add broad suppressions in the TS plugin to paper over mapping issues
+- do not relax existing diagnostics or navigation behavior to make refactors easier
+
+### High-confidence refactor targets
+
+#### 1. Shared region coordinate helpers in core
+Create/export core helpers for:
+- raw offset -> stripped offset
+- stripped offset -> raw offset
+- original file offset inside a Pug region -> stripped region offset
+- stripped region offset -> original file offset
+
+Consumers:
+- `positionMapping.ts`
+- `pugToTsx.ts`
+- TS plugin parse/transform diagnostic span mapping
+- VS Code embedded style completion logic
+
+This is generic and immediately reduces duplicated edge-case handling.
+
+#### 2. Shared shadow query/span helpers in core
+Create/export core helpers for:
+- original span -> shadow span
+- shadow span -> original span
+- encoded classification triples remapped back to original
+- optional nearby-on-same-line fallback for editor typing positions
+
+Consumers:
+- TS plugin completion/hover/definition/reference/refactor/classification wrappers
+
+This should let the TS plugin stop reimplementing mapping rules method by method.
+
+#### 3. Thin TS plugin adapters
+After the helpers exist, the TS plugin should mostly be:
+- document/cache management
+- LS override selection
+- TS-result shape adaptation
+- plugin-specific diagnostics injection/filtering
+
+The plugin should stop owning generic shadow mapping algorithms.
+
+#### 4. Keep syntax highlighting separate
+The syntax grammar should only share:
+- tag-function detection assumptions when practical
+- regression tests for comment/string boundaries
+
+It should not be forced into the shadow-document architecture, because it is a separate TextMate
+tokenization path.
+
+### TS/VSCode implementation tasks
+
+1. Add shared raw/stripped offset helpers to core and switch existing core code to them.
+2. Add shared region offset helpers to core and switch TS plugin + VS Code style completion to them.
+3. Add shared original/shadow span-query helpers to core.
+4. Add shared encoded-classification remapping helper to core.
+5. Add optional nearby-position fallback helper to core if its behavior can be expressed
+   generically without TS-specific leakage.
+6. Refactor the TS plugin to consume these helpers and delete duplicated mapping code.
+7. Strengthen tests around:
+   - completion cursor mapping
+   - hover span mapping
+   - classification span mapping
+   - parse/transform diagnostic locations
+   - embedded style completion cursor mapping
+8. Validate with:
+   - `npm test`
+   - targeted TS/VSCode checks in this repo
+   - real consumer behavior in `../startupjs` and `../startupjs-ui`
+
+### Success criteria
+- fewer custom offset/span helpers outside core
+- TS plugin becomes smaller and more adapter-like
+- VS Code embedded style features reuse core coordinate logic
+- no loss of diagnostics/navigation accuracy
+- no new rule suppressions or mapping relaxations
+
+### TS/VSCode current implementation status
+- core now owns shared coordinate/query helpers:
+  - `regionOffsetMapping.ts`
+  - `queryMapping.ts`
+- core code that previously duplicated raw/stripped conversion now uses those helpers:
+  - `positionMapping.ts`
+  - `pugToTsx.ts`
+- the TS plugin now consumes shared core helpers for:
+  - original span -> shadow span
+  - shadow span -> original span
+  - encoded classification remapping
+  - nearby same-line typing fallback
+  - generated diagnostic range mapping
+  - core-owned document issues (`missingTagImport`, `parseError`, `transformError`)
+- the VS Code extension now reuses the shared raw->stripped helper for embedded style completion context
+- targeted regression tests were added for:
+  - shared query/span helpers
+  - classification remapping through the TS plugin
+  - core-owned document issue shaping
+
+### TS/VSCode current architectural assessment
+This refactor pass materially improved the architecture:
+
+- generic shadow coordinate/query logic is now concentrated in core
+- the TS plugin is more adapter-like and owns less mapping math
+- core-owned document issues are no longer shaped ad hoc inside the plugin
+- real consumer validation in `../startupjs` and `../startupjs-ui` is green for the targeted Pug-heavy files
+
+The remaining TS plugin complexity is mostly the correct kind of complexity:
+- snapshot/cache management
+- TS language-service override wiring
+- TS result-shape adaptation
+- narrow TS-specific false-positive suppression codes caused by generated shadow TSX
+
+At this point, more refactoring should be conservative. There is no obvious next extraction that is both:
+- generic across consumers
+- and simpler than leaving the logic in the TS plugin
+
+So the current recommendation is:
+- stop the TS/VSCode refactor here unless a new real consumer bug shows a genuinely generic seam we missed
+- keep validating against `../startupjs` and `../startupjs-ui` after any future mapping changes
   - wrapper creation per region container kind
   - formatted-expression extraction back out of a wrapper
   - unit-tested indentation baseline semantics for wrapper extraction
@@ -388,6 +560,11 @@ This is the next place where genericity can improve meaningfully.
    - repo `npm test`
    - `../startupjs` targeted lint checks
    - `../startupjs-ui` targeted lint checks
+35. For TS/VSCode mapping changes, re-run:
+   - repo `npm test`
+   - targeted TS/classification checks in this repo
+   - targeted shadow-plugin checks in `../startupjs`
+   - targeted shadow-plugin checks in `../startupjs-ui`
 35. Reassess whether any remaining suppressions are still principled and synthetic-only.
 36. Only then consider the architecture revamp “complete”.
 
