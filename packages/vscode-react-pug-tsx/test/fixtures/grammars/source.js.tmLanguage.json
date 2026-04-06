@@ -1,0 +1,35 @@
+{
+  "scopeName": "source.js",
+  "patterns": [
+    {
+      "include": "#line-comment"
+    },
+    {
+      "include": "#double-quoted-string"
+    },
+    {
+      "include": "#single-quoted-string"
+    },
+    {
+      "match": "\\b(?:const|let|var|return)\\b",
+      "name": "keyword.control.js"
+    }
+  ],
+  "repository": {
+    "line-comment": {
+      "begin": "//",
+      "end": "$",
+      "name": "comment.line.double-slash.js"
+    },
+    "double-quoted-string": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.js"
+    },
+    "single-quoted-string": {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.js"
+    }
+  }
+}

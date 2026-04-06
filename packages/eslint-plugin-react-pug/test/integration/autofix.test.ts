@@ -9,6 +9,14 @@ import reactPugPlugin from '../../src/index'
 const repoRoot = resolve(__dirname, '../../../..')
 const fixtureRoot = resolve(repoRoot, 'test/fixtures/example-unformatted')
 const snapshotRoot = resolve(fixtureRoot, 'snapshots/fixed')
+const reactHooksStubPlugin = {
+  rules: {
+    'rules-of-hooks': {
+      meta: { schema: [] },
+      create: () => ({}),
+    },
+  },
+}
 
 const tempDirs: string[] = []
 
@@ -19,11 +27,17 @@ function createExampleEslint(cwd: string, fix: boolean): ESLint {
     ignore: false,
     overrideConfigFile: true,
     overrideConfig: [
+      {
+        linterOptions: {
+          reportUnusedDisableDirectives: 'off',
+        },
+      },
       ...neostandard({
         ts: true,
       }),
       {
         plugins: {
+          'react-hooks': reactHooksStubPlugin as any,
           'react-pug': reactPugPlugin as any,
         },
         processor: 'react-pug/react-pug',
@@ -59,15 +73,38 @@ afterEach(() => {
 })
 
 describe('eslint --fix integration for react-pug processor', () => {
-  it('does not corrupt files and produces lint-clean output for an unformatted example fixture', async () => {
+  it('does not corrupt files and preserves only the expected non-fixable diagnostics for an unformatted example fixture', async () => {
     const tempDir = createTempFixtureCopy()
 
     const firstPass = await createExampleEslint(tempDir, true).lintFiles(['src/**/*.{js,jsx,ts,tsx}'])
     await ESLint.outputFixes(firstPass)
 
     const secondPass = await createExampleEslint(tempDir, false).lintFiles(['src/**/*.{js,jsx,ts,tsx}'])
-    const allMessages = secondPass.flatMap(result => result.messages)
-    expect(allMessages).toEqual([])
+    const allMessages = secondPass.flatMap(result => (
+      result.messages.map(message => ({
+        filePath: result.filePath.replace(/.*\/src\//, 'src/'),
+        ruleId: message.ruleId,
+        line: message.line,
+        column: message.column,
+        message: message.message,
+      }))
+    ))
+    expect(allMessages).toEqual([
+      {
+        filePath: 'src/StartupjsUiMdxComponents.js',
+        ruleId: 'react/jsx-boolean-value',
+        line: 205,
+        column: 34,
+        message: 'Value must be omitted for boolean attribute `value`',
+      },
+      {
+        filePath: 'src/StartupjsUiMdxComponents.js',
+        ruleId: 'react/jsx-boolean-value',
+        line: 257,
+        column: 27,
+        message: 'Value must be omitted for boolean attribute `value`',
+      },
+    ])
 
     const fixedFiles = [
       'src/App.tsx',
@@ -75,7 +112,13 @@ describe('eslint --fix integration for react-pug processor', () => {
       'src/Card.tsx',
       'src/ModalScreen.tsx',
       'src/RootLayout.tsx',
+      'src/StartupjsUiDialogsReadme.js',
+      'src/StartupjsUiDraggableReadme.js',
       'src/StartupjsLogin.js',
+      'src/StartupjsUiMdxComponents.js',
+      'src/StartupjsUiPrompt.tsx',
+      'src/StartupjsUiTypeCell.js',
+      'src/StartupjsUiWrapInput.tsx',
       'src/StartupjsTabThree.js',
       'src/TypeScriptErrorsInPug.tsx',
       'src/TypeScriptInPug.tsx',

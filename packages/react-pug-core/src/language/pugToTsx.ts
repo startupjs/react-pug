@@ -9,6 +9,7 @@ import type {
 } from './mapping';
 import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from './mapping';
 import { extractPugRegions } from './extractRegions';
+import { strippedToRawOffset } from './regionOffsetMapping';
 
 // ── TsxEmitter ──────────────────────────────────────────────────
 
@@ -525,25 +526,6 @@ function findNextInterpolationOccurrence(
 
   if (bestIdx < 0 || bestInterpolation == null) return null;
   return { index: bestIdx, interpolation: bestInterpolation };
-}
-
-function strippedToRawOffset(rawText: string, strippedOffset: number, commonIndent: number): number {
-  if (commonIndent === 0) return strippedOffset;
-  let stripped = 0;
-  let raw = 0;
-  const lines = rawText.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
-    const strippedLineLen = Math.max(0, line.length - indentToRemove);
-    if (strippedOffset <= stripped + strippedLineLen) {
-      const colInStripped = strippedOffset - stripped;
-      return raw + indentToRemove + colInStripped;
-    }
-    stripped += strippedLineLen + 1;
-    raw += line.length + 1;
-  }
-  return raw;
 }
 
 function countIndent(line: string): number {

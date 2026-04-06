@@ -253,6 +253,60 @@ describe('eslint-plugin-react-pug processor', () => {
     `);
   });
 
+  it('formats multiline pug used as an object-property value without stylistic indent drift', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const config = {',
+      '  children: pug`',
+      "    - const label = 'Child'",
+      '    Span= label',
+      '  `',
+      '}',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    expect(code).toMatchInlineSnapshot(`
+      "const config = {
+        children: (() => {
+          const label = 'Child'
+          return <Span>{label}</Span>
+        })()
+      }"
+    `);
+
+    const lintMessages = lintStylisticIndent(code, 'file.jsx');
+    const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
+    expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
+  });
+
+  it('formats multiline pug used in a ternary branch without stylistic indent drift', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = ready',
+      '  ? pug`',
+      "      - const label = 'Yes'",
+      '      Span= label',
+      '    `',
+      '  : null',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    expect(code).toMatchInlineSnapshot(`
+      "const view = ready
+        ? (() => {
+            const label = 'Yes'
+            return <Span>{label}</Span>
+          })()
+        : null"
+    `);
+
+    const lintMessages = lintStylisticIndent(code, 'file.jsx');
+    const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
+    expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
+  });
+
   it('suppresses legacy styl warnings without hiding normal linting', () => {
     const processor = createReactPugProcessor();
     const input = [

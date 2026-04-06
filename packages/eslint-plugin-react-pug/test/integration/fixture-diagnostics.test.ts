@@ -7,6 +7,14 @@ import reactPugPlugin from '../../src/index'
 const repoRoot = resolve(__dirname, '../../../..')
 const fixtureRoot = resolve(repoRoot, 'test/fixtures/example-unformatted')
 const diagnosticsSnapshotRoot = resolve(fixtureRoot, 'snapshots/diagnostics')
+const reactHooksStubPlugin = {
+  rules: {
+    'rules-of-hooks': {
+      meta: { schema: [] },
+      create: () => ({}),
+    },
+  },
+}
 
 function createExampleEslint(): ESLint {
   return new ESLint({
@@ -15,11 +23,17 @@ function createExampleEslint(): ESLint {
     ignore: false,
     overrideConfigFile: true,
     overrideConfig: [
+      {
+        linterOptions: {
+          reportUnusedDisableDirectives: 'off',
+        },
+      },
       ...neostandard({
         ts: true,
       }),
       {
         plugins: {
+          'react-hooks': reactHooksStubPlugin as any,
           'react-pug': reactPugPlugin as any,
         },
         processor: 'react-pug/react-pug',
@@ -60,5 +74,23 @@ describe('eslint diagnostics for example-unformatted fixture', () => {
 
     const startupjsLogin = results.find(result => result.filePath.endsWith('/src/StartupjsLogin.js'))
     expect(startupjsLogin?.messages.some(message => message.ruleId === '@stylistic/jsx-indent')).toBe(false)
+
+    const startupjsUiDialogsReadme = results.find(result => result.filePath.endsWith('/src/StartupjsUiDialogsReadme.js'))
+    expect(startupjsUiDialogsReadme?.messages.some(message => message.ruleId === 'react/jsx-fragments')).toBe(false)
+
+    const startupjsUiDraggableReadme = results.find(result => result.filePath.endsWith('/src/StartupjsUiDraggableReadme.js'))
+    expect(startupjsUiDraggableReadme?.messages.some(message => message.ruleId === 'no-unneeded-ternary')).toBe(false)
+
+    const startupjsUiTypeCell = results.find(result => result.filePath.endsWith('/src/StartupjsUiTypeCell.js'))
+    expect(startupjsUiTypeCell?.messages.some(message => message.ruleId === '@stylistic/no-multi-spaces')).toBe(false)
+
+    const startupjsUiPrompt = results.find(result => result.filePath.endsWith('/src/StartupjsUiPrompt.tsx'))
+    expect(startupjsUiPrompt?.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
+
+    const startupjsUiMdxComponents = results.find(result => result.filePath.endsWith('/src/StartupjsUiMdxComponents.js'))
+    expect(startupjsUiMdxComponents?.messages.map(message => message.ruleId)).toEqual([
+      'react/jsx-boolean-value',
+      'react/jsx-boolean-value',
+    ])
   }, 30000)
 })

@@ -244,7 +244,7 @@ describe('suppressed diagnostic codes inside pug regions', () => {
 
   it('well-typed pug file produces zero semantic diagnostics', () => {
     const diags = ls.getSemanticDiagnostics(wellTypedFile);
-    // All diagnostics should be filtered: suppressed codes (2503, 1109) inside
+    // All diagnostics should be filtered: suppressed codes (2503, 1109, 2875) inside
     // pug regions get removed, and unmapped synthetic positions get filtered.
     expect(diags).toHaveLength(0);
   });
@@ -262,6 +262,12 @@ describe('suppressed diagnostic codes inside pug regions', () => {
     const allDiags = [...semanticDiags, ...syntacticDiags];
     const expressionExpected = allDiags.filter(d => d.code === 1109);
     expect(expressionExpected).toHaveLength(0);
+  });
+
+  it('no diagnostics with code 2875 appear for pug files', () => {
+    const diags = ls.getSemanticDiagnostics(wellTypedFile);
+    const jsxRuntimeDiags = diags.filter(d => d.code === 2875);
+    expect(jsxRuntimeDiags).toHaveLength(0);
   });
 
   it('suppressed codes outside pug regions are NOT filtered', async () => {

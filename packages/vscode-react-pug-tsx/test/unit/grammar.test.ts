@@ -63,6 +63,8 @@ describe('TextMate grammar file', () => {
     expect(selector).toContain('source.jsx');
     // Should use L: prefix for left-injection
     expect(selector).toContain('L:');
+    expect(selector).toContain('-comment');
+    expect(selector).toContain('-string');
   });
 
   it('has patterns array referencing pug-tagged-template', () => {
@@ -72,6 +74,100 @@ describe('TextMate grammar file', () => {
 
     const includeRefs = grammar.patterns.map((p: any) => p.include);
     expect(includeRefs).toContain('#pug-tagged-template');
+  });
+});
+
+describe('tokenization regressions', () => {
+  async function createRegistry() {
+    const vsctm = require('vscode-textmate');
+    const onig = require('vscode-oniguruma');
+    const wasmBin = readFileSync(require.resolve('vscode-oniguruma/release/onig.wasm')).buffer;
+    const jsGrammarPath = resolve(extensionRoot, 'test/fixtures/grammars/source.js.tmLanguage.json');
+    const pugGrammarPath = resolve(extensionRoot, 'test/fixtures/grammars/source.pug.tmLanguage.json');
+    await onig.loadWASM(wasmBin);
+
+    return new vsctm.Registry({
+      onigLib: Promise.resolve({
+        createOnigScanner(patterns: string[]) {
+          return new onig.OnigScanner(patterns);
+        },
+        createOnigString(s: string) {
+          return new onig.OnigString(s);
+        },
+      }),
+      loadGrammar(scopeName: string) {
+        const knownScopes: Record<string, string> = {
+          'source.js': jsGrammarPath,
+          'source.jsx': jsGrammarPath,
+          'source.ts': jsGrammarPath,
+          'source.tsx': jsGrammarPath,
+          'source.pug': pugGrammarPath,
+          'inline.pug-template-literal': grammarPath,
+        };
+        const target = knownScopes[scopeName];
+        if (!target) return null;
+        return vsctm.parseRawGrammar(readFileSync(target, 'utf8'), target);
+      },
+      getInjections(scopeName: string) {
+        if (['source.js', 'source.jsx', 'source.ts', 'source.tsx'].includes(scopeName)) {
+          return ['inline.pug-template-literal'];
+        }
+        return [];
+      },
+    });
+  }
+
+  it('injects pug tokenization into a real tagged template', async () => {
+    const registry = await createRegistry();
+    const grammar = await registry.loadGrammar('source.js');
+    const line = "const view = pug`Div.card Hello`";
+    const result = grammar.tokenizeLine(line);
+    const injectedTokens = result.tokens.filter((token: any) => (
+      token.scopes.includes('meta.embedded.inline.pug')
+    ));
+
+    expect(injectedTokens.length).toBeGreaterThan(0);
+    expect(injectedTokens.some((token: any) => (
+      token.scopes.includes('entity.name.tag.pug')
+    ))).toBe(true);
+  });
+
+  it('does not inject pug tokenization into line comments', async () => {
+    const registry = await createRegistry();
+    const grammar = await registry.loadGrammar('source.js');
+    const line = "// const RowComponent = props => pug`Div(...props row)`";
+    const result = grammar.tokenizeLine(line);
+    const injectedTokens = result.tokens.filter((token: any) => (
+      token.scopes.includes('meta.embedded.inline.pug')
+    ));
+
+    expect(injectedTokens).toEqual([]);
+  });
+
+  it('does not leak pug tokenization onto the next line after a commented pug template', async () => {
+    const registry = await createRegistry();
+    const grammar = await registry.loadGrammar('source.js');
+    const firstLine = "// const RowComponent = props => pug`Div(...props row)`";
+    const secondLine = "const ALPHABET = 'abcdefghigklmnopqrstuvwxyz'";
+    const firstResult = grammar.tokenizeLine(firstLine);
+    const secondResult = grammar.tokenizeLine(secondLine, firstResult.ruleStack);
+    const injectedTokens = secondResult.tokens.filter((token: any) => (
+      token.scopes.includes('meta.embedded.inline.pug')
+    ));
+
+    expect(injectedTokens).toEqual([]);
+  });
+
+  it('does not inject pug tokenization inside ordinary string literals', async () => {
+    const registry = await createRegistry();
+    const grammar = await registry.loadGrammar('source.js');
+    const line = "const x = 'pug`div hi`'";
+    const result = grammar.tokenizeLine(line);
+    const injectedTokens = result.tokens.filter((token: any) => (
+      token.scopes.includes('meta.embedded.inline.pug')
+    ));
+
+    expect(injectedTokens).toEqual([]);
   });
 });
 

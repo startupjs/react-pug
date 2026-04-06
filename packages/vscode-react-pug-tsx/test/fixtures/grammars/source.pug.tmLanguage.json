@@ -1,0 +1,9 @@
+{
+  "scopeName": "source.pug",
+  "patterns": [
+    {
+      "match": "[A-Za-z_][\\w-]*",
+      "name": "entity.name.tag.pug"
+    }
+  ]
+}

@@ -22,26 +22,66 @@ export default observer(({ $cat, showPhone, large, small }) => {
       {photoFileId
         ? (
           <Photo
-            styleName={['avatar', { large, small }]}
+            styleName={[
+              'avatar',
+              {
+                large,
+                small
+              }
+            ]}
             fileId={photoFileId}
             name={name}
           />
           )
         : (
-          <Avatar styleName={['avatar', { large, small }]}>{name}</Avatar>
+          <Avatar
+            styleName={[
+              'avatar',
+              {
+                large,
+                small
+              }
+            ]}
+          >
+            {name}
+          </Avatar>
           )}
       <Div row>
-        <Span styleName={['text', { large }]} bold>
+        <Span
+          styleName={[
+            'text',
+            {
+              large
+            }
+          ]}
+          bold
+        >
           {(number || 'X') + '. '}
         </Span>
         <Div>
-          <Span styleName={['text', { large }]}>{name}</Span>
+          <Span
+            styleName={[
+              'text',
+              {
+                large
+              }
+            ]}
+          >
+            {name}
+          </Span>
           {showPhone
             ? (
               <>
                 {phone
                   ? (
-                    <Span styleName={['text', { large }]}>
+                    <Span
+                      styleName={[
+                        'text',
+                        {
+                          large
+                        }
+                      ]}
+                    >
                       <Span bold>Phone: </Span>
                       {phone}
                     </Span>
@@ -49,10 +89,22 @@ export default observer(({ $cat, showPhone, large, small }) => {
                   : null}
                 {catgram
                   ? (
-                    <Span styleName={['text', { large }]}>
+                    <Span
+                      styleName={[
+                        'text',
+                        {
+                          large
+                        }
+                      ]}
+                    >
                       <Span bold>Catgram: </Span>
                       <Link
-                        styleName={['text', { large }]}
+                        styleName={[
+                          'text',
+                          {
+                            large
+                          }
+                        ]}
                         to={getCatgramLink(catgram)}
                       >
                         {catgram}
@@ -62,10 +114,22 @@ export default observer(({ $cat, showPhone, large, small }) => {
                   : null}
                 {phonegram
                   ? (
-                    <Span styleName={['text', { large }]}>
+                    <Span
+                      styleName={[
+                        'text',
+                        {
+                          large
+                        }
+                      ]}
+                    >
                       <Span bold>Phonegram: </Span>
                       <Link
-                        styleName={['text', { large }]}
+                        styleName={[
+                          'text',
+                          {
+                            large
+                          }
+                        ]}
                         to={getPhonegramLink(phonegram)}
                       >
                         {phonegram}

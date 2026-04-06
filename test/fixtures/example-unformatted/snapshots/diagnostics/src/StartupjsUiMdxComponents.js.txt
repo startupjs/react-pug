@@ -1,0 +1,2 @@
+205:34  error  react/jsx-boolean-value  Value must be omitted for boolean attribute `value`
+257:27  error  react/jsx-boolean-value  Value must be omitted for boolean attribute `value`

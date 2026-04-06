@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { StyleTagLang } from '../../react-pug-core/src/language/mapping';
 import { extractPugAnalysis } from '../../react-pug-core/src/language/extractRegions';
 import { compilePugToTsx } from '../../react-pug-core/src/language/pugToTsx';
+import { rawToStrippedOffset } from '../../react-pug-core/src/language/regionOffsetMapping';
 import { buildShadowDocument } from '../../react-pug-core/src/language/shadowDocument';
 import { hasTagFunctionCall } from '../../react-pug-core/src/language/tagFunctionPresence';
 
@@ -78,43 +79,6 @@ function resolveClassShorthandOptions(
   ) ? config.classShorthandMerge : (classAttribute === 'styleName' ? 'classnames' : 'concatenate');
 
   return { classAttribute, classMerge };
-}
-
-function rawToStrippedOffset(rawText: string, rawOffset: number, commonIndent: number): number | null {
-  if (commonIndent === 0) return rawOffset;
-  let stripped = 0;
-  let raw = 0;
-  const lines = rawText.split('\n');
-  for (const line of lines) {
-    const lineEnd = raw + line.length;
-    if (rawOffset <= lineEnd) {
-      const colInRaw = rawOffset - raw;
-      const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
-      if (indentToRemove > 0 && colInRaw < indentToRemove) return null;
-      return stripped + Math.max(0, colInRaw - indentToRemove);
-    }
-    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
-    stripped += Math.max(0, line.length - indentToRemove) + 1;
-    raw = lineEnd + 1;
-  }
-  return stripped;
-}
-
-function strippedToRawOffset(rawText: string, strippedOffset: number, commonIndent: number): number {
-  if (commonIndent === 0) return strippedOffset;
-  let stripped = 0;
-  let raw = 0;
-  const lines = rawText.split('\n');
-  for (const line of lines) {
-    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
-    const strippedLineLen = Math.max(0, line.length - indentToRemove);
-    if (strippedOffset <= stripped + strippedLineLen) {
-      return raw + indentToRemove + (strippedOffset - stripped);
-    }
-    stripped += strippedLineLen + 1;
-    raw += line.length + 1;
-  }
-  return raw;
 }
 
 function languageIdForStyleLang(lang: StyleTagLang): 'css' | 'scss' | 'sass' | 'stylus' {

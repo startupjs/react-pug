@@ -1,6 +1,6 @@
 {
   "scopeName": "inline.pug-template-literal",
-  "injectionSelector": "L:source.ts,L:source.tsx,L:source.js,L:source.jsx",
+  "injectionSelector": "L:source.ts -comment -string, L:source.tsx -comment -string, L:source.js -comment -string, L:source.jsx -comment -string",
   "patterns": [
     {
       "include": "#pug-tagged-template"

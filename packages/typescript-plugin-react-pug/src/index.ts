@@ -2,8 +2,15 @@ import type ts from 'typescript';
 import {
   type PugDocument,
   buildShadowDocument,
-  hasTagFunctionCall,
+  collectPugDocumentIssues,
   findRegionAtOriginalOffset,
+  findRegionAtShadowOffset,
+  hasTagFunctionCall,
+  mapEncodedClassificationsToOriginal,
+  mapGeneratedRangeToOriginal,
+  mapOriginalOffsetToNearbyShadowOnSameLine,
+  mapOriginalSpanToShadow,
+  mapShadowSpanToOriginal,
   originalToShadow,
   shadowToOriginal,
 } from '@react-pug/react-pug-core';
@@ -41,29 +48,6 @@ declare module 'react' {
 function withExtraReactAttributes(shadowText: string): string {
   if (shadowText.includes(EXTRA_REACT_ATTRIBUTES_MARKER)) return shadowText;
   return `${shadowText}\n${EXTRA_REACT_ATTRIBUTES_TEXT}`;
-}
-
-function strippedOffsetToRawOffset(rawText: string, strippedOffset: number, commonIndent: number): number {
-  if (commonIndent === 0) return strippedOffset;
-  let stripped = 0;
-  let raw = 0;
-  const lines = rawText.split('\n');
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
-    const strippedLineLength = Math.max(0, line.length - indentToRemove);
-    if (strippedOffset <= stripped + strippedLineLength) {
-      return raw + indentToRemove + (strippedOffset - stripped);
-    }
-    stripped += strippedLineLength + 1;
-    raw += line.length + 1;
-  }
-  return raw;
-}
-
-function regionOffsetToOriginalOffset(doc: PugDocument, region: PugDocument['regions'][number], strippedOffset: number): number {
-  const rawText = doc.originalText.slice(region.pugTextStart, region.pugTextEnd);
-  return region.pugTextStart + strippedOffsetToRawOffset(rawText, strippedOffset, region.commonIndent);
 }
 
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
@@ -262,47 +246,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       // Lenient mapping for typing-time completions: if exact position is unmapped,
       // try nearby mapped offsets on the same line and preserve relative cursor delta.
       function mapToShadowForTyping(fileName: string, position: number): number | null | undefined {
-        const mapped = mapToShadow(fileName, position);
-        if (mapped !== null) return mapped;
-
         ensureCached(fileName);
         const doc = docCache.get(fileName);
         if (!doc) return undefined;
-
-        const region = findRegionAtOriginalOffset(doc, position);
-        if (!region) return null;
-        if (position < region.pugTextStart || position > region.pugTextEnd) return null;
-
-        const lineStart = doc.originalText.lastIndexOf('\n', position - 1) + 1;
-        const lineEndIdx = doc.originalText.indexOf('\n', position);
-        const lineEnd = lineEndIdx >= 0 ? lineEndIdx : doc.originalText.length;
-        const maxRadius = 3;
-
-        for (let radius = 1; radius <= maxRadius; radius++) {
-          const left = position - radius;
-          if (left >= lineStart) {
-            const leftMapped = originalToShadow(doc, left);
-            if (leftMapped != null) {
-              if (left === position - 1) {
-                const ch = doc.originalText[position] ?? '';
-                if (/\s|[),]/.test(ch)) {
-                  return Math.min(leftMapped + 1, doc.shadowText.length);
-                }
-              }
-              return leftMapped;
-            }
-          }
-
-          const right = position + radius;
-          if (right <= lineEnd) {
-            const rightMapped = originalToShadow(doc, right);
-            if (rightMapped != null) {
-              return rightMapped;
-            }
-          }
-        }
-
-        return null;
+        return mapOriginalOffsetToNearbyShadowOnSameLine(doc, position);
       }
 
       // Helper: map completion result spans back from shadow -> original.
@@ -372,13 +319,9 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       function mapTextSpanBack(fileName: string, textSpan: ts.TextSpan): ts.TextSpan {
         const doc = docCache.get(fileName);
         if (!doc) return textSpan;
-        const origStart = shadowToOriginal(doc, textSpan.start);
-        if (origStart == null) return textSpan;
-        const origEnd = shadowToOriginal(doc, textSpan.start + textSpan.length);
-        return {
-          start: origStart,
-          length: origEnd != null ? origEnd - origStart : textSpan.length,
-        };
+        const mapped = mapShadowSpanToOriginal(doc, textSpan);
+        if (!mapped) return textSpan;
+        return { start: mapped.start, length: mapped.length };
       }
 
       // Override: getDefinitionAtPosition
@@ -569,64 +512,6 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         }));
       }
 
-      // Helper: map a requested original span to shadow span for classification queries.
-      // Returns null when a clean range mapping is not possible.
-      function mapQuerySpanToShadow(doc: PugDocument, span: ts.TextSpan): ts.TextSpan | null {
-        const shadowStart = originalToShadow(doc, span.start);
-        const shadowEnd = originalToShadow(doc, span.start + span.length);
-        if (shadowStart == null || shadowEnd == null || shadowEnd < shadowStart) {
-          return null;
-        }
-        return { start: shadowStart, length: shadowEnd - shadowStart };
-      }
-
-      // Helper: map encoded classifications (triples: start,length,class) back to original file.
-      function mapEncodedClassifications(
-        fileName: string,
-        requestedOriginalSpan: ts.TextSpan,
-        classifications: ts.Classifications,
-      ): ts.Classifications {
-        const doc = docCache.get(fileName);
-        if (!doc) return classifications;
-
-        const originalStart = requestedOriginalSpan.start;
-        const originalEnd = requestedOriginalSpan.start + requestedOriginalSpan.length;
-        const maxOriginal = doc.originalText.length;
-        const mappedSpans: number[] = [];
-        const encoded = classifications.spans ?? [];
-
-        for (let i = 0; i + 2 < encoded.length; i += 3) {
-          const shadowStart = encoded[i];
-          const shadowLength = encoded[i + 1];
-          const classification = encoded[i + 2];
-          if (!Number.isFinite(shadowStart) || !Number.isFinite(shadowLength) || shadowLength <= 0) continue;
-
-          const mappedStart = shadowToOriginal(doc, shadowStart);
-          const mappedEnd = shadowToOriginal(doc, shadowStart + shadowLength);
-          if (mappedStart == null || mappedEnd == null) continue;
-
-          let start = mappedStart;
-          let end = mappedEnd;
-          if (end <= start) continue;
-
-          if (end <= originalStart || start >= originalEnd) continue;
-          if (start < originalStart) start = originalStart;
-          if (end > originalEnd) end = originalEnd;
-
-          if (start < 0) start = 0;
-          if (end > maxOriginal) end = maxOriginal;
-          const length = end - start;
-          if (length <= 0) continue;
-
-          mappedSpans.push(start, length, classification);
-        }
-
-        return {
-          spans: mappedSpans,
-          endOfLineState: classifications.endOfLineState,
-        };
-      }
-
       // Override: getApplicableRefactors
       safeOverride('getApplicableRefactors', (fileName, positionOrRange, ...rest) => {
         ensureCached(fileName);
@@ -639,10 +524,16 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
           if (mapped == null) return [];
           return ls.getApplicableRefactors(fileName, mapped, ...rest);
         }
-        const mappedPos = originalToShadow(doc, positionOrRange.pos);
-        const mappedEnd = originalToShadow(doc, positionOrRange.end);
-        if (mappedPos == null || mappedEnd == null) return [];
-        return ls.getApplicableRefactors(fileName, { pos: mappedPos, end: mappedEnd }, ...rest);
+        const mappedSpan = mapOriginalSpanToShadow(doc, {
+          start: positionOrRange.pos,
+          length: positionOrRange.end - positionOrRange.pos,
+        });
+        if (!mappedSpan) return [];
+        return ls.getApplicableRefactors(
+          fileName,
+          { pos: mappedSpan.start, end: mappedSpan.end },
+          ...rest,
+        );
       });
 
       // Override: getEditsForRefactor
@@ -656,10 +547,12 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
             if (mapped == null) return undefined;
             mappedRange = mapped;
           } else {
-            const mappedPos = originalToShadow(doc, positionOrRange.pos);
-            const mappedEnd = originalToShadow(doc, positionOrRange.end);
-            if (mappedPos == null || mappedEnd == null) return undefined;
-            mappedRange = { pos: mappedPos, end: mappedEnd };
+            const mappedSpan = mapOriginalSpanToShadow(doc, {
+              start: positionOrRange.pos,
+              length: positionOrRange.end - positionOrRange.pos,
+            });
+            if (!mappedSpan) return undefined;
+            mappedRange = { pos: mappedSpan.start, end: mappedSpan.end };
           }
         }
         const result = ls.getEditsForRefactor(fileName, formatOptions, mappedRange, refactorName, actionName, preferences, interactiveRefactorArguments);
@@ -684,11 +577,13 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         let mappedStart = start;
         let mappedEnd = end;
         if (doc) {
-          const ms = originalToShadow(doc, start);
-          const me = originalToShadow(doc, end);
-          if (ms == null || me == null) return [];
-          mappedStart = ms;
-          mappedEnd = me;
+          const mappedSpan = mapOriginalSpanToShadow(doc, {
+            start,
+            length: end - start,
+          });
+          if (!mappedSpan) return [];
+          mappedStart = mappedSpan.start;
+          mappedEnd = mappedSpan.end;
         }
         const results = ls.getCodeFixesAtPosition(fileName, mappedStart, mappedEnd, errorCodes, formatOptions, preferences);
         return results.map(fix => ({
@@ -712,10 +607,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         const doc = docCache.get(fileName);
         if (!doc) return ls.getEncodedSyntacticClassifications(fileName, span);
 
-        const querySpan = mapQuerySpanToShadow(doc, span)
-          ?? { start: 0, length: doc.shadowText.length };
+        const querySpan = mapOriginalSpanToShadow(doc, span)
+          ?? { start: 0, end: doc.shadowText.length, length: doc.shadowText.length };
         const result = ls.getEncodedSyntacticClassifications(fileName, querySpan);
-        return mapEncodedClassifications(fileName, span, result);
+        return mapEncodedClassificationsToOriginal(doc, span, result);
       });
 
       // Override: getEncodedSemanticClassifications
@@ -724,10 +619,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         const doc = docCache.get(fileName);
         if (!doc) return ls.getEncodedSemanticClassifications(fileName, span, format);
 
-        const querySpan = mapQuerySpanToShadow(doc, span)
-          ?? { start: 0, length: doc.shadowText.length };
+        const querySpan = mapOriginalSpanToShadow(doc, span)
+          ?? { start: 0, end: doc.shadowText.length, length: doc.shadowText.length };
         const result = ls.getEncodedSemanticClassifications(fileName, querySpan, format);
-        return mapEncodedClassifications(fileName, span, result);
+        return mapEncodedClassificationsToOriginal(doc, span, result);
       });
 
       // Diagnostic codes to suppress in pug regions (false positives from generated TSX)
@@ -736,17 +631,10 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         2503,
         // "Expression expected" -- from structural TSX brackets
         1109,
+        // "This JSX tag requires the module path 'react/jsx-runtime' to exist"
+        // -- shadow TSX infrastructure requirement, not an original-source issue
+        2875,
       ]);
-
-      // Helper: check if a shadow offset falls inside any pug region
-      function isInsidePugRegion(doc: PugDocument, shadowOffset: number): boolean {
-        for (const region of doc.regions) {
-          if (shadowOffset >= region.shadowStart && shadowOffset < region.shadowEnd) {
-            return true;
-          }
-        }
-        return false;
-      }
 
       // Helper: map diagnostics from shadow -> original, filtering unmapped ones
       function mapDiagnostics<T extends ts.Diagnostic>(fileName: string, diagnostics: T[]): T[] {
@@ -762,85 +650,49 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
             continue;
           }
 
-          // Suppress known false-positive codes inside pug regions
-          if (SUPPRESSED_DIAG_CODES.has(diag.code) && isInsidePugRegion(doc, diag.start)) {
+          const mappedRange = mapGeneratedRangeToOriginal(doc, diag.start, diag.length ?? 1);
+          if (!mappedRange) {
+            if (SUPPRESSED_DIAG_CODES.has(diag.code) && findRegionAtShadowOffset(doc, diag.start)) {
+              continue;
+            }
+            continue; // falls in synthetic/unmapped region -- filter out
+          }
+
+          // Suppress known false-positive codes that ultimately map into pug regions.
+          if (SUPPRESSED_DIAG_CODES.has(diag.code) && findRegionAtOriginalOffset(doc, mappedRange.start)) {
             continue;
           }
 
-          const origStart = shadowToOriginal(doc, diag.start);
-          if (origStart == null) continue; // falls in synthetic/unmapped region -- filter out
-
-          const origEnd = diag.length != null ? shadowToOriginal(doc, diag.start + diag.length) : null;
-          // Ensure length is at least 1 for mapped diagnostics
-          const length = origEnd != null ? Math.max(1, origEnd - origStart) : diag.length;
           mapped.push({
             ...diag,
-            start: origStart,
-            length,
+            start: mappedRange.start,
+            length: mappedRange.length,
           });
         }
 
         // Add pug parse error diagnostics for regions with parseError (if enabled)
         if (!diagnosticsEnabled) return mapped;
-        if (doc.missingTagImport) {
+        for (const issue of collectPugDocumentIssues(doc)) {
+          const code = issue.kind === 'missing-tag-import'
+            ? 99002
+            : issue.kind === 'parse-error'
+              ? 99001
+              : 99003;
+          const messagePrefix = issue.kind === 'missing-tag-import'
+            ? ''
+            : issue.kind === 'parse-error'
+              ? 'Pug parse error: '
+              : 'Pug transform error: ';
+
           mapped.push({
             file: undefined,
-            start: doc.missingTagImport.start,
-            length: doc.missingTagImport.length,
-            messageText: doc.missingTagImport.message,
+            start: issue.start,
+            length: issue.length,
+            messageText: `${messagePrefix}${issue.message}`,
             category: tsModule.DiagnosticCategory.Error,
-            code: 99002,
+            code,
             source: 'pug-react',
           } as unknown as T);
-        }
-        for (const region of doc.regions) {
-          if (region.parseError) {
-            const err = region.parseError;
-            // Compute a meaningful error span length
-            let errorStart = regionOffsetToOriginalOffset(doc, region, err.offset);
-            let textAfterError = doc.originalText.slice(errorStart);
-
-            // If error points at a newline, advance to the next non-empty line
-            if (textAfterError.startsWith('\n')) {
-              const nextLineStart = textAfterError.indexOf('\n') + 1;
-              const trimmedNext = textAfterError.slice(nextLineStart);
-              const indentLen = trimmedNext.match(/^\s*/)?.[0].length ?? 0;
-              errorStart += nextLineStart + indentLen;
-              textAfterError = doc.originalText.slice(errorStart);
-            }
-
-            const nlIdx = textAfterError.indexOf('\n');
-            const errorLength = Math.max(1, nlIdx >= 0 ? nlIdx : Math.min(textAfterError.length, 20));
-
-            mapped.push({
-              file: undefined,
-              start: errorStart,
-              length: errorLength,
-              messageText: `Pug parse error: ${err.message}`,
-              category: tsModule.DiagnosticCategory.Error,
-              code: 99001,
-              source: 'pug-react',
-            } as unknown as T);
-          }
-          if (region.transformError) {
-            const err = region.transformError;
-            const errorStart = regionOffsetToOriginalOffset(doc, region, err.offset);
-            const textAfterError = doc.originalText.slice(errorStart);
-            const nlIdx = textAfterError.indexOf('\n');
-            const errorLength = err.code === 'style-tag-must-be-last'
-              ? 'style'.length
-              : Math.max(1, nlIdx >= 0 ? nlIdx : Math.min(textAfterError.length, 20));
-
-            mapped.push({
-              file: undefined,
-              start: errorStart,
-              length: errorLength,
-              messageText: `Pug transform error: ${err.message}`,
-              category: tsModule.DiagnosticCategory.Error,
-              code: 99003,
-              source: 'pug-react',
-            } as unknown as T);
-          }
         }
 
         return mapped;
