@@ -195,7 +195,12 @@ const SelectLikes = observer(({ $likes, oppositeBreed, eventId }) => {
           const catId = $cat.getId()
           return (
             <Item
-              styleName={['item', { selected: $likes[catId].get() }]}
+              styleName={[
+                'item',
+                {
+                  selected: $likes[catId].get()
+                }
+              ]}
               key={catId}
               onPress={() =>
                 $likes[catId].get()

@@ -34,7 +34,10 @@ export default observer(function TabLayout () {
       <Stack.Screen
         options={{
           title: $event.name.get(),
-          headerRight: () => renderEditEvent({ $event })
+          headerRight: () =>
+            renderEditEvent({
+              $event
+            })
         }}
       />
       <Tabs
@@ -106,24 +109,52 @@ const EditEvent = observer(({ $event }) => {
 
 function renderWildIcon ({ color, size }) {
   return (
-    <Icon icon={faWildBadge} style={{ color, width: size, height: size }} />
+    <Icon
+      icon={faWildBadge}
+      style={{
+        color,
+        width: size,
+        height: size
+      }}
+    />
   )
 }
 
 function renderDomesticIcon ({ color, size }) {
   return (
-    <Icon icon={faDomesticBadge} style={{ color, width: size, height: size }} />
+    <Icon
+      icon={faDomesticBadge}
+      style={{
+        color,
+        width: size,
+        height: size
+      }}
+    />
   )
 }
 
 function renderHomeIcon ({ color, size }) {
   return (
-    <Icon icon={faHeart} style={{ color, width: size, height: size }} />
+    <Icon
+      icon={faHeart}
+      style={{
+        color,
+        width: size,
+        height: size
+      }}
+    />
   )
 }
 
 function renderTestIcon ({ color, size }) {
   return (
-    <Icon icon={faToolbox} style={{ color, width: size, height: size }} />
+    <Icon
+      icon={faToolbox}
+      style={{
+        color,
+        width: size,
+        height: size
+      }}
+    />
   )
 }

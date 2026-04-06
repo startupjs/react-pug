@@ -9,6 +9,14 @@ import reactPugPlugin from '../../src/index'
 const repoRoot = resolve(__dirname, '../../../..')
 const fixtureRoot = resolve(repoRoot, 'test/fixtures/example-unformatted')
 const snapshotRoot = resolve(fixtureRoot, 'snapshots/fixed')
+const reactHooksStubPlugin = {
+  rules: {
+    'rules-of-hooks': {
+      meta: { schema: [] },
+      create: () => ({}),
+    },
+  },
+}
 
 const tempDirs: string[] = []
 
@@ -19,11 +27,17 @@ function createExampleEslint(cwd: string, fix: boolean): ESLint {
     ignore: false,
     overrideConfigFile: true,
     overrideConfig: [
+      {
+        linterOptions: {
+          reportUnusedDisableDirectives: 'off',
+        },
+      },
       ...neostandard({
         ts: true,
       }),
       {
         plugins: {
+          'react-hooks': reactHooksStubPlugin as any,
           'react-pug': reactPugPlugin as any,
         },
         processor: 'react-pug/react-pug',
@@ -75,7 +89,12 @@ describe('eslint --fix integration for react-pug processor', () => {
       'src/Card.tsx',
       'src/ModalScreen.tsx',
       'src/RootLayout.tsx',
+      'src/StartupjsUiDialogsReadme.js',
+      'src/StartupjsUiDraggableReadme.js',
       'src/StartupjsLogin.js',
+      'src/StartupjsUiMdxComponents.js',
+      'src/StartupjsUiTypeCell.js',
+      'src/StartupjsUiWrapInput.tsx',
       'src/StartupjsTabThree.js',
       'src/TypeScriptErrorsInPug.tsx',
       'src/TypeScriptInPug.tsx',
