@@ -1,3 +1,6 @@
+# Mac OS X Finder
+.DS_Store
+
 node_modules
 packages/*/.nyc_output
 packages/*/coverage
