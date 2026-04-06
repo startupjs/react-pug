@@ -241,6 +241,9 @@ The specific implementation target for this branch is:
   - wrapper creation per region container kind
   - formatted-expression extraction back out of a wrapper
   - unit-tested indentation baseline semantics for wrapper extraction
+- core now also owns the generic second-pass region rewrite helper used by the ESLint formatter layer
+  - the plugin no longer owns a custom “rewrite all rewritten Pug regions again” loop
+  - that remapping infrastructure is now reusable and tested in core
 - `RegionFormattingContext` was simplified to only the structural field that still matters:
   - `containerKind`
   - the earlier `inlinePrefix` / `closingIndentOffset` metadata was removed because it no longer drove real formatting decisions
@@ -259,17 +262,30 @@ The specific implementation target for this branch is:
 - message/fix remapping
 - narrow justified filtering for fundamentally synthetic legacy constructs only
 
+### Newly reduced in the ESLint plugin
+- second-pass segmented-region rewrite plumbing
+- custom formatted-copy / formatted-region segment bookkeeping
+- custom formatted-offset back-mapping helper for that second pass
+
+Those now rely on the generic core segmented-region rewrite helper instead.
+
 ### Removed during this refactor
 - the earlier `Provider(value=true)` suppression was removed
 - current startupjs-ui behavior now intentionally reports the two real `react/jsx-boolean-value` diagnostics in `mdxComponents`
 - this is the correct outcome: we no longer suppress real rule results just because they were inconvenient in one consumer fixture
 
 ### Remaining validation tasks
-- re-run full `npm test` after the latest wrapper-contract move into core
-- re-run targeted `../startupjs-ui` validation with local `file:` overrides for:
-  - `eslint-plugin-cssxjs`
-  - `@react-pug/react-pug-core`
-- re-run targeted `../startupjs` validation with the same local `file:` overrides
+- latest validation after the generic second-pass rewrite helper move:
+  - full `npm test` passed
+  - targeted `../startupjs-ui` validation passed with local `file:` overrides for:
+    - `eslint-plugin-cssxjs`
+    - `@react-pug/react-pug-core`
+  - targeted `../startupjs` validation passed with the same local `file:` overrides
+- continue to re-run these after any further formatter-layer refactors
+- when validating `../startupjs-ui`, the expected remaining diagnostics in `mdxComponents` are still:
+  - the two real `react/jsx-boolean-value` errors
+  - the repo-local unused disable-directive warning
+- when validating `../startupjs`, the targeted repro files are currently clean
 - current remaining work is architectural cleanup, not “make the suite green”
 
 ### Known non-goal for this branch
@@ -301,7 +317,7 @@ The remaining heuristic layer is now smaller and genuinely formatter-specific:
 - `normalizeJsxClosingBracketIndent(...)`
 - continued reliance on deprecated internal `@stylistic/jsx-indent`
 
-These are still string-level concerns, but they are now downstream of an explicit structural contract instead of mixed into semantic rewriting.
+These are still string-level concerns, but they are now downstream of an explicit structural contract and generic rewrite infrastructure instead of mixed into semantic rewriting.
 
 ### What this means
 The branch already improved the architecture materially, but it is **not yet the fully generic end state**.
@@ -355,24 +371,25 @@ This is the next place where genericity can improve meaningfully.
    - logical branch if we encounter one in real code
 28. Only keep plugin-side formatter post-processing that is genuinely style-tool-specific, not context inference.
 29. Reassess whether `normalizeJsxClosingBracketIndent(...)` and the region rebasing helper can be reduced further once enough structural context is exposed.
+30. Keep any additional rewrite-stage mapping/bookkeeping out of the plugin unless it is impossible to express generically in core.
 
 ### Phase 8. Keep the hybrid model explicit
-30. Keep core/plugin boundaries aligned with the hybrid text+mapping model, not a full-file Babel IR model.
-31. When introducing new structural metadata, prefer:
+31. Keep core/plugin boundaries aligned with the hybrid text+mapping model, not a full-file Babel IR model.
+32. When introducing new structural metadata, prefer:
    - core contracts
    - per-region analysis
    over:
    - whole-file regeneration
    - AST-location-only mapping schemes
-32. Only revisit a broader Babel-backed generation layer if a concrete unsolved problem shows that the current hybrid model cannot support it cleanly.
+33. Only revisit a broader Babel-backed generation layer if a concrete unsolved problem shows that the current hybrid model cannot support it cleanly.
 
 ### Phase 9. Re-evaluate branch completeness
-33. After reducing formatter heuristics, re-run:
+34. After reducing formatter heuristics, re-run:
    - repo `npm test`
    - `../startupjs` targeted lint checks
    - `../startupjs-ui` targeted lint checks
-34. Reassess whether any remaining suppressions are still principled and synthetic-only.
-35. Only then consider the architecture revamp “complete”.
+35. Reassess whether any remaining suppressions are still principled and synthetic-only.
+36. Only then consider the architecture revamp “complete”.
 
 ## Success Criteria
 

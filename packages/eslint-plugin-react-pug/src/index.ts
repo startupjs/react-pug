@@ -9,6 +9,8 @@ import {
   lineColumnToOffset,
   mapGeneratedRangeToOriginal,
   offsetToLineColumn,
+  rewriteSegmentedPugRegions,
+  type RewrittenPugRegionsResult,
   type RegionFormattingContext,
   type StartupjsCssxjsOption,
 } from '@react-pug/react-pug-core';
@@ -51,27 +53,6 @@ interface EslintLintMessage {
 
 type LintTransformState = ReturnType<typeof createLintTransform>;
 
-interface FormattedCopySegment {
-  formattedStart: number;
-  formattedEnd: number;
-  transformedStart: number;
-  transformedEnd: number;
-}
-
-interface FormattedRegionSegment {
-  formattedStart: number;
-  formattedEnd: number;
-  transformedStart: number;
-  transformedEnd: number;
-  boundaryMap: number[];
-}
-
-interface FormattedLintCode {
-  code: string;
-  copySegments: FormattedCopySegment[];
-  regionSegments: FormattedRegionSegment[];
-}
-
 interface OffsetRange {
   start: number;
   end: number;
@@ -80,7 +61,7 @@ interface OffsetRange {
 interface CachedLintState {
   originalText: string;
   transformed: LintTransformState | null;
-  formatted: FormattedLintCode | null;
+  formatted: RewrittenPugRegionsResult | null;
   legacyStyleStatementRanges: OffsetRange[];
   syntheticStyleCallRanges: OffsetRange[];
 }
@@ -397,83 +378,18 @@ function formatPugRegionForLint(
   };
 }
 
-function formatLintCode(transformed: LintTransformState, filename: string): FormattedLintCode | null {
-  const pugRegions = transformed.regionSegments
-    .slice()
-    .sort((a, b) => a.rewrittenStart - b.rewrittenStart);
+function formatLintCode(transformed: LintTransformState, filename: string): RewrittenPugRegionsResult | null {
+  if (transformed.regionSegments.length === 0) return null;
 
-  if (pugRegions.length === 0) return null;
-
-  let code = '';
-  let cursor = 0;
-  const copySegments: FormattedCopySegment[] = [];
-  const regionSegments: FormattedRegionSegment[] = [];
-
-  for (const region of pugRegions) {
-    if (cursor < region.rewrittenStart) {
-      const formattedStart = code.length;
-      const copied = transformed.code.slice(cursor, region.rewrittenStart);
-      code += copied;
-      copySegments.push({
-        formattedStart,
-        formattedEnd: code.length,
-        transformedStart: cursor,
-        transformedEnd: region.rewrittenStart,
-      });
-    }
-
-    const formattedStart = code.length;
+  return rewriteSegmentedPugRegions(transformed, filename, (expr, region, currentFilename) => {
     const baseIndent = getLineIndent(transformed.code, region.rewrittenStart);
-    const formattedRegion = formatPugRegionForLint(
-      transformed.code.slice(region.rewrittenStart, region.rewrittenEnd),
+    return formatPugRegionForLint(
+      expr,
       baseIndent,
       region.formattingContext,
-      filename,
+      currentFilename,
     );
-    code += formattedRegion.code;
-    regionSegments.push({
-      formattedStart,
-      formattedEnd: code.length,
-      transformedStart: region.rewrittenStart,
-      transformedEnd: region.rewrittenEnd,
-      boundaryMap: formattedRegion.boundaryMap,
-    });
-    cursor = region.rewrittenEnd;
-  }
-
-  if (cursor < transformed.code.length) {
-    const formattedStart = code.length;
-    code += transformed.code.slice(cursor);
-    copySegments.push({
-      formattedStart,
-      formattedEnd: code.length,
-      transformedStart: cursor,
-      transformedEnd: transformed.code.length,
-    });
-  }
-
-  return { code, copySegments, regionSegments };
-}
-
-function mapFormattedOffsetToTransformed(
-  formatted: FormattedLintCode,
-  formattedOffset: number,
-): number | null {
-  const clamped = Math.max(0, Math.min(formattedOffset, formatted.code.length));
-
-  for (const region of formatted.regionSegments) {
-    if (clamped < region.formattedStart || clamped > region.formattedEnd) continue;
-    const localOffset = clamped - region.formattedStart;
-    const mappedLocal = region.boundaryMap[Math.min(localOffset, region.boundaryMap.length - 1)] ?? 0;
-    return region.transformedStart + mappedLocal;
-  }
-
-  for (const segment of formatted.copySegments) {
-    if (clamped < segment.formattedStart || clamped > segment.formattedEnd) continue;
-    return segment.transformedStart + (clamped - segment.formattedStart);
-  }
-
-  return null;
+  });
 }
 
 function intersectsTransformedPugRegion(
@@ -497,10 +413,10 @@ function mapLintFix(
   if (!cached.transformed) return undefined;
 
   const generatedStart = cached.formatted
-    ? mapFormattedOffsetToTransformed(cached.formatted, fix.range[0])
+    ? cached.formatted.mapRewrittenOffsetToBase(fix.range[0])
     : fix.range[0];
   const generatedEnd = cached.formatted
-    ? mapFormattedOffsetToTransformed(cached.formatted, fix.range[1])
+    ? cached.formatted.mapRewrittenOffsetToBase(fix.range[1])
     : fix.range[1];
 
   if (generatedStart == null || generatedEnd == null) return undefined;
@@ -576,8 +492,7 @@ function mapLintMessage(
   if (message.line == null || message.column == null) return message;
 
   const generatedStart = cached.formatted
-    ? mapFormattedOffsetToTransformed(
-      cached.formatted,
+    ? cached.formatted.mapRewrittenOffsetToBase(
       lineColumnToOffset(cached.formatted.code, message.line, message.column),
     )
     : lineColumnToOffset(cached.transformed.code, message.line, message.column);
@@ -586,8 +501,7 @@ function mapLintMessage(
   const generatedEnd = (message.endLine != null && message.endColumn != null)
     ? (
         cached.formatted
-          ? mapFormattedOffsetToTransformed(
-            cached.formatted,
+          ? cached.formatted.mapRewrittenOffsetToBase(
             lineColumnToOffset(cached.formatted.code, message.endLine, message.endColumn),
           )
           : lineColumnToOffset(cached.transformed.code, message.endLine, message.endColumn)

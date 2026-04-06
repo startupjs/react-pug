@@ -5,6 +5,7 @@ import {
   createFormattingWrapper,
   extractFormattedExpressionFromWrapper,
   normalizePugExpressionForLint,
+  rewriteSegmentedPugRegions,
 } from '../../src/language/lintTransform'
 
 function remapSnippet (source: string, generated: string, snippet: string, mapper: (offset: number) => number | null): string | null {
@@ -195,5 +196,33 @@ describe('lintTransform', () => {
       code: "(\n    <Prompt\n      title='Hello'\n    />\n  )",
       wrapperLineIndentWidth: 2,
     })
+  })
+
+  it('can rewrite already-segmented pug regions again while preserving mapping to the previous transform', () => {
+    const source = [
+      "import { pug } from 'startupjs'",
+      'const config = {',
+      '  children: pug`',
+      '    span Child',
+      '  `',
+      '}',
+    ].join('\n')
+
+    const linted = createLintTransform(source, 'file.jsx')
+    const formatted = rewriteSegmentedPugRegions(linted, 'file.jsx', (expr) => {
+      const code = `(\n  ${expr}\n)`
+      return {
+        code,
+        boundaryMap: buildExpressionBoundaryMap(expr, code, 'file.jsx'),
+      }
+    })
+
+    expect(formatted.code).toContain('(\n  <span>Child</span>\n)')
+
+    const rewrittenOffset = formatted.code.indexOf('Child')
+    expect(rewrittenOffset).toBeGreaterThanOrEqual(0)
+    const baseOffset = formatted.mapRewrittenOffsetToBase(rewrittenOffset)
+    expect(baseOffset).not.toBeNull()
+    expect(linted.code.slice(baseOffset!, baseOffset! + 'Child'.length)).toBe('Child')
   })
 })

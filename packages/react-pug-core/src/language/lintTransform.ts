@@ -30,6 +30,12 @@ export interface RewrittenPugRegionsResult {
   mapBaseOffsetToRewritten: (offset: number) => number | null;
 }
 
+export interface SegmentedPugRegionsInput {
+  code: string;
+  copySegments: RewrittenCopySegment[];
+  regionSegments: RewrittenRegionSegment[];
+}
+
 export interface BoundaryMappedExpression {
   code: string;
   boundaryMap: number[];
@@ -708,6 +714,131 @@ export function rewriteMappedPugRegions(
 
   const mapBaseOffsetToRewritten = (offset: number): number | null => {
     const clamped = Math.max(0, Math.min(offset, baseTransform.code.length));
+
+    for (const region of regionSegments) {
+      if (clamped < region.baseStart || clamped > region.baseEnd) continue;
+      const localOffset = clamped - region.baseStart;
+
+      for (let i = 0; i < region.boundaryMap.length; i += 1) {
+        if (region.boundaryMap[i] >= localOffset) {
+          return region.rewrittenStart + i;
+        }
+      }
+
+      return region.rewrittenEnd;
+    }
+
+    for (const segment of copySegments) {
+      if (clamped < segment.baseStart || clamped > segment.baseEnd) continue;
+      return segment.rewrittenStart + (clamped - segment.baseStart);
+    }
+
+    return null;
+  };
+
+  return {
+    code,
+    copySegments,
+    regionSegments,
+    mapRewrittenOffsetToBase,
+    mapBaseOffsetToRewritten,
+  };
+}
+
+export function rewriteSegmentedPugRegions(
+  input: SegmentedPugRegionsInput,
+  filename: string,
+  rewriteRegion: (expr: string, region: RewrittenRegionSegment, filename: string) => BoundaryMappedExpression,
+): RewrittenPugRegionsResult {
+  const pugRegions = input.regionSegments
+    .slice()
+    .sort((a, b) => a.rewrittenStart - b.rewrittenStart);
+
+  if (pugRegions.length === 0) {
+    return {
+      code: input.code,
+      copySegments: [{
+        rewrittenStart: 0,
+        rewrittenEnd: input.code.length,
+        baseStart: 0,
+        baseEnd: input.code.length,
+      }],
+      regionSegments: [],
+      mapRewrittenOffsetToBase: (offset: number) => (
+        offset >= 0 && offset <= input.code.length ? offset : null
+      ),
+      mapBaseOffsetToRewritten: (offset: number) => (
+        offset >= 0 && offset <= input.code.length ? offset : null
+      ),
+    };
+  }
+
+  let code = '';
+  let cursor = 0;
+  const copySegments: RewrittenCopySegment[] = [];
+  const regionSegments: RewrittenRegionSegment[] = [];
+
+  for (const region of pugRegions) {
+    if (cursor < region.rewrittenStart) {
+      const rewrittenStart = code.length;
+      const copied = input.code.slice(cursor, region.rewrittenStart);
+      code += copied;
+      copySegments.push({
+        rewrittenStart,
+        rewrittenEnd: code.length,
+        baseStart: cursor,
+        baseEnd: region.rewrittenStart,
+      });
+    }
+
+    const rewrittenStart = code.length;
+    const originalExpr = input.code.slice(region.rewrittenStart, region.rewrittenEnd);
+    const rewritten = rewriteRegion(originalExpr, region, filename);
+    code += rewritten.code;
+    regionSegments.push({
+      rewrittenStart,
+      rewrittenEnd: code.length,
+      baseStart: region.rewrittenStart,
+      baseEnd: region.rewrittenEnd,
+      boundaryMap: rewritten.boundaryMap,
+      region: region.region,
+      formattingContext: region.formattingContext,
+    });
+    cursor = region.rewrittenEnd;
+  }
+
+  if (cursor < input.code.length) {
+    const rewrittenStart = code.length;
+    const copied = input.code.slice(cursor);
+    code += copied;
+    copySegments.push({
+      rewrittenStart,
+      rewrittenEnd: code.length,
+      baseStart: cursor,
+      baseEnd: input.code.length,
+    });
+  }
+
+  const mapRewrittenOffsetToBase = (offset: number): number | null => {
+    const clamped = Math.max(0, Math.min(offset, code.length));
+
+    for (const region of regionSegments) {
+      if (clamped < region.rewrittenStart || clamped > region.rewrittenEnd) continue;
+      const localOffset = clamped - region.rewrittenStart;
+      const mappedLocal = region.boundaryMap[Math.min(localOffset, region.boundaryMap.length - 1)] ?? 0;
+      return region.baseStart + mappedLocal;
+    }
+
+    for (const segment of copySegments) {
+      if (clamped < segment.rewrittenStart || clamped > segment.rewrittenEnd) continue;
+      return segment.baseStart + (clamped - segment.rewrittenStart);
+    }
+
+    return null;
+  };
+
+  const mapBaseOffsetToRewritten = (offset: number): number | null => {
+    const clamped = Math.max(0, Math.min(offset, input.code.length));
 
     for (const region of regionSegments) {
       if (clamped < region.baseStart || clamped > region.baseEnd) continue;
