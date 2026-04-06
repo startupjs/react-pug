@@ -9,8 +9,17 @@ Use the VS Code Marketplace build when available, or package/install from the re
 ```bash
 npm ci
 npm run package:vsix
-code --install-extension packages/vscode-react-pug-tsx/*.vsix
+code --install-extension .tmp/vsix/vscode-react-pug-tsx.vsix
 ```
+
+Or build and install in one step:
+
+```bash
+npm ci
+npm run install:vsix
+```
+
+This builds the VSIX from the monorepo into `.tmp/vsix/`, keeps a stable install path at `.tmp/vsix/vscode-react-pug-tsx.vsix`, and installs it locally into VS Code.
 
 Embedded `style(...)` editor support notes:
 
