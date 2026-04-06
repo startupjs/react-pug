@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
-import { readdirSync } from 'fs';
 
 // Test checklist:
 // [x] syntaxes/pug-template-literal.json exists
@@ -79,24 +78,12 @@ describe('TextMate grammar file', () => {
 });
 
 describe('tokenization regressions', () => {
-  function getLatestVsCodeAppRoot() {
-    const testRoot = resolve(extensionRoot, '../../.vscode-test');
-    const entries = readdirSync(testRoot, { withFileTypes: true })
-      .filter(entry => entry.isDirectory() && entry.name.startsWith('vscode-darwin-arm64-'))
-      .map(entry => resolve(testRoot, entry.name, 'Visual Studio Code.app/Contents/Resources/app'));
-
-    if (entries.length === 0) {
-      throw new Error('No local VS Code test install found under .vscode-test');
-    }
-
-    return entries.sort().at(-1)!;
-  }
-
   async function createRegistry() {
-    const vscodeAppRoot = getLatestVsCodeAppRoot();
-    const vsctm = require(resolve(vscodeAppRoot, 'node_modules/vscode-textmate/release/main.js'));
-    const onig = require(resolve(vscodeAppRoot, 'node_modules/vscode-oniguruma/release/main.js'));
-    const wasmBin = readFileSync(resolve(vscodeAppRoot, 'node_modules/vscode-oniguruma/release/onig.wasm')).buffer;
+    const vsctm = require('vscode-textmate');
+    const onig = require('vscode-oniguruma');
+    const wasmBin = readFileSync(require.resolve('vscode-oniguruma/release/onig.wasm')).buffer;
+    const jsGrammarPath = resolve(extensionRoot, 'test/fixtures/grammars/source.js.tmLanguage.json');
+    const pugGrammarPath = resolve(extensionRoot, 'test/fixtures/grammars/source.pug.tmLanguage.json');
     await onig.loadWASM(wasmBin);
 
     return new vsctm.Registry({
@@ -110,11 +97,11 @@ describe('tokenization regressions', () => {
       }),
       loadGrammar(scopeName: string) {
         const knownScopes: Record<string, string> = {
-          'source.js': resolve(vscodeAppRoot, 'extensions/javascript/syntaxes/JavaScript.tmLanguage.json'),
-          'source.jsx': resolve(vscodeAppRoot, 'extensions/javascript/syntaxes/JavaScriptReact.tmLanguage.json'),
-          'source.ts': resolve(vscodeAppRoot, 'extensions/typescript-basics/syntaxes/TypeScript.tmLanguage.json'),
-          'source.tsx': resolve(vscodeAppRoot, 'extensions/typescript-basics/syntaxes/TypeScriptReact.tmLanguage.json'),
-          'source.pug': resolve(vscodeAppRoot, 'extensions/pug/syntaxes/pug.tmLanguage.json'),
+          'source.js': jsGrammarPath,
+          'source.jsx': jsGrammarPath,
+          'source.ts': jsGrammarPath,
+          'source.tsx': jsGrammarPath,
+          'source.pug': pugGrammarPath,
           'inline.pug-template-literal': grammarPath,
         };
         const target = knownScopes[scopeName];
@@ -129,6 +116,21 @@ describe('tokenization regressions', () => {
       },
     });
   }
+
+  it('injects pug tokenization into a real tagged template', async () => {
+    const registry = await createRegistry();
+    const grammar = await registry.loadGrammar('source.js');
+    const line = "const view = pug`Div.card Hello`";
+    const result = grammar.tokenizeLine(line);
+    const injectedTokens = result.tokens.filter((token: any) => (
+      token.scopes.includes('meta.embedded.inline.pug')
+    ));
+
+    expect(injectedTokens.length).toBeGreaterThan(0);
+    expect(injectedTokens.some((token: any) => (
+      token.scopes.includes('entity.name.tag.pug')
+    ))).toBe(true);
+  });
 
   it('does not inject pug tokenization into line comments', async () => {
     const registry = await createRegistry();

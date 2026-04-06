@@ -55,7 +55,9 @@
     "lerna": "^9.0.5",
     "neostandard": "^0.13.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "vscode-oniguruma": "^1.7.0",
+    "vscode-textmate": "^9.3.2"
   },
   "repository": "https://github.com/startupjs/react-pug"
 }
