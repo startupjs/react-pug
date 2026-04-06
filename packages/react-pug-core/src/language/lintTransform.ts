@@ -1,7 +1,7 @@
 import generate from '@babel/generator';
 import { parse, parseExpression } from '@babel/parser';
 import * as t from '@babel/types';
-import type { ShadowMappedRegion } from './mapping';
+import type { ShadowInsertion, ShadowMappedRegion } from './mapping';
 import type { SourceTransformOptions, SourceTransformResult } from './sourceTransform';
 import { transformSourceFile } from './sourceTransform';
 
@@ -66,6 +66,11 @@ export interface RegionFormattingContext {
 export interface FormattingWrapperExtraction {
   code: string;
   wrapperLineIndentWidth: number;
+}
+
+export interface InsertionOffsetRange {
+  start: number;
+  end: number;
 }
 
 interface ExpressionToken {
@@ -868,6 +873,28 @@ export function rewriteSegmentedPugRegions(
     mapRewrittenOffsetToBase,
     mapBaseOffsetToRewritten,
   };
+}
+
+interface MappedInsertionRangesInput {
+  baseTransform: SourceTransformResult;
+  mapBaseOffsetToRewritten: (offset: number) => number | null;
+}
+
+export function collectMappedInsertionRangesByKind(
+  input: MappedInsertionRangesInput,
+  kind: ShadowInsertion['kind'],
+): InsertionOffsetRange[] {
+  const ranges: InsertionOffsetRange[] = [];
+
+  for (const insertion of input.baseTransform.document.insertions) {
+    if (insertion.kind !== kind) continue;
+    const start = input.mapBaseOffsetToRewritten(insertion.shadowStart);
+    const end = input.mapBaseOffsetToRewritten(insertion.shadowEnd);
+    if (start == null || end == null) continue;
+    ranges.push({ start, end });
+  }
+
+  return ranges;
 }
 
 export function createLintTransform(

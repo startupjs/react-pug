@@ -2,10 +2,12 @@ import {
   buildExpressionBoundaryMap,
   type ClassAttributeOption,
   type ClassMergeOption,
+  collectMappedInsertionRangesByKind,
   createFormattingWrapper,
   createLintTransform,
   extractFormattedExpressionFromWrapper,
   hasTagFunctionCall,
+  type InsertionOffsetRange,
   lineColumnToOffset,
   mapGeneratedRangeToOriginal,
   offsetToLineColumn,
@@ -53,17 +55,12 @@ interface EslintLintMessage {
 
 type LintTransformState = ReturnType<typeof createLintTransform>;
 
-interface OffsetRange {
-  start: number;
-  end: number;
-}
-
 interface CachedLintState {
   originalText: string;
   transformed: LintTransformState | null;
   formatted: RewrittenPugRegionsResult | null;
-  legacyStyleStatementRanges: OffsetRange[];
-  syntheticStyleCallRanges: OffsetRange[];
+  legacyStyleStatementRanges: InsertionOffsetRange[];
+  syntheticStyleCallRanges: InsertionOffsetRange[];
 }
 
 interface EslintProcessorLike {
@@ -211,7 +208,7 @@ function containsJsxSyntax(text: string, filename: string): boolean {
   }
 }
 
-function collectLegacyStyleStatementRanges(text: string, filename: string): OffsetRange[] {
+function collectLegacyStyleStatementRanges(text: string, filename: string): InsertionOffsetRange[] {
   try {
     const ast = parse(text, {
       sourceType: 'module',
@@ -219,7 +216,7 @@ function collectLegacyStyleStatementRanges(text: string, filename: string): Offs
       errorRecovery: false,
     }) as any;
 
-    const ranges: OffsetRange[] = [];
+    const ranges: InsertionOffsetRange[] = [];
     const visit = (node: any) => {
       if (!node || typeof node !== 'object') return;
       if (Array.isArray(node)) {
@@ -248,20 +245,6 @@ function collectLegacyStyleStatementRanges(text: string, filename: string): Offs
   } catch {
     return [];
   }
-}
-
-function collectSyntheticStyleCallRanges(transformed: LintTransformState): OffsetRange[] {
-  const ranges: OffsetRange[] = [];
-
-  for (const insertion of transformed.baseTransform.document.insertions) {
-    if (insertion.kind !== 'style-call') continue;
-    const start = transformed.mapBaseOffsetToRewritten(insertion.shadowStart);
-    const end = transformed.mapBaseOffsetToRewritten(insertion.shadowEnd);
-    if (start == null || end == null) continue;
-    ranges.push({ start, end });
-  }
-
-  return ranges;
 }
 
 function getLineIndent(text: string, offset: number): string {
@@ -441,7 +424,7 @@ function mapLintFix(
   };
 }
 
-function overlapsRangeList(ranges: OffsetRange[], start: number, end: number): boolean {
+function overlapsRangeList(ranges: InsertionOffsetRange[], start: number, end: number): boolean {
   return ranges.some(range => start < range.end && end > range.start);
 }
 
@@ -617,7 +600,7 @@ function createReactPugProcessor(
         transformed,
         formatted,
         legacyStyleStatementRanges,
-        syntheticStyleCallRanges: collectSyntheticStyleCallRanges(transformed),
+        syntheticStyleCallRanges: collectMappedInsertionRangesByKind(transformed, 'style-call'),
       });
       if (!shouldUseVirtualJsxFilename) return [transformed.code];
       return [{

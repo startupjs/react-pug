@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildExpressionBoundaryMap,
+  collectMappedInsertionRangesByKind,
   createLintTransform,
   createFormattingWrapper,
   extractFormattedExpressionFromWrapper,
@@ -224,5 +225,27 @@ describe('lintTransform', () => {
     const baseOffset = formatted.mapRewrittenOffsetToBase(rewrittenOffset)
     expect(baseOffset).not.toBeNull()
     expect(linted.code.slice(baseOffset!, baseOffset! + 'Child'.length)).toBe('Child')
+  })
+
+  it('exposes mapped synthetic style-call insertion ranges generically', () => {
+    const source = [
+      "import { pug } from 'startupjs'",
+      'export default function Demo () {',
+      '  return pug`',
+      '    Div Hello',
+      "    style(lang='styl')",
+      '      .root',
+      '        color red',
+      '  `',
+      '}',
+    ].join('\n')
+
+    const result = createLintTransform(source, 'file.jsx')
+    const styleCallRanges = collectMappedInsertionRangesByKind(result, 'style-call')
+
+    expect(styleCallRanges).toHaveLength(1)
+    const styleCallText = result.code.slice(styleCallRanges[0].start, styleCallRanges[0].end)
+    expect(styleCallText).toContain('styl`')
+    expect(styleCallText).toContain('.root')
   })
 })
