@@ -48,13 +48,14 @@ function createStartupjsUiStyleEslint(fix: boolean): ESLint {
 }
 
 describe('startupjs-ui regressions', () => {
-  it('does not report false indent or Provider(value=true) diagnostics for startupjs-ui repros', async () => {
+  it('does not report false processor diagnostics for startupjs-ui repros', async () => {
     const files = [
       resolve(fixtureRoot, 'StartupjsUiDialogsReadme.js'),
       resolve(fixtureRoot, 'StartupjsUiDraggableReadme.js'),
       resolve(fixtureRoot, 'StartupjsUiTypeCell.js'),
       resolve(fixtureRoot, 'StartupjsUiWrapInput.tsx'),
       resolve(fixtureRoot, 'StartupjsUiMdxComponents.js'),
+      resolve(fixtureRoot, 'StartupjsUiPrompt.tsx'),
     ]
 
     const results = await createStartupjsUiStyleEslint(false).lintFiles(files)
@@ -68,7 +69,22 @@ describe('startupjs-ui regressions', () => {
       }))
     ))
 
-    expect(messages).toEqual([])
+    expect(messages).toEqual([
+      {
+        column: 34,
+        filePath: resolve(fixtureRoot, 'StartupjsUiMdxComponents.js'),
+        line: 205,
+        message: 'Value must be omitted for boolean attribute `value`',
+        ruleId: 'react/jsx-boolean-value',
+      },
+      {
+        column: 27,
+        filePath: resolve(fixtureRoot, 'StartupjsUiMdxComponents.js'),
+        line: 257,
+        message: 'Value must be omitted for boolean attribute `value`',
+        ruleId: 'react/jsx-boolean-value',
+      },
+    ])
   })
 
   it('still reports jsx-boolean-value for intrinsic boolean attrs inside pug', async () => {
@@ -97,6 +113,7 @@ describe('startupjs-ui regressions', () => {
       'StartupjsUiDialogsReadme.js',
       'StartupjsUiDraggableReadme.js',
       'StartupjsUiMdxComponents.js',
+      'StartupjsUiPrompt.tsx',
       'StartupjsUiTypeCell.js',
       'StartupjsUiWrapInput.tsx',
     ]) {

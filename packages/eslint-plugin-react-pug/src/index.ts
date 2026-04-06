@@ -1,16 +1,18 @@
 import {
+  buildExpressionBoundaryMap,
   type ClassAttributeOption,
   type ClassMergeOption,
+  createFormattingWrapper,
+  createLintTransform,
+  extractFormattedExpressionFromWrapper,
   hasTagFunctionCall,
   lineColumnToOffset,
   mapGeneratedRangeToOriginal,
   offsetToLineColumn,
+  type RegionFormattingContext,
   type StartupjsCssxjsOption,
-  transformSourceFile,
 } from '@react-pug/react-pug-core';
-import generate from '@babel/generator';
-import { parse, parseExpression } from '@babel/parser';
-import * as t from '@babel/types';
+import { parse } from '@babel/parser';
 import { Linter, SourceCode } from 'eslint';
 import stylisticPlugin from '@stylistic/eslint-plugin';
 import prettier from '@prettier/sync';
@@ -47,7 +49,7 @@ interface EslintLintMessage {
   [key: string]: unknown;
 }
 
-type SourceTransformState = ReturnType<typeof transformSourceFile>;
+type LintTransformState = ReturnType<typeof createLintTransform>;
 
 interface FormattedCopySegment {
   formattedStart: number;
@@ -77,10 +79,10 @@ interface OffsetRange {
 
 interface CachedLintState {
   originalText: string;
-  transformed: SourceTransformState | null;
+  transformed: LintTransformState | null;
   formatted: FormattedLintCode | null;
   legacyStyleStatementRanges: OffsetRange[];
-  providerBooleanValueRanges: OffsetRange[];
+  syntheticStyleCallRanges: OffsetRange[];
 }
 
 interface EslintProcessorLike {
@@ -92,7 +94,6 @@ interface EslintProcessorLike {
   supportsAutofix: boolean;
 }
 
-const FORMAT_WRAPPER_PREFIX = 'const __pug = ';
 const FLAT_LINT_FILES = ['**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}'];
 const LEGACY_STYLE_HELPERS = new Set(['styl', 'css', 'sass', 'scss']);
 const LEGACY_STYLE_SUPPRESSED_RULES = new Set(['no-unused-expressions', 'no-unreachable']);
@@ -268,58 +269,18 @@ function collectLegacyStyleStatementRanges(text: string, filename: string): Offs
   }
 }
 
-function isProviderElementName(node: any): boolean {
-  if (!node || typeof node !== 'object') return false;
-  if (node.type === 'JSXIdentifier') return node.name === 'Provider';
-  if (node.type === 'JSXMemberExpression') return isProviderElementName(node.property);
-  return false;
-}
+function collectSyntheticStyleCallRanges(transformed: LintTransformState): OffsetRange[] {
+  const ranges: OffsetRange[] = [];
 
-function collectProviderBooleanValueRanges(text: string, filename: string): OffsetRange[] {
-  try {
-    const ast = parse(text, {
-      sourceType: 'module',
-      plugins: getExpressionParserPlugins(filename),
-      errorRecovery: false,
-    }) as any;
-
-    const ranges: OffsetRange[] = [];
-    const visit = (node: any) => {
-      if (!node || typeof node !== 'object') return;
-      if (Array.isArray(node)) {
-        for (const child of node) visit(child);
-        return;
-      }
-
-      if (
-        node.type === 'JSXOpeningElement'
-        && isProviderElementName(node.name)
-        && Array.isArray(node.attributes)
-      ) {
-        for (const attribute of node.attributes) {
-          if (
-            attribute?.type === 'JSXAttribute'
-            && attribute.name?.type === 'JSXIdentifier'
-            && attribute.name.name === 'value'
-            && attribute.value?.type === 'JSXExpressionContainer'
-            && attribute.value.expression?.type === 'BooleanLiteral'
-            && attribute.value.expression.value === true
-            && typeof attribute.start === 'number'
-            && typeof attribute.end === 'number'
-          ) {
-            ranges.push({ start: attribute.start, end: attribute.end });
-          }
-        }
-      }
-
-      for (const value of Object.values(node)) visit(value);
-    };
-
-    visit(ast.program);
-    return ranges;
-  } catch {
-    return [];
+  for (const insertion of transformed.baseTransform.document.insertions) {
+    if (insertion.kind !== 'style-call') continue;
+    const start = transformed.mapBaseOffsetToRewritten(insertion.shadowStart);
+    const end = transformed.mapBaseOffsetToRewritten(insertion.shadowEnd);
+    if (start == null || end == null) continue;
+    ranges.push({ start, end });
   }
+
+  return ranges;
 }
 
 function getLineIndent(text: string, offset: number): string {
@@ -336,281 +297,25 @@ function getExpressionParserPlugins(filename: string): any[] {
   ] as any;
 }
 
-function unwrapLintComparableExpression(node: t.Expression): t.Expression {
-  if (t.isParenthesizedExpression(node)) return unwrapLintComparableExpression(node.expression as t.Expression);
-  if (t.isTSAsExpression(node)) return unwrapLintComparableExpression(node.expression as t.Expression);
-  if (t.isTSTypeAssertion(node)) return unwrapLintComparableExpression(node.expression as t.Expression);
-  if (t.isTSNonNullExpression(node)) return unwrapLintComparableExpression(node.expression as t.Expression);
-  return node;
-}
-
-function isRepeatableTruthyExpression(node: t.Expression): boolean {
-  const unwrapped = unwrapLintComparableExpression(node);
-  return (
-    t.isIdentifier(unwrapped)
-    || t.isThisExpression(unwrapped)
-    || t.isSuper(unwrapped)
-    || t.isMemberExpression(unwrapped)
-    || t.isOptionalMemberExpression(unwrapped)
-  );
-}
-
-function areEquivalentRepeatableExpressions(left: t.Expression, right: t.Expression): boolean {
-  const a = unwrapLintComparableExpression(left);
-  const b = unwrapLintComparableExpression(right);
-
-  if (a.type !== b.type) return false;
-  if (t.isIdentifier(a) && t.isIdentifier(b)) return a.name === b.name;
-  if (t.isThisExpression(a) && t.isThisExpression(b)) return true;
-  if (t.isSuper(a) && t.isSuper(b)) return true;
-
-  if (t.isMemberExpression(a) && t.isMemberExpression(b)) {
-    return (
-      a.computed === b.computed
-      && areEquivalentRepeatableExpressions(a.object as t.Expression, b.object as t.Expression)
-      && (
-        a.computed
-          ? (
-              t.isExpression(a.property)
-              && t.isExpression(b.property)
-              && areEquivalentRepeatableExpressions(a.property, b.property)
-            )
-          : (
-              t.isIdentifier(a.property)
-              && t.isIdentifier(b.property)
-              && a.property.name === b.property.name
-            )
-      )
-    );
-  }
-
-  if (t.isOptionalMemberExpression(a) && t.isOptionalMemberExpression(b)) {
-    return (
-      a.computed === b.computed
-      && a.optional === b.optional
-      && areEquivalentRepeatableExpressions(a.object as t.Expression, b.object as t.Expression)
-      && (
-        a.computed
-          ? areEquivalentRepeatableExpressions(a.property as t.Expression, b.property as t.Expression)
-          : (
-              t.isIdentifier(a.property)
-              && t.isIdentifier(b.property)
-              && a.property.name === b.property.name
-            )
-      )
-    );
-  }
-
-  return false;
-}
-
-function isFragmentJsxName(name: t.JSXIdentifier | t.JSXMemberExpression | t.JSXNamespacedName): boolean {
-  return (
-    (t.isJSXIdentifier(name) && name.name === 'Fragment')
-    || (
-      t.isJSXMemberExpression(name)
-      && t.isJSXIdentifier(name.object)
-      && name.object.name === 'React'
-      && t.isJSXIdentifier(name.property)
-      && name.property.name === 'Fragment'
-    )
-  );
-}
-
-function normalizeLintExpressionAst<T extends t.Node>(node: T): T {
-  if (t.isConditionalExpression(node)) {
-    node.test = normalizeLintExpressionAst(node.test);
-    node.consequent = normalizeLintExpressionAst(node.consequent);
-    node.alternate = normalizeLintExpressionAst(node.alternate);
-
-    if (
-      isRepeatableTruthyExpression(node.test)
-      && areEquivalentRepeatableExpressions(node.test, node.consequent)
-    ) {
-      return t.logicalExpression('||', node.test, node.alternate) as T;
-    }
-
-    return node;
-  }
-
-  if (t.isJSXElement(node)) {
-    node.children = node.children.map(child => normalizeLintExpressionAst(child));
-    if (
-      isFragmentJsxName(node.openingElement.name)
-      && node.openingElement.attributes.length === 0
-      && !node.openingElement.selfClosing
-      && node.closingElement
-    ) {
-      return t.jsxFragment(
-        t.jsxOpeningFragment(),
-        t.jsxClosingFragment(),
-        node.children,
-      ) as T;
-    }
-    return node;
-  }
-
-  if (t.isJSXFragment(node)) {
-    node.children = node.children.map(child => normalizeLintExpressionAst(child));
-    return node;
-  }
-
-  if (t.isJSXExpressionContainer(node)) {
-    node.expression = normalizeLintExpressionAst(node.expression);
-    return node;
-  }
-
-  if (Array.isArray((node as any).children)) {
-    (node as any).children = (node as any).children.map((child: any) => normalizeLintExpressionAst(child));
-  }
-
-  for (const [key, value] of Object.entries(node as any)) {
-    if (key === 'loc' || key === 'start' || key === 'end' || key === 'extra') continue;
-    if (Array.isArray(value)) {
-      (node as any)[key] = value.map(item => {
-        if (!item || typeof item !== 'object' || typeof (item as any).type !== 'string') return item;
-        return normalizeLintExpressionAst(item as t.Node);
-      });
-      continue;
-    }
-
-    if (value && typeof value === 'object' && typeof (value as any).type === 'string') {
-      (node as any)[key] = normalizeLintExpressionAst(value as t.Node);
-    }
-  }
-
-  return node;
-}
-
-function normalizeLintExpression(expr: string, filename: string): string {
-  try {
-    const ast = parseExpression(expr, {
-      plugins: getExpressionParserPlugins(filename),
-      errorRecovery: false,
-    }) as t.Expression;
-    const normalized = normalizeLintExpressionAst(ast);
-    return generate(normalized, {
-      comments: true,
-      jsescOption: {
-        minimal: true,
-      },
-    }).code;
-  } catch {
-    return expr;
-  }
-}
-
-function indentFormattedRegion(
+function rebaseFormattedRegion(
   text: string,
   baseIndent: string,
-  closingIndentOffset = 0,
-  inlinePrefix = false,
+  wrapperLineIndentWidth: number,
 ): string {
-  if (baseIndent.length === 0 || text.length === 0) return text;
-
+  if (text.length === 0) return text;
   const lines = text.split('\n');
   if (lines.length === 1) return text;
 
-  const firstTrimmed = lines[0].trim();
-  const lastTrimmed = lines[lines.length - 1].trim();
-  const isStructuredMultilineExpression = (
-    (firstTrimmed === '(' && lastTrimmed === ')')
-    || (firstTrimmed.startsWith('(() => {') && lastTrimmed.startsWith('})()'))
-    || (firstTrimmed.startsWith('<') && (lastTrimmed.startsWith('</') || lastTrimmed === '/>' || lastTrimmed === '>'))
-  );
-
-  const structuredBodyIndent = isStructuredMultilineExpression
-    ? Math.min(...lines
-      .slice(1, -1)
-      .filter(line => line.trim().length > 0)
-      .map(line => line.match(/^[ \t]*/)?.[0].length ?? 0))
-    : 0;
-
   return lines
     .map((line, index) => {
-      if (index === 0) return inlinePrefix ? line.trimStart() : line;
+      if (index === 0) return line.trimStart();
+      if (line.trim().length === 0) return '';
 
-      if (isStructuredMultilineExpression && index < lines.length - 1) {
-        return `${baseIndent}  ${line.slice(structuredBodyIndent)}`;
-      }
-
-      if (isStructuredMultilineExpression) {
-        return `${baseIndent}${' '.repeat(closingIndentOffset)}${line.trimStart()}`;
-      }
-
-      return `${baseIndent}${line}`;
+      const indentWidth = line.match(/^[ \t]*/)?.[0].length ?? 0;
+      const relativeIndent = Math.max(0, indentWidth - wrapperLineIndentWidth);
+      return `${baseIndent}${' '.repeat(relativeIndent)}${line.trimStart()}`;
     })
     .join('\n');
-}
-
-function normalizeTernaryBranchIndent(text: string): string {
-  const lines = text.split('\n');
-  const stack: Array<{
-    branchIndent: number;
-    iifeOpenIndex: number | null;
-  }> = [];
-
-  const getIndent = (line: string) => line.match(/^[ \t]*/)?.[0].length ?? 0;
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    const indent = getIndent(line);
-
-    if (/^[?:]\s*\($/.test(trimmed)) {
-      stack.push({ branchIndent: indent, iifeOpenIndex: null });
-      continue;
-    }
-
-    const current = stack[stack.length - 1];
-    if (!current) continue;
-
-    if (current.iifeOpenIndex == null && (trimmed === ')' || trimmed === ')}')) {
-      lines[i] = `${' '.repeat(current.branchIndent + 2)}${trimmed}`;
-      stack.pop();
-      continue;
-    }
-
-    if (trimmed.startsWith('(() => {') || trimmed.startsWith('{(() => {')) {
-      current.iifeOpenIndex = i;
-      lines[i] = `${' '.repeat(current.branchIndent + 4)}${trimmed}`;
-      continue;
-    }
-
-    if (current.iifeOpenIndex != null && trimmed.startsWith('})()')) {
-      const bodyLines = lines
-        .slice(current.iifeOpenIndex + 1, i)
-        .filter(branchLine => branchLine.trim().length > 0);
-      const bodyBaseIndent = bodyLines.length > 0
-        ? Math.min(...bodyLines.map(getIndent))
-        : current.branchIndent + 2;
-
-      for (let bodyIndex = current.iifeOpenIndex + 1; bodyIndex < i; bodyIndex += 1) {
-        const bodyLine = lines[bodyIndex];
-        const bodyTrimmed = bodyLine.trim();
-        if (bodyTrimmed.length === 0) continue;
-
-        const relativeIndent = Math.max(0, getIndent(bodyLine) - bodyBaseIndent);
-        lines[bodyIndex] = `${' '.repeat(current.branchIndent + 6 + relativeIndent)}${bodyTrimmed}`;
-      }
-
-      lines[i] = `${' '.repeat(current.branchIndent + 4)}${trimmed}`;
-      current.iifeOpenIndex = null;
-      continue;
-    }
-
-    if (current.iifeOpenIndex == null && trimmed.length > 0) {
-      const expectedIndent = /^[<>{]/.test(trimmed)
-        ? current.branchIndent + 2
-        : current.branchIndent + 4;
-
-      if (indent < expectedIndent) {
-        lines[i] = `${' '.repeat(expectedIndent)}${trimmed}`;
-      }
-    }
-  }
-
-  return lines.join('\n');
 }
 
 function normalizeJsxClosingBracketIndent(text: string): string {
@@ -638,179 +343,10 @@ function normalizeJsxClosingBracketIndent(text: string): string {
   return lines.join('\n');
 }
 
-function parseExpressionTokens(expr: string, filename: string) {
-  const wrapped = `${FORMAT_WRAPPER_PREFIX}${expr}\n`;
-  const ast = parse(wrapped, {
-    sourceType: 'module',
-    plugins: [
-      'jsx',
-      'decorators-legacy',
-      ...(isTypeScriptLikeFilename(filename) ? ['typescript'] : []),
-    ] as any,
-    errorRecovery: false,
-    tokens: true,
-  }) as any;
-
-  const prefixLength = FORMAT_WRAPPER_PREFIX.length;
-  const endLimit = wrapped.length - 1;
-  const tokens = (ast.tokens ?? [])
-    .filter((token: any) => {
-      if (token.start < prefixLength || token.end > endLimit) return false;
-      const rawText = wrapped.slice(token.start, token.end);
-      if (token.type?.label === 'jsxText' && rawText.trim().length === 0) return false;
-      return true;
-    })
-    .map((token: any) => ({
-      start: token.start - prefixLength,
-      end: token.end - prefixLength,
-      label: token.type?.label ?? token.type,
-      value: token.value,
-      raw: wrapped.slice(token.start, token.end),
-    }));
-
-  return tokens;
-}
-
-function tokenAlignmentKey(token: {
-  label: string;
-  value?: unknown;
-  raw: string;
-}): string {
-  switch (token.label) {
-    case 'name':
-    case 'jsxName':
-    case 'privateName':
-      return `${token.label}:${token.raw}`;
-    case 'string':
-      return `${token.label}:${String(token.value ?? token.raw)}`;
-    case 'num':
-    case 'bigint':
-    case 'decimal':
-    case 'regexp':
-      return `${token.label}:${token.raw}`;
-    case 'jsxText':
-      return `${token.label}:${token.raw.trim()}`;
-    default:
-      return token.label;
-  }
-}
-
-function alignExpressionTokens(
-  originalTokens: Array<{
-    start: number;
-    end: number;
-    label: string;
-    value?: unknown;
-    raw: string;
-  }>,
-  formattedTokens: Array<{
-    start: number;
-    end: number;
-    label: string;
-    value?: unknown;
-    raw: string;
-  }>,
-): Array<[number, number]> {
-  const originalKeys = originalTokens.map(tokenAlignmentKey);
-  const formattedKeys = formattedTokens.map(tokenAlignmentKey);
-  const dp = Array.from({ length: originalKeys.length + 1 }, () => (
-    new Array<number>(formattedKeys.length + 1).fill(0)
-  ));
-
-  for (let i = originalKeys.length - 1; i >= 0; i -= 1) {
-    for (let j = formattedKeys.length - 1; j >= 0; j -= 1) {
-      if (originalKeys[i] === formattedKeys[j]) {
-        dp[i][j] = dp[i + 1][j + 1] + 1;
-      } else {
-        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
-      }
-    }
-  }
-
-  const matches: Array<[number, number]> = [];
-  let i = 0;
-  let j = 0;
-  while (i < originalKeys.length && j < formattedKeys.length) {
-    if (originalKeys[i] === formattedKeys[j]) {
-      matches.push([i, j]);
-      i += 1;
-      j += 1;
-      continue;
-    }
-    if (dp[i + 1][j] >= dp[i][j + 1]) {
-      i += 1;
-    } else {
-      j += 1;
-    }
-  }
-
-  return matches;
-}
-
-function buildBoundaryMap(
-  originalExpr: string,
-  formattedExpr: string,
-  filename: string,
-): number[] {
-  try {
-    const originalTokens = parseExpressionTokens(originalExpr, filename);
-    const formattedTokens = parseExpressionTokens(formattedExpr, filename);
-    const matchedTokens = alignExpressionTokens(originalTokens, formattedTokens);
-    if (matchedTokens.length === 0) throw new Error('token-alignment-empty');
-
-    const anchors = [{ formatted: 0, original: 0 }];
-    for (const [originalIndex, formattedIndex] of matchedTokens) {
-      const original = originalTokens[originalIndex];
-      const formatted = formattedTokens[formattedIndex];
-      anchors.push({ formatted: formatted.start, original: original.start });
-      anchors.push({ formatted: formatted.end, original: original.end });
-    }
-    anchors.push({ formatted: formattedExpr.length, original: originalExpr.length });
-
-    anchors.sort((a, b) => a.formatted - b.formatted || a.original - b.original);
-
-    const deduped: Array<{ formatted: number; original: number }> = [];
-    for (const anchor of anchors) {
-      const last = deduped[deduped.length - 1];
-      if (!last || last.formatted !== anchor.formatted || last.original !== anchor.original) {
-        deduped.push(anchor);
-      }
-    }
-
-    const boundaryMap = new Array<number>(formattedExpr.length + 1);
-    for (let i = 0; i < deduped.length - 1; i += 1) {
-      const current = deduped[i];
-      const next = deduped[i + 1];
-      const formattedSpan = next.formatted - current.formatted;
-      const originalSpan = next.original - current.original;
-
-      if (formattedSpan <= 0) continue;
-
-      for (let offset = current.formatted; offset < next.formatted; offset += 1) {
-        const relative = offset - current.formatted;
-        boundaryMap[offset] = current.original + Math.round(relative * originalSpan / formattedSpan);
-      }
-    }
-
-    boundaryMap[formattedExpr.length] = originalExpr.length;
-    for (let i = 0; i < boundaryMap.length; i += 1) {
-      if (boundaryMap[i] == null) {
-        boundaryMap[i] = i === 0 ? 0 : boundaryMap[i - 1];
-      }
-    }
-    return boundaryMap;
-  } catch {
-    return Array.from({ length: formattedExpr.length + 1 }, (_, index) => (
-      Math.min(originalExpr.length, Math.round(index * originalExpr.length / Math.max(1, formattedExpr.length)))
-    ));
-  }
-}
-
 function formatPugRegionForLint(
   expr: string,
   baseIndent: string,
-  closingIndentOffset: number,
-  inlinePrefix: boolean,
+  formattingContext: RegionFormattingContext,
   filename: string,
 ): { code: string; boundaryMap: number[] } {
   const lintConfig: any[] = [{
@@ -825,9 +361,8 @@ function formatPugRegionForLint(
       }
       : {}),
   }];
-  const normalizedExpr = normalizeLintExpression(expr, filename);
-  const wrapped = `${FORMAT_WRAPPER_PREFIX}${normalizedExpr}\n`;
-  const prettyWrapped = prettier.format(wrapped, {
+  const wrapper = createFormattingWrapper(expr, formattingContext.containerKind);
+  const prettyWrapped = prettier.format(wrapper, {
     parser: isTypeScriptLikeFilename(filename) ? 'babel-ts' : 'babel',
     semi: false,
     singleQuote: true,
@@ -837,39 +372,35 @@ function formatPugRegionForLint(
   });
 
   const fixedWrapped = formatLinter.verifyAndFix(prettyWrapped, lintConfig, getFormatterLintFilename(filename)).output;
-  let body = fixedWrapped.slice(FORMAT_WRAPPER_PREFIX.length);
-  if (body.endsWith('\n')) body = body.slice(0, -1);
-  body = normalizeTernaryBranchIndent(body);
-  body = normalizeJsxClosingBracketIndent(body);
-  const normalizedWrapped = `${FORMAT_WRAPPER_PREFIX}${body}\n`;
+  const normalizedWrapped = normalizeJsxClosingBracketIndent(fixedWrapped);
   const refixedWrapped = formatLinter.verifyAndFix(
     normalizedWrapped,
     lintConfig,
     getFormatterLintFilename(filename),
   ).output;
-  body = refixedWrapped.slice(FORMAT_WRAPPER_PREFIX.length);
-  if (body.endsWith('\n')) body = body.slice(0, -1);
-  body = normalizeTernaryBranchIndent(body);
-  body = normalizeJsxClosingBracketIndent(body);
   const finalWrapped = formatLinter.verifyAndFix(
-    `${FORMAT_WRAPPER_PREFIX}${body}\n`,
+    normalizeJsxClosingBracketIndent(refixedWrapped),
     lintConfig,
     getFormatterLintFilename(filename),
   ).output;
-  body = finalWrapped.slice(FORMAT_WRAPPER_PREFIX.length);
-  if (body.endsWith('\n')) body = body.slice(0, -1);
-  body = indentFormattedRegion(body, baseIndent, closingIndentOffset, inlinePrefix);
+
+  const extracted = extractFormattedExpressionFromWrapper(finalWrapped, formattingContext.containerKind, filename);
+  const body = rebaseFormattedRegion(
+    extracted?.code ?? expr,
+    baseIndent,
+    extracted?.wrapperLineIndentWidth ?? 0,
+  );
 
   return {
     code: body,
-    boundaryMap: buildBoundaryMap(expr, body, filename),
+    boundaryMap: buildExpressionBoundaryMap(expr, body, filename),
   };
 }
 
-function formatLintCode(transformed: SourceTransformState, filename: string): FormattedLintCode | null {
-  const pugRegions = transformed.document.mappedRegions
-    .filter(region => region.kind === 'pug')
-    .sort((a, b) => a.shadowStart - b.shadowStart);
+function formatLintCode(transformed: LintTransformState, filename: string): FormattedLintCode | null {
+  const pugRegions = transformed.regionSegments
+    .slice()
+    .sort((a, b) => a.rewrittenStart - b.rewrittenStart);
 
   if (pugRegions.length === 0) return null;
 
@@ -879,45 +410,35 @@ function formatLintCode(transformed: SourceTransformState, filename: string): Fo
   const regionSegments: FormattedRegionSegment[] = [];
 
   for (const region of pugRegions) {
-    if (cursor < region.shadowStart) {
+    if (cursor < region.rewrittenStart) {
       const formattedStart = code.length;
-      const copied = transformed.code.slice(cursor, region.shadowStart);
+      const copied = transformed.code.slice(cursor, region.rewrittenStart);
       code += copied;
       copySegments.push({
         formattedStart,
         formattedEnd: code.length,
         transformedStart: cursor,
-        transformedEnd: region.shadowStart,
+        transformedEnd: region.rewrittenStart,
       });
     }
 
     const formattedStart = code.length;
-    const baseIndent = getLineIndent(transformed.code, region.shadowStart);
-    const lineStart = transformed.code.lastIndexOf('\n', Math.max(0, region.shadowStart - 1)) + 1;
-    const beforeRegionOnLine = transformed.code.slice(lineStart, region.shadowStart);
-    const inlinePrefix = beforeRegionOnLine.trim().length > 0;
-    const closingIndentOffset = (
-      /[?:]\s*$/.test(beforeRegionOnLine)
-      || /^\s*[?:].*=>\s*$/.test(beforeRegionOnLine)
-    )
-      ? 2
-      : 0;
+    const baseIndent = getLineIndent(transformed.code, region.rewrittenStart);
     const formattedRegion = formatPugRegionForLint(
-      transformed.code.slice(region.shadowStart, region.shadowEnd),
+      transformed.code.slice(region.rewrittenStart, region.rewrittenEnd),
       baseIndent,
-      closingIndentOffset,
-      inlinePrefix,
+      region.formattingContext,
       filename,
     );
     code += formattedRegion.code;
     regionSegments.push({
       formattedStart,
       formattedEnd: code.length,
-      transformedStart: region.shadowStart,
-      transformedEnd: region.shadowEnd,
+      transformedStart: region.rewrittenStart,
+      transformedEnd: region.rewrittenEnd,
       boundaryMap: formattedRegion.boundaryMap,
     });
-    cursor = region.shadowEnd;
+    cursor = region.rewrittenEnd;
   }
 
   if (cursor < transformed.code.length) {
@@ -956,16 +477,15 @@ function mapFormattedOffsetToTransformed(
 }
 
 function intersectsTransformedPugRegion(
-  transformed: SourceTransformState | null,
+  transformed: LintTransformState | null,
   generatedStart: number,
   generatedEnd: number,
 ): boolean {
   if (!transformed) return false;
   const end = Math.max(generatedStart, generatedEnd);
-  return transformed.document.mappedRegions.some(region => (
-    region.kind === 'pug'
-    && generatedStart < region.shadowEnd
-    && end > region.shadowStart
+  return transformed.regionSegments.some(region => (
+    generatedStart < region.rewrittenEnd
+    && end > region.rewrittenStart
   ));
 }
 
@@ -988,10 +508,14 @@ function mapLintFix(
     return undefined;
   }
 
+  const baseStart = cached.transformed.mapRewrittenOffsetToBase(generatedStart);
+  const baseEnd = cached.transformed.mapRewrittenOffsetToBase(generatedEnd);
+  if (baseStart == null || baseEnd == null) return undefined;
+
   const mapped = mapGeneratedRangeToOriginal(
-    cached.transformed.document,
-    generatedStart,
-    Math.max(0, generatedEnd - generatedStart),
+    cached.transformed.baseTransform.document,
+    baseStart,
+    Math.max(0, baseEnd - baseStart),
   );
   if (!mapped) return undefined;
 
@@ -1022,32 +546,13 @@ function shouldSuppressOriginalRangeMessage(
   return false;
 }
 
-function isSyntheticStyleCallRange(
-  cached: CachedLintState,
-  generatedStart: number,
-  generatedEnd: number,
-): boolean {
-  if (!cached.transformed) return false;
-  return cached.transformed.document.insertions.some(insertion => (
-    insertion.kind === 'style-call'
-    && generatedStart >= insertion.shadowStart
-    && generatedEnd <= insertion.shadowEnd
-  ));
-}
-
 function shouldSuppressGeneratedRangeMessage(
   cached: CachedLintState,
   message: EslintLintMessage,
   generatedStart: number,
   generatedEnd: number,
 ): boolean {
-  if (
-    message.ruleId === 'react/jsx-boolean-value'
-    && overlapsRangeList(cached.providerBooleanValueRanges, generatedStart, generatedEnd)
-  ) {
-    return true;
-  }
-  if (isSyntheticStyleCallRange(cached, generatedStart, generatedEnd)) {
+  if (overlapsRangeList(cached.syntheticStyleCallRanges, generatedStart, generatedEnd)) {
     return true;
   }
   return false;
@@ -1094,10 +599,14 @@ function mapLintMessage(
     return null;
   }
 
+  const baseStart = cached.transformed.mapRewrittenOffsetToBase(generatedStart);
+  const baseEnd = cached.transformed.mapRewrittenOffsetToBase(generatedEnd);
+  if (baseStart == null || baseEnd == null) return message;
+
   const mapped = mapGeneratedRangeToOriginal(
-    cached.transformed.document,
-    generatedStart,
-    Math.max(1, generatedEnd - generatedStart),
+    cached.transformed.baseTransform.document,
+    baseStart,
+    Math.max(1, baseEnd - baseStart),
   );
 
   if (!mapped) return message;
@@ -1107,7 +616,7 @@ function mapLintMessage(
 
   const startLc = offsetToLineColumn(cached.originalText, mapped.start);
   const endLc = offsetToLineColumn(cached.originalText, mapped.end);
-  const hasTransformedPug = cached.transformed.regions.length > 0;
+  const hasTransformedPug = cached.transformed.baseTransform.regions.length > 0;
   const mappedFix = hasTransformedPug ? undefined : mapLintFix(message.fix, cached);
   const mappedSuggestions = hasTransformedPug
     ? undefined
@@ -1156,7 +665,7 @@ function createReactPugProcessor(
           transformed: null,
           formatted: null,
           legacyStyleStatementRanges,
-          providerBooleanValueRanges: [],
+          syntheticStyleCallRanges: [],
         });
       } else {
         cache.delete(filename);
@@ -1168,16 +677,15 @@ function createReactPugProcessor(
         }];
       }
 
-      const transformed = transformSourceFile(text, filename, {
+      const transformed = createLintTransform(text, filename, {
         tagFunction: configuredTagFunction,
-        compileMode: 'runtime',
         requirePugImport: options.requirePugImport ?? false,
         classAttribute: options.classShorthandProperty ?? 'auto',
         classMerge: options.classShorthandMerge ?? 'auto',
         startupjsCssxjs: options.startupjsCssxjs ?? 'auto',
         componentPathFromUppercaseClassShorthand: options.componentPathFromUppercaseClassShorthand ?? true,
       });
-      const hasTransformedPug = transformed.regions.length > 0;
+      const hasTransformedPug = transformed.baseTransform.regions.length > 0;
       const jsLikeFilename = isJavaScriptLikeFilename(filename);
       const shouldAlwaysVirtualizeJs = (
         options.jsxInJsFiles === 'always'
@@ -1195,7 +703,7 @@ function createReactPugProcessor(
         transformed,
         formatted,
         legacyStyleStatementRanges,
-        providerBooleanValueRanges: collectProviderBooleanValueRanges(transformed.code, filename),
+        syntheticStyleCallRanges: collectSyntheticStyleCallRanges(transformed),
       });
       if (!shouldUseVirtualJsxFilename) return [transformed.code];
       return [{

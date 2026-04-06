@@ -11,9 +11,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@babel/generator": "^7.28.3",
     "@babel/parser": "^7.0.0",
-    "@babel/types": "^7.28.2",
     "@prettier/sync": "^0.6.1",
     "@react-pug/react-pug-core": "^0.1.10",
     "@stylistic/eslint-plugin": "^5.10.0",

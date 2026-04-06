@@ -83,5 +83,14 @@ describe('eslint diagnostics for example-unformatted fixture', () => {
 
     const startupjsUiTypeCell = results.find(result => result.filePath.endsWith('/src/StartupjsUiTypeCell.js'))
     expect(startupjsUiTypeCell?.messages.some(message => message.ruleId === '@stylistic/no-multi-spaces')).toBe(false)
+
+    const startupjsUiPrompt = results.find(result => result.filePath.endsWith('/src/StartupjsUiPrompt.tsx'))
+    expect(startupjsUiPrompt?.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
+
+    const startupjsUiMdxComponents = results.find(result => result.filePath.endsWith('/src/StartupjsUiMdxComponents.js'))
+    expect(startupjsUiMdxComponents?.messages.map(message => message.ruleId)).toEqual([
+      'react/jsx-boolean-value',
+      'react/jsx-boolean-value',
+    ])
   }, 30000)
 })

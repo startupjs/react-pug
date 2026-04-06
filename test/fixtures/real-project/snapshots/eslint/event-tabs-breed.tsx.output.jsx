@@ -134,7 +134,11 @@ const CatsList = observer(({ onEdit, breed, eventId }) => {
           <Item.Right>
             <Div vAlign='center' row gap={1}>
               {!hasContact($cat) ? <Tag color='error'>No contact</Tag> : null}
-              {!$cat.photoFileId.get() ? <Tag color='error'>No photo</Tag> : null}
+              {!$cat.photoFileId.get()
+                ? (
+                  <Tag color='error'>No photo</Tag>
+                  )
+                : null}
               <Button
                 variant='text'
                 icon={faPen}
