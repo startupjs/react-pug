@@ -12,6 +12,7 @@ import {
   mapGeneratedRangeToOriginal,
   offsetToLineColumn,
   rewriteSegmentedPugRegions,
+  type BoundaryMappedExpression,
   type RewrittenPugRegionsResult,
   type RegionFormattingContext,
   type StartupjsCssxjsOption,
@@ -208,6 +209,38 @@ function containsJsxSyntax(text: string, filename: string): boolean {
   }
 }
 
+function unwrapRootExpression(node: any): any {
+  let current = node;
+  while (
+    current
+    && typeof current === 'object'
+    && (
+      current.type === 'ParenthesizedExpression'
+      || current.type === 'TSAsExpression'
+      || current.type === 'TSTypeAssertion'
+      || current.type === 'TSNonNullExpression'
+    )
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isRootJsxExpression(text: string, filename: string): boolean {
+  try {
+    const expr = parse(`const __pug = ${text}\n`, {
+      sourceType: 'module',
+      plugins: getExpressionParserPlugins(filename),
+      createParenthesizedExpressions: true,
+      errorRecovery: false,
+    }) as any;
+    const root = unwrapRootExpression(expr.program.body[0]?.declarations?.[0]?.init);
+    return root?.type === 'JSXElement' || root?.type === 'JSXFragment';
+  } catch {
+    return false;
+  }
+}
+
 function collectLegacyStyleStatementRanges(text: string, filename: string): InsertionOffsetRange[] {
   try {
     const ast = parse(text, {
@@ -307,12 +340,30 @@ function normalizeJsxClosingBracketIndent(text: string): string {
   return lines.join('\n');
 }
 
-function formatPugRegionForLint(
-  expr: string,
-  baseIndent: string,
-  formattingContext: RegionFormattingContext,
-  filename: string,
-): { code: string; boundaryMap: number[] } {
+function normalizeSyntheticWrapperClosingIndent(
+  text: string,
+  containerKind: RegionFormattingContext['containerKind'],
+): string {
+  const lines = text.split('\n');
+  if (lines.length < 3) return text;
+  if (lines[0].trim() !== '(') return text;
+  if (lines[lines.length - 1].trim() !== ')') return text;
+
+  const firstContentLine = lines
+    .slice(1, -1)
+    .find(line => line.trim().length > 0);
+  if (!firstContentLine) return text;
+
+  const contentIndent = firstContentLine.match(/^[ \t]*/)?.[0] ?? '';
+  const shouldAlignWithContent = (
+    containerKind === 'conditional-branch'
+    || containerKind === 'logical-operand'
+  );
+  lines[lines.length - 1] = `${shouldAlignWithContent ? contentIndent : ''})`;
+  return lines.join('\n');
+}
+
+function applyFormatterLintPasses(text: string, filename: string): string {
   const lintConfig: any[] = [{
     files: FLAT_LINT_FILES,
     ...FORMAT_RULE_CONFIG,
@@ -325,8 +376,7 @@ function formatPugRegionForLint(
       }
       : {}),
   }];
-  const wrapper = createFormattingWrapper(expr, formattingContext.containerKind);
-  const prettyWrapped = prettier.format(wrapper, {
+  const pretty = prettier.format(text, {
     parser: isTypeScriptLikeFilename(filename) ? 'babel-ts' : 'babel',
     semi: false,
     singleQuote: true,
@@ -334,30 +384,97 @@ function formatPugRegionForLint(
     trailingComma: 'none',
     bracketSameLine: false,
   });
+  const fixed = formatLinter.verifyAndFix(pretty, lintConfig, getFormatterLintFilename(filename)).output;
+  const normalized = normalizeJsxClosingBracketIndent(fixed);
+  const refixed = formatLinter.verifyAndFix(
+    normalized,
+    lintConfig,
+    getFormatterLintFilename(filename),
+  ).output;
 
-  const fixedWrapped = formatLinter.verifyAndFix(prettyWrapped, lintConfig, getFormatterLintFilename(filename)).output;
-  const normalizedWrapped = normalizeJsxClosingBracketIndent(fixedWrapped);
-  const refixedWrapped = formatLinter.verifyAndFix(
-    normalizedWrapped,
+  return formatLinter.verifyAndFix(
+    normalizeJsxClosingBracketIndent(refixed),
     lintConfig,
     getFormatterLintFilename(filename),
   ).output;
-  const finalWrapped = formatLinter.verifyAndFix(
-    normalizeJsxClosingBracketIndent(refixedWrapped),
-    lintConfig,
-    getFormatterLintFilename(filename),
-  ).output;
+}
+
+function normalizeFormattedExpressionForLint(
+  text: string,
+  wrapperLineIndentWidth: number,
+  formattingContext: RegionFormattingContext,
+  filename: string,
+): {
+  code: string;
+  wrapperLineIndentWidth: number;
+  hasSyntheticWrapperLines?: boolean;
+} {
+  if (
+    formattingContext.containerKind !== 'standalone'
+    && text.includes('\n')
+    && isRootJsxExpression(text, filename)
+  ) {
+    const wrapped = applyFormatterLintPasses(`const __pug = (${text})\n`, filename);
+    const extracted = extractFormattedExpressionFromWrapper(wrapped, 'variable-init', filename);
+    if (extracted) {
+      const normalizedCode = normalizeSyntheticWrapperClosingIndent(
+        extracted.code,
+        formattingContext.containerKind,
+      );
+      const lastNewline = extracted.code.lastIndexOf('\n');
+      return {
+        code: normalizedCode,
+        wrapperLineIndentWidth: extracted.wrapperLineIndentWidth,
+        hasSyntheticWrapperLines: lastNewline >= 0,
+      };
+    }
+  }
+
+  return {
+    code: text,
+    wrapperLineIndentWidth,
+  };
+}
+
+function getSyntheticWrapperLineRanges(text: string): InsertionOffsetRange[] {
+  const firstNewline = text.indexOf('\n');
+  const lastNewline = text.lastIndexOf('\n');
+  if (firstNewline < 0 || lastNewline < 0 || firstNewline === lastNewline) return [];
+
+  return [
+    { start: 0, end: firstNewline + 1 },
+    { start: lastNewline + 1, end: text.length },
+  ];
+}
+
+function formatPugRegionForLint(
+  expr: string,
+  baseIndent: string,
+  formattingContext: RegionFormattingContext,
+  filename: string,
+): BoundaryMappedExpression {
+  const wrapper = createFormattingWrapper(expr, formattingContext.containerKind);
+  const finalWrapped = applyFormatterLintPasses(wrapper, filename);
 
   const extracted = extractFormattedExpressionFromWrapper(finalWrapped, formattingContext.containerKind, filename);
-  const body = rebaseFormattedRegion(
+  const normalized = normalizeFormattedExpressionForLint(
     extracted?.code ?? expr,
-    baseIndent,
     extracted?.wrapperLineIndentWidth ?? 0,
+    formattingContext,
+    filename,
+  );
+  const body = rebaseFormattedRegion(
+    normalized.code,
+    baseIndent,
+    normalized.wrapperLineIndentWidth,
   );
 
   return {
     code: body,
     boundaryMap: buildExpressionBoundaryMap(expr, body, filename),
+    syntheticRanges: normalized.hasSyntheticWrapperLines
+      ? getSyntheticWrapperLineRanges(body)
+      : undefined,
   };
 }
 
@@ -424,8 +541,22 @@ function mapLintFix(
   };
 }
 
-function overlapsRangeList(ranges: InsertionOffsetRange[], start: number, end: number): boolean {
+function overlapsRangeList(
+  ranges: InsertionOffsetRange[] | null | undefined,
+  start: number,
+  end: number,
+): boolean {
+  if (!ranges || ranges.length === 0) return false;
   return ranges.some(range => start < range.end && end > range.start);
+}
+
+function overlapsFormattedSyntheticRegion(
+  formatted: RewrittenPugRegionsResult | null,
+  start: number,
+  end: number,
+): boolean {
+  if (!formatted) return false;
+  return formatted.regionSegments.some(region => overlapsRangeList(region.syntheticRanges, start, end));
 }
 
 function shouldSuppressOriginalRangeMessage(
@@ -474,19 +605,34 @@ function mapLintMessage(
 
   if (message.line == null || message.column == null) return message;
 
+  const formattedStart = cached.formatted
+    ? lineColumnToOffset(cached.formatted.code, message.line, message.column)
+    : null;
+  const formattedEnd = (
+    cached.formatted
+    && message.endLine != null
+    && message.endColumn != null
+  )
+    ? lineColumnToOffset(cached.formatted.code, message.endLine, message.endColumn)
+    : null;
+
+  if (formattedStart != null && overlapsFormattedSyntheticRegion(
+    cached.formatted,
+    formattedStart,
+    Math.max(formattedStart + 1, formattedEnd ?? (formattedStart + 1)),
+  )) {
+    return null;
+  }
+
   const generatedStart = cached.formatted
-    ? cached.formatted.mapRewrittenOffsetToBase(
-      lineColumnToOffset(cached.formatted.code, message.line, message.column),
-    )
+    ? cached.formatted.mapRewrittenOffsetToBase(formattedStart!)
     : lineColumnToOffset(cached.transformed.code, message.line, message.column);
   if (generatedStart == null) return message;
 
   const generatedEnd = (message.endLine != null && message.endColumn != null)
     ? (
         cached.formatted
-          ? cached.formatted.mapRewrittenOffsetToBase(
-            lineColumnToOffset(cached.formatted.code, message.endLine, message.endColumn),
-          )
+          ? cached.formatted.mapRewrittenOffsetToBase(formattedEnd!)
           : lineColumnToOffset(cached.transformed.code, message.endLine, message.endColumn)
       )
     : generatedStart + 1;

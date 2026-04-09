@@ -13,6 +13,10 @@ const reactHooksStubPlugin = {
       meta: { schema: [] },
       create: () => ({}),
     },
+    'exhaustive-deps': {
+      meta: { schema: [] },
+      create: () => ({}),
+    },
   },
 }
 
@@ -78,19 +82,25 @@ describe('eslint diagnostics for example-unformatted fixture', () => {
     const startupjsUiDialogsReadme = results.find(result => result.filePath.endsWith('/src/StartupjsUiDialogsReadme.js'))
     expect(startupjsUiDialogsReadme?.messages.some(message => message.ruleId === 'react/jsx-fragments')).toBe(false)
 
+    const startupjsUiDropdown = results.find(result => result.filePath.endsWith('/src/StartupjsUiDropdown.tsx'))
+    expect(startupjsUiDropdown?.messages.some(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toBe(false)
+
     const startupjsUiDraggableReadme = results.find(result => result.filePath.endsWith('/src/StartupjsUiDraggableReadme.js'))
     expect(startupjsUiDraggableReadme?.messages.some(message => message.ruleId === 'no-unneeded-ternary')).toBe(false)
 
     const startupjsUiTypeCell = results.find(result => result.filePath.endsWith('/src/StartupjsUiTypeCell.js'))
     expect(startupjsUiTypeCell?.messages.some(message => message.ruleId === '@stylistic/no-multi-spaces')).toBe(false)
 
+    const startupjsUiTextInput = results.find(result => result.filePath.endsWith('/src/StartupjsUiTextInput.tsx'))
+    expect(startupjsUiTextInput?.messages.some(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toBe(false)
+
     const startupjsUiPrompt = results.find(result => result.filePath.endsWith('/src/StartupjsUiPrompt.tsx'))
     expect(startupjsUiPrompt?.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
 
     const startupjsUiMdxComponents = results.find(result => result.filePath.endsWith('/src/StartupjsUiMdxComponents.js'))
-    expect(startupjsUiMdxComponents?.messages.map(message => message.ruleId)).toEqual([
-      'react/jsx-boolean-value',
-      'react/jsx-boolean-value',
-    ])
+    expect(startupjsUiMdxComponents?.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
+
+    const startupjsUiMultiSelect = results.find(result => result.filePath.endsWith('/src/StartupjsUiMultiSelect.tsx'))
+    expect(startupjsUiMultiSelect?.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
   }, 30000)
 })

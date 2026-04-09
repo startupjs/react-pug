@@ -15,6 +15,10 @@ const reactHooksStubPlugin = {
       meta: { schema: [] },
       create: () => ({}),
     },
+    'exhaustive-deps': {
+      meta: { schema: [] },
+      create: () => ({}),
+    },
   },
 }
 
@@ -89,22 +93,7 @@ describe('eslint --fix integration for react-pug processor', () => {
         message: message.message,
       }))
     ))
-    expect(allMessages).toEqual([
-      {
-        filePath: 'src/StartupjsUiMdxComponents.js',
-        ruleId: 'react/jsx-boolean-value',
-        line: 205,
-        column: 34,
-        message: 'Value must be omitted for boolean attribute `value`',
-      },
-      {
-        filePath: 'src/StartupjsUiMdxComponents.js',
-        ruleId: 'react/jsx-boolean-value',
-        line: 257,
-        column: 27,
-        message: 'Value must be omitted for boolean attribute `value`',
-      },
-    ])
+    expect(allMessages).toEqual([])
 
     const fixedFiles = [
       'src/App.tsx',
@@ -113,10 +102,13 @@ describe('eslint --fix integration for react-pug processor', () => {
       'src/ModalScreen.tsx',
       'src/RootLayout.tsx',
       'src/StartupjsUiDialogsReadme.js',
+      'src/StartupjsUiDropdown.tsx',
       'src/StartupjsUiDraggableReadme.js',
       'src/StartupjsLogin.js',
       'src/StartupjsUiMdxComponents.js',
+      'src/StartupjsUiMultiSelect.tsx',
       'src/StartupjsUiPrompt.tsx',
+      'src/StartupjsUiTextInput.tsx',
       'src/StartupjsUiTypeCell.js',
       'src/StartupjsUiWrapInput.tsx',
       'src/StartupjsTabThree.js',

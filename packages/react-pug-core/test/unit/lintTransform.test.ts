@@ -215,6 +215,10 @@ describe('lintTransform', () => {
       return {
         code,
         boundaryMap: buildExpressionBoundaryMap(expr, code, 'file.jsx'),
+        syntheticRanges: [
+          { start: 0, end: 2 },
+          { start: code.length - 1, end: code.length },
+        ],
       }
     })
 
@@ -225,6 +229,10 @@ describe('lintTransform', () => {
     const baseOffset = formatted.mapRewrittenOffsetToBase(rewrittenOffset)
     expect(baseOffset).not.toBeNull()
     expect(linted.code.slice(baseOffset!, baseOffset! + 'Child'.length)).toBe('Child')
+    expect(formatted.regionSegments[0].syntheticRanges).toEqual([
+      { start: formatted.regionSegments[0].rewrittenStart, end: formatted.regionSegments[0].rewrittenStart + 2 },
+      { start: formatted.regionSegments[0].rewrittenEnd - 1, end: formatted.regionSegments[0].rewrittenEnd },
+    ])
   })
 
   it('exposes mapped synthetic style-call insertion ranges generically', () => {
