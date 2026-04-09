@@ -1,7 +1,7 @@
 {
   "name": "@react-pug/react-pug-core",
   "main": "./dist/index.js",
-  "version": "0.1.13",
+  "version": "0.1.15",
   "types": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
