@@ -127,6 +127,96 @@ function lintStylisticIndent(code: string, filename = 'file.jsx') {
   );
 }
 
+function lintStartupjsUiStyle(code: string, filename = 'file.jsx') {
+  const linter = new Linter({ configType: 'flat' });
+  return linter.verify(
+    code,
+    [{
+      files: FLAT_LINT_FILES,
+      plugins: {
+        '@stylistic': stylisticPlugin as any,
+      },
+      languageOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        ...(filename.endsWith('.ts') || filename.endsWith('.tsx')
+          ? {
+            parser: tsParser,
+          }
+          : {}),
+        parserOptions: {
+          ecmaFeatures: {
+            jsx: true,
+          },
+        },
+      },
+      rules: {
+        '@stylistic/indent': ['error', 2, {
+          SwitchCase: 1,
+          VariableDeclarator: 1,
+          outerIIFEBody: 1,
+          MemberExpression: 1,
+          FunctionDeclaration: {
+            parameters: 1,
+            body: 1,
+          },
+          FunctionExpression: {
+            parameters: 1,
+            body: 1,
+          },
+          CallExpression: {
+            arguments: 1,
+          },
+          ArrayExpression: 1,
+          ObjectExpression: 1,
+          ImportDeclaration: 1,
+          flatTernaryExpressions: false,
+          ignoreComments: false,
+          ignoredNodes: [
+            'TemplateLiteral *',
+            'JSXElement',
+            'JSXElement > *',
+            'JSXAttribute',
+            'JSXIdentifier',
+            'JSXNamespacedName',
+            'JSXMemberExpression',
+            'JSXSpreadAttribute',
+            'JSXExpressionContainer',
+            'JSXOpeningElement',
+            'JSXClosingElement',
+            'JSXFragment',
+            'JSXOpeningFragment',
+            'JSXClosingFragment',
+            'JSXText',
+            'JSXEmptyExpression',
+            'JSXSpreadChild',
+          ],
+          offsetTernaryExpressions: true,
+        }],
+        '@stylistic/jsx-indent': ['error', 2, {
+          checkAttributes: false,
+          indentLogicalExpressions: true,
+        }],
+        '@stylistic/jsx-indent-props': ['error', 2],
+        '@stylistic/jsx-wrap-multilines': ['error', {
+          declaration: 'parens-new-line',
+          assignment: 'parens-new-line',
+          return: 'parens-new-line',
+          arrow: 'ignore',
+          condition: 'ignore',
+          logical: 'ignore',
+          prop: 'ignore',
+        }],
+        '@stylistic/jsx-first-prop-new-line': ['error', 'multiline-multiprop'],
+        '@stylistic/jsx-closing-bracket-location': ['error', 'tag-aligned'],
+        '@stylistic/jsx-closing-tag-location': 'error',
+        '@stylistic/multiline-ternary': ['error', 'always-multiline'],
+      },
+    }],
+    filename,
+  );
+}
+
 function offsetToLineColumn(text: string, offset: number) {
   const before = text.slice(0, offset).split('\n');
   return {
@@ -305,6 +395,141 @@ describe('eslint-plugin-react-pug processor', () => {
     const lintMessages = lintStylisticIndent(code, 'file.jsx');
     const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
     expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
+  });
+
+  it('formats multiline jsx call-argument pug with parenthesized multiline JSX so closing tags stay aligned', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const rows = []',
+      'rows.push(pug`',
+      '  View(',
+      '    key=index',
+      '    value=child.props.value',
+      '    onLayout=onLayoutActive',
+      '  )=_child',
+      '`)',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+
+    expect(code).toContain('rows.push((');
+    expect(code).toContain('</View>');
+
+    const lintMessages = lintStylisticIndent(code, 'file.jsx');
+    const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
+    expect(mapped.filter(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toEqual([]);
+  });
+
+  it('formats multiline fragment call-argument pug with parenthesized multiline JSX so closing tags stay aligned', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = renderWrapper({}, pug`',
+      '  Div Alpha',
+      '  Div Beta',
+      '`)',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+
+    expect(code).toContain('renderWrapper({}, (');
+    expect(code).toContain('</>');
+
+    const lintMessages = lintStylisticIndent(code, 'file.jsx');
+    const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
+    expect(mapped.filter(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toEqual([]);
+  });
+
+  it('formats multiline jsx ternary branches without startupjs-ui indent drift', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const requiredAsterisk = required === true',
+      '  ? pug`',
+      "    Text.required(aria-hidden=IS_WEB ? true : undefined)= ' *'",
+      '  `',
+      '  : null',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const lintMessages = lintStartupjsUiStyle(code, 'file.jsx');
+    const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
+
+    expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
+    expect(mapped.filter(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toEqual([]);
+  });
+
+  it('formats multiline fragment branches inside ternaries without startupjs-ui indent drift', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = IS_WEB',
+      '  ? pug`',
+      '    MultiSelectInput(',
+      "      part='input'",
+      '      focused=focused',
+      '    )',
+      '  `',
+      '  : pug`',
+      '    MultiSelectInput(',
+      "      part='input'",
+      '      focused=focused',
+      '    )',
+      "    Drawer.nativeListContent(visible=focused position='bottom')",
+      '      ScrollView',
+      '        each option, index in normalizedOptions',
+      '          = _renderListItem({ item: option, index })',
+      '  `',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const lintMessages = lintStartupjsUiStyle(code, 'file.jsx');
+    const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
+
+    expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
+    expect(mapped.filter(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toEqual([]);
+  });
+
+  it('formats multiline jsx variable initializers without startupjs-ui indent drift', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const input = pug`',
+      '  Component(',
+      "    part='wrapper'",
+      '    focused=focused',
+      '  )',
+      '`',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const lintMessages = lintStartupjsUiStyle(code, 'file.jsx');
+    const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
+
+    expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
+    expect(mapped.filter(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toEqual([]);
+  });
+
+  it('formats multiline jsx arrow bodies without startupjs-ui indent drift', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const renderPopoverContent = () => pug`',
+      '  ScrollView(',
+      '    ref=refScroll',
+      '    showsVerticalScrollIndicator=false',
+      '  )',
+      '    = renderContent.current',
+      '`',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    const lintMessages = lintStartupjsUiStyle(code, 'file.jsx');
+    const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
+
+    expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
+    expect(mapped.filter(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toEqual([]);
   });
 
   it('suppresses legacy styl warnings without hiding normal linting', () => {

@@ -14,6 +14,10 @@ const reactHooksStubPlugin = {
       meta: { schema: [] },
       create: () => ({}),
     },
+    'exhaustive-deps': {
+      meta: { schema: [] },
+      create: () => ({}),
+    },
   },
 }
 
@@ -39,6 +43,19 @@ function createStartupjsUiStyleEslint(fix: boolean): ESLint {
           'react-pug': reactPugPlugin as any,
         },
         rules: {
+          '@stylistic/jsx-indent': ['error', 2, {
+            checkAttributes: false,
+            indentLogicalExpressions: true,
+          }],
+          '@stylistic/jsx-wrap-multilines': ['error', {
+            declaration: 'parens-new-line',
+            assignment: 'parens-new-line',
+            return: 'parens-new-line',
+            arrow: 'ignore',
+            condition: 'ignore',
+            logical: 'ignore',
+            prop: 'ignore',
+          }],
           'react/jsx-boolean-value': 'error',
         },
         processor: 'react-pug/react-pug',
@@ -51,10 +68,13 @@ describe('startupjs-ui regressions', () => {
   it('does not report false processor diagnostics for startupjs-ui repros', async () => {
     const files = [
       resolve(fixtureRoot, 'StartupjsUiDialogsReadme.js'),
+      resolve(fixtureRoot, 'StartupjsUiDropdown.tsx'),
       resolve(fixtureRoot, 'StartupjsUiDraggableReadme.js'),
       resolve(fixtureRoot, 'StartupjsUiTypeCell.js'),
+      resolve(fixtureRoot, 'StartupjsUiTextInput.tsx'),
       resolve(fixtureRoot, 'StartupjsUiWrapInput.tsx'),
       resolve(fixtureRoot, 'StartupjsUiMdxComponents.js'),
+      resolve(fixtureRoot, 'StartupjsUiMultiSelect.tsx'),
       resolve(fixtureRoot, 'StartupjsUiPrompt.tsx'),
     ]
 
@@ -69,22 +89,7 @@ describe('startupjs-ui regressions', () => {
       }))
     ))
 
-    expect(messages).toEqual([
-      {
-        column: 34,
-        filePath: resolve(fixtureRoot, 'StartupjsUiMdxComponents.js'),
-        line: 205,
-        message: 'Value must be omitted for boolean attribute `value`',
-        ruleId: 'react/jsx-boolean-value',
-      },
-      {
-        column: 27,
-        filePath: resolve(fixtureRoot, 'StartupjsUiMdxComponents.js'),
-        line: 257,
-        message: 'Value must be omitted for boolean attribute `value`',
-        ruleId: 'react/jsx-boolean-value',
-      },
-    ])
+    expect(messages).toEqual([])
   })
 
   it('still reports jsx-boolean-value for intrinsic boolean attrs inside pug', async () => {
@@ -111,11 +116,14 @@ describe('startupjs-ui regressions', () => {
   it('does not rewrite startupjs-ui repros under eslint --fix', async () => {
     for (const relativePath of [
       'StartupjsUiDialogsReadme.js',
+      'StartupjsUiDropdown.tsx',
       'StartupjsUiDraggableReadme.js',
       'StartupjsUiMdxComponents.js',
       'StartupjsUiPrompt.tsx',
+      'StartupjsUiTextInput.tsx',
       'StartupjsUiTypeCell.js',
       'StartupjsUiWrapInput.tsx',
+      'StartupjsUiMultiSelect.tsx',
     ]) {
       const filePath = resolve(fixtureRoot, relativePath)
       const input = readFileSync(filePath, 'utf8')

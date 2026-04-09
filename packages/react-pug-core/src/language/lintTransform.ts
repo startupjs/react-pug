@@ -18,6 +18,7 @@ export interface RewrittenRegionSegment {
   baseStart: number;
   baseEnd: number;
   boundaryMap: number[];
+  syntheticRanges: InsertionOffsetRange[];
   region: ShadowMappedRegion;
   formattingContext: RegionFormattingContext;
 }
@@ -39,6 +40,7 @@ export interface SegmentedPugRegionsInput {
 export interface BoundaryMappedExpression {
   code: string;
   boundaryMap: number[];
+  syntheticRanges?: InsertionOffsetRange[];
 }
 
 export interface LintTransformResult extends RewrittenPugRegionsResult {
@@ -681,6 +683,10 @@ export function rewriteMappedPugRegions(
       baseStart: region.shadowStart,
       baseEnd: region.shadowEnd,
       boundaryMap: rewritten.boundaryMap,
+      syntheticRanges: (rewritten.syntheticRanges ?? []).map(range => ({
+        start: rewrittenStart + range.start,
+        end: rewrittenStart + range.end,
+      })),
       region,
       formattingContext: resolveFormattingContext(region.shadowStart, region.shadowEnd),
     });
@@ -806,6 +812,10 @@ export function rewriteSegmentedPugRegions(
       baseStart: region.rewrittenStart,
       baseEnd: region.rewrittenEnd,
       boundaryMap: rewritten.boundaryMap,
+      syntheticRanges: (rewritten.syntheticRanges ?? []).map(range => ({
+        start: rewrittenStart + range.start,
+        end: rewrittenStart + range.end,
+      })),
       region: region.region,
       formattingContext: region.formattingContext,
     });
