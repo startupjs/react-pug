@@ -164,6 +164,18 @@ describe('attributes', () => {
     expect(result.tsx).not.toContain('label={"Hello"}');
   });
 
+  it('keeps concatenated string attribute expressions wrapped in braces', () => {
+    const result = compilePugToTsx("Button(label='Show Done' + getTitle() + ' today')");
+    expect(result.tsx).toContain("label={'Show Done' + getTitle() + ' today'}");
+    expect(result.tsx).not.toContain("label='Show Done' + getTitle() + ' today'");
+  });
+
+  it('keeps dynamic id concatenations as expressions instead of static literals', () => {
+    const result = compilePugToTsx("Button(id='prefix-' + getId())");
+    expect(result.tsx).toContain("id={'prefix-' + getId()}");
+    expect(result.tsx).not.toContain("id='prefix-' + getId()");
+  });
+
   it('multiple attributes', () => {
     const result = compilePugToTsx('Button(onClick=handler, label="Hi")');
     expect(result.tsx).toContain('onClick');
@@ -211,11 +223,21 @@ describe('text content', () => {
     expect(result.tsx).toContain('{name}');
   });
 
+  it('keeps concatenated expressions intact inside interpolations', () => {
+    const result = compilePugToTsx("p Hello #{title + ' ' + description}");
+    expect(result.tsx).toBe("(<p>Hello {title + ' ' + description}</p>)");
+  });
+
   it('tag with = buffered code: p= expr', () => {
     const result = compilePugToTsx('p= myVar');
     expect(result.tsx).toContain('<p');
     expect(result.tsx).toContain('{');
     expect(result.tsx).toContain('myVar');
+  });
+
+  it('keeps concatenated expressions intact in buffered code', () => {
+    const result = compilePugToTsx("p= title + ' ' + description");
+    expect(result.tsx).toBe("(<p>{title + ' ' + description}</p>)");
   });
 
   it('supports piped text nodes across multiple lines', () => {

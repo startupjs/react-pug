@@ -8,6 +8,7 @@ import type {
   StyleTagLang,
 } from './mapping';
 import { FULL_FEATURES, CSS_CLASS, SYNTHETIC, VERIFY_ONLY } from './mapping';
+import { parseExpression } from '@babel/parser';
 import { extractPugRegions } from './extractRegions';
 import { strippedToRawOffset } from './regionOffsetMapping';
 
@@ -167,6 +168,17 @@ type PugNode =
   | PugComment;
 
 // ── Helpers ─────────────────────────────────────────────────────
+
+function getStaticStringLiteralValue(expr: string): string | null {
+  try {
+    const parsed = parseExpression(expr, {
+      plugins: ['jsx', 'decorators-legacy', 'typescript'],
+    });
+    return parsed.type === 'StringLiteral' ? parsed.value : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Create a parse-recovery variant of pug text for typing-in-progress scenarios. */
 function buildTypingRecoveryText(text: string): string {
@@ -987,7 +999,7 @@ function emitAttributeValueAsExpression(
   const valOffset = attrOffset + attr.name.length + 1;
   const val = attr.val;
 
-  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith('\'') && val.endsWith('\''))) {
+  if (getStaticStringLiteralValue(val) != null) {
     emitter.emitMapped(val, valOffset, FULL_FEATURES);
     return;
   }
@@ -1080,20 +1092,12 @@ function emitTag(
 
   for (const attr of node.attrs) {
     if (attr.name === 'class' && typeof attr.val === 'string') {
-      // Shorthand class: val is like "'card'" (with quotes)
       const raw = attr.val;
-      if (raw.startsWith("'") && raw.endsWith("'")) {
+      const staticValue = getStaticStringLiteralValue(raw);
+      if (staticValue != null) {
         const classOffset = lineColToOffset(pugText, attr.line, attr.column);
         classNames.push({
-          name: raw.slice(1, -1),
-          offset: classOffset,
-          sourceLength: Math.max(1, raw.length),
-          nameOffset: classOffset + 1,
-        });
-      } else if (raw.startsWith('"') && raw.endsWith('"')) {
-        const classOffset = lineColToOffset(pugText, attr.line, attr.column);
-        classNames.push({
-          name: raw.slice(1, -1),
+          name: staticValue,
           offset: classOffset,
           sourceLength: Math.max(1, raw.length),
           nameOffset: classOffset + 1,
@@ -1104,10 +1108,9 @@ function emitTag(
       }
     } else if (attr.name === 'id' && typeof attr.val === 'string') {
       const raw = attr.val;
-      if (raw.startsWith("'") && raw.endsWith("'")) {
-        idValue = raw.slice(1, -1);
-      } else if (raw.startsWith('"') && raw.endsWith('"')) {
-        idValue = raw.slice(1, -1);
+      const staticValue = getStaticStringLiteralValue(raw);
+      if (staticValue != null) {
+        idValue = staticValue;
       } else {
         regularAttrs.push(attr);
       }
@@ -1232,8 +1235,7 @@ function emitAttribute(
     const val = attr.val;
 
     // JSX string literal attribute: label="Hello"
-    if ((val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))) {
+    if (getStaticStringLiteralValue(val) != null) {
       emitter.emitSynthetic('=');
       // Find the value offset: after "name=" in the source
       const valOffset = attrOffset + attr.name.length + 1; // +1 for '='

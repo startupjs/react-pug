@@ -240,6 +240,47 @@ describe('eslint-plugin-react-pug processor', () => {
     `);
   });
 
+  it('keeps concatenated string attrs as JSX expressions so preprocessing stays parseable', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'function render () {',
+      '  return pug`',
+      '    Button(',
+      "      label='Show Done' + getTitle() + ' today'",
+      '      onClick=handleReset',
+      '    )',
+      '  `',
+      '}',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+
+    expect(code).toContain("label={'Show Done' + getTitle() + ' today'}");
+    expect(code).not.toContain("label='Show Done' + getTitle() + ' today'");
+
+    const linter = new Linter({ configType: 'flat' });
+    const lintMessages = linter.verify(
+      code,
+      [{
+        files: FLAT_LINT_FILES,
+        languageOptions: {
+          ecmaVersion: 2022,
+          sourceType: 'module',
+          parserOptions: {
+            ecmaFeatures: {
+              jsx: true,
+            },
+          },
+        },
+        rules: {},
+      }],
+      'file.jsx',
+    );
+
+    expect(lintMessages).toEqual([]);
+  });
+
   it('auto class strategy switches to styleName+classnames for startupjs marker', () => {
     const processor = createReactPugProcessor();
     const input = [
