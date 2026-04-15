@@ -124,12 +124,13 @@ export default [
 ESLint processor behavior:
 
 - real JS/TS diagnostics inside Pug expression sites such as `#{...}`, `${...}`, `tag= ...`, attribute expressions, and inline handler/function bodies are mapped back to the original Pug source
+- formatting diagnostics for those embedded expression sites are linted against source-faithful JS wrappers rather than only against generated JSX
 - diagnostics that originate only from synthetic generated helper code are filtered out
 - the processor formats against the project's own `@stylistic` package when available so generated JSX converges to the same style engine the outer ESLint run uses
 
 Current limitation:
 
-- purely formatting-only, auto-fixable source mistakes inside nested embedded-expression sites, especially `${...}`, can currently be normalized away by the generated-JSX formatting pass instead of being reported back as original-source style diagnostics
+- multiline unbuffered `- ...` statements that are authored across several Pug lines do not yet get the same source-faithful formatting-diagnostic surface as embedded expression sites
 - autofixes and suggestions are currently not mapped back for files that contain transformed Pug regions, so transformed-region diagnostics are report-only today
 
 ## VS Code Settings

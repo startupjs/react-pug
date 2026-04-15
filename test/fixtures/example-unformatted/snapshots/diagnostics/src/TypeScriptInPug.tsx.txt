@@ -1,1 +1,2 @@
-No diagnostics.
+49:16  error  @stylistic/indent  Expected indentation of 2 spaces but found 3.
+51:21  error  @stylistic/no-extra-parens  Unnecessary parentheses around expression.

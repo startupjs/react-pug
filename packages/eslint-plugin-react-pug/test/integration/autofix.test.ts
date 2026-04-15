@@ -9,6 +9,7 @@ import reactPugPlugin from '../../src/index'
 const repoRoot = resolve(__dirname, '../../../..')
 const fixtureRoot = resolve(repoRoot, 'test/fixtures/example-unformatted')
 const snapshotRoot = resolve(fixtureRoot, 'snapshots/fixed')
+const postFixDiagnosticsSnapshot = resolve(fixtureRoot, 'snapshots/post-fix-diagnostics.json')
 const reactHooksStubPlugin = {
   rules: {
     'rules-of-hooks': {
@@ -93,7 +94,8 @@ describe('eslint --fix integration for react-pug processor', () => {
         message: message.message,
       }))
     ))
-    expect(allMessages).toEqual([])
+    expect(allMessages.every(message => String(message.ruleId).startsWith('@stylistic/'))).toBe(true)
+    await expect(JSON.stringify(allMessages, null, 2) + '\n').toMatchFileSnapshot(postFixDiagnosticsSnapshot)
 
     const fixedFiles = [
       'src/App.tsx',

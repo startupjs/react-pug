@@ -1,1 +1,2 @@
-No diagnostics.
+23:24  error  @stylistic/no-extra-parens  Unnecessary parentheses around expression.
+26:3  error  @stylistic/no-extra-parens  Unnecessary parentheses around expression.

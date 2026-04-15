@@ -1,6 +1,8 @@
 import type {
   CodeMapping,
   CodeInformation,
+  EmbeddedJsLintSite,
+  EmbeddedJsLintSiteKind,
   ExtractedStyleBlock,
   PugParseError,
   PugToken,
@@ -315,6 +317,7 @@ interface InterpolationContext {
 }
 
 const interpolationContextStack: InterpolationContext[] = [];
+const embeddedJsLintSiteStack: EmbeddedJsLintSite[][] = [];
 interface CompileContext {
   mode: CompileMode;
   classAttribute: ClassAttributeName;
@@ -326,6 +329,12 @@ const compileContextStack: CompileContext[] = [];
 function currentInterpolationContext(): InterpolationContext | null {
   return interpolationContextStack.length > 0
     ? interpolationContextStack[interpolationContextStack.length - 1]
+    : null;
+}
+
+function currentEmbeddedJsLintSites(): EmbeddedJsLintSite[] | null {
+  return embeddedJsLintSiteStack.length > 0
+    ? embeddedJsLintSiteStack[embeddedJsLintSiteStack.length - 1]
     : null;
 }
 
@@ -538,6 +547,111 @@ function findNextInterpolationOccurrence(
 
   if (bestIdx < 0 || bestInterpolation == null) return null;
   return { index: bestIdx, interpolation: bestInterpolation };
+}
+
+interface MappedSourceBuilder {
+  code: string;
+  boundaryMap: number[];
+  previousSourceEnd: number | null;
+}
+
+function appendMappedSourceChar(
+  state: MappedSourceBuilder,
+  ch: string,
+  sourceStart: number,
+  sourceEnd: number,
+): void {
+  if (state.code.length === 0) {
+    state.boundaryMap.push(sourceStart);
+  } else if (state.previousSourceEnd !== sourceStart) {
+    state.boundaryMap[state.boundaryMap.length - 1] = sourceStart;
+  }
+  state.code += ch;
+  state.boundaryMap.push(sourceEnd);
+  state.previousSourceEnd = sourceEnd;
+}
+
+function appendMappedSourceSegment(
+  state: MappedSourceBuilder,
+  segment: string,
+  sourceStart: number,
+): void {
+  for (let i = 0; i < segment.length; i += 1) {
+    appendMappedSourceChar(state, segment[i], sourceStart + i, sourceStart + i + 1);
+  }
+}
+
+function resolveTemplateInterpolatedJavaScript(
+  text: string,
+  sourceStart: number,
+  context: InterpolationContext | null,
+): { code: string; boundaryMap: number[] } {
+  const state: MappedSourceBuilder = {
+    code: '',
+    boundaryMap: [],
+    previousSourceEnd: null,
+  };
+
+  let cursor = 0;
+  while (cursor < text.length) {
+    const hit = findNextInterpolationOccurrence(text, cursor, context);
+    if (!hit) {
+      appendMappedSourceSegment(state, text.slice(cursor), sourceStart + cursor);
+      break;
+    }
+
+    if (hit.index > cursor) {
+      appendMappedSourceSegment(
+        state,
+        text.slice(cursor, hit.index),
+        sourceStart + cursor,
+      );
+    }
+
+    const interpolation = hit.interpolation;
+    appendMappedSourceSegment(
+      state,
+      interpolation.expression,
+      interpolation.exprStart,
+    );
+    cursor = hit.index + interpolation.marker.length;
+  }
+
+  if (state.boundaryMap.length === 0) {
+    state.boundaryMap.push(sourceStart);
+  }
+
+  return {
+    code: state.code,
+    boundaryMap: state.boundaryMap,
+  };
+}
+
+function recordEmbeddedJsLintSite(
+  kind: EmbeddedJsLintSiteKind,
+  text: string,
+  sourceStart: number,
+): void {
+  const sites = currentEmbeddedJsLintSites();
+  if (!sites) return;
+
+  const resolved = resolveTemplateInterpolatedJavaScript(
+    text,
+    sourceStart,
+    currentInterpolationContext(),
+  );
+  const trimmedLength = resolved.code.replace(/[ \t\r\n]+$/u, '').length;
+  if (trimmedLength === 0) return;
+  const trimmedCode = resolved.code.slice(0, trimmedLength);
+  const trimmedBoundaryMap = resolved.boundaryMap.slice(0, trimmedLength + 1);
+
+  sites.push({
+    kind,
+    sourceStart,
+    sourceEnd: sourceStart + text.length,
+    code: trimmedCode,
+    boundaryMap: trimmedBoundaryMap,
+  });
 }
 
 function countIndent(line: string): number {
@@ -865,7 +979,11 @@ function emitExpressionWithTemplateInterpolations(
   expressionOffset: number,
   emitter: TsxEmitter,
   info: CodeInformation = FULL_FEATURES,
+  lintSiteKind: EmbeddedJsLintSiteKind | null = 'expression',
 ): void {
+  if (lintSiteKind) {
+    recordEmbeddedJsLintSite(lintSiteKind, expression, expressionOffset);
+  }
   const context = currentInterpolationContext();
   let cursor = 0;
 
@@ -1283,6 +1401,7 @@ function emitText(
     if (interpolation.expression.trim().length === 0) {
       emitter.emitSynthetic('undefined');
     } else {
+      recordEmbeddedJsLintSite('expression', interpolation.expression, interpolation.exprStart);
       emitJsExpressionWithNestedPug(interpolation.expression, interpolation.exprStart, emitter);
     }
     emitter.emitSynthetic('}');
@@ -1318,7 +1437,7 @@ function emitCode(
   } else {
     // Unbuffered code block: - const x = 10
     // Emitted as a statement; IIFE wrapping is handled by emitNodesWithCodeBlocks
-    emitExpressionWithTemplateInterpolations(node.val, valueOffset, emitter, FULL_FEATURES);
+    emitExpressionWithTemplateInterpolations(node.val, valueOffset, emitter, FULL_FEATURES, 'statement');
     emitter.emitSynthetic(';');
   }
 }
@@ -1781,6 +1900,7 @@ export interface CompileResult {
   parseError: PugParseError | null;
   styleBlock: ExtractedStyleBlock | null;
   transformError: PugTransformError | null;
+  embeddedJsLintSites: EmbeddedJsLintSite[];
 }
 
 export type CompileMode = 'languageService' | 'runtime';
@@ -1816,7 +1936,9 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
   const extractedStyle = extractTerminalStyleBlock(pugText);
   const prepared = prepareTemplateInterpolations(extractedStyle.pugTextWithoutStyle);
   const pugTextForParse = prepared.sanitizedText;
+  const embeddedJsLintSites: EmbeddedJsLintSite[] = [];
   interpolationContextStack.push(prepared.context);
+  embeddedJsLintSiteStack.push(embeddedJsLintSites);
   compileContextStack.push({
     mode,
     classAttribute,
@@ -1833,6 +1955,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
         parseError: null,
         styleBlock: null,
         transformError: extractedStyle.transformError,
+        embeddedJsLintSites,
       };
     }
 
@@ -1860,6 +1983,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
             parseError,
             styleBlock: extractedStyle.styleBlock,
             transformError: null,
+            embeddedJsLintSites,
           };
         }
       } else {
@@ -1870,6 +1994,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
           parseError,
           styleBlock: extractedStyle.styleBlock,
           transformError: null,
+          embeddedJsLintSites,
         };
       }
     }
@@ -1916,6 +2041,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
           parseError,
           styleBlock: extractedStyle.styleBlock,
           transformError: null,
+          embeddedJsLintSites,
         };
       }
     }
@@ -1938,9 +2064,11 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
       parseError,
       styleBlock: extractedStyle.styleBlock,
       transformError: null,
+      embeddedJsLintSites,
     };
   } finally {
     compileContextStack.pop();
+    embeddedJsLintSiteStack.pop();
     interpolationContextStack.pop();
   }
 }

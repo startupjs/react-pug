@@ -64,6 +64,14 @@ interface CachedLintState {
   formatted: RewrittenPugRegionsResult | null;
   legacyStyleStatementRanges: InsertionOffsetRange[];
   syntheticStyleCallRanges: InsertionOffsetRange[];
+  embeddedLintBlocks: EmbeddedLintBlockState[];
+}
+
+interface EmbeddedLintBlockState {
+  text: string;
+  filename: string;
+  boundaryMap: Array<number | null>;
+  syntheticRanges: InsertionOffsetRange[];
 }
 
 interface EslintProcessorLike {
@@ -300,6 +308,122 @@ function getExpressionParserPlugins(filename: string): any[] {
   ] as any;
 }
 
+interface EmbeddedLintBlockBuilder {
+  text: string;
+  boundaryMap: Array<number | null>;
+  syntheticRanges: InsertionOffsetRange[];
+}
+
+function appendSyntheticBlockText(
+  builder: EmbeddedLintBlockBuilder,
+  text: string,
+): void {
+  if (text.length === 0) return;
+  const start = builder.text.length;
+  if (builder.boundaryMap.length === 0) builder.boundaryMap.push(null);
+  else builder.boundaryMap[builder.boundaryMap.length - 1] = null;
+  builder.text += text;
+  for (let i = 0; i < text.length; i += 1) builder.boundaryMap.push(null);
+  builder.syntheticRanges.push({ start, end: builder.text.length });
+}
+
+function appendMappedBlockText(
+  builder: EmbeddedLintBlockBuilder,
+  text: string,
+  boundaryMap: number[],
+): void {
+  if (text.length === 0) {
+    if (builder.boundaryMap.length === 0) builder.boundaryMap.push(boundaryMap[0] ?? null);
+    return;
+  }
+
+  if (builder.boundaryMap.length === 0) builder.boundaryMap.push(boundaryMap[0] ?? null);
+  else builder.boundaryMap[builder.boundaryMap.length - 1] = boundaryMap[0] ?? null;
+
+  builder.text += text;
+  for (let i = 0; i < text.length; i += 1) {
+    builder.boundaryMap.push(boundaryMap[i + 1] ?? null);
+  }
+}
+
+function appendMappedCodeWithIndent(
+  builder: EmbeddedLintBlockBuilder,
+  code: string,
+  boundaryMap: number[],
+  indent: string,
+): void {
+  let lineStart = true;
+  for (let index = 0; index < code.length; index += 1) {
+    if (lineStart) appendSyntheticBlockText(builder, indent);
+    appendMappedBlockText(builder, code[index], [boundaryMap[index], boundaryMap[index + 1]]);
+    lineStart = code[index] === '\n';
+  }
+}
+
+function createEmbeddedLintBlockFilename(
+  filename: string,
+  kind: 'expression' | 'statement',
+): string {
+  const suffix = isTypeScriptLikeFilename(filename) ? 'tsx' : 'jsx';
+  return `../../../pug-react-embedded-${kind}.${suffix}`;
+}
+
+function createEmbeddedLintBlocks(transformed: LintTransformState, filename: string): EmbeddedLintBlockState[] {
+  const expressionSites = transformed.embeddedJsLintSites.filter(site => site.kind === 'expression');
+  const statementSites = transformed.embeddedJsLintSites.filter(site => site.kind === 'statement');
+  const blocks: EmbeddedLintBlockState[] = [];
+
+  const buildExpressionBlock = () => {
+    if (expressionSites.length === 0) return;
+    const builder: EmbeddedLintBlockBuilder = {
+      text: '',
+      boundaryMap: [],
+      syntheticRanges: [],
+    };
+
+    expressionSites.forEach((site, index) => {
+      appendSyntheticBlockText(builder, `const __reactPugExpr${index} = (\n`);
+      appendMappedCodeWithIndent(builder, site.code, site.boundaryMap, '  ');
+      appendSyntheticBlockText(builder, '\n)\n');
+      if (index < expressionSites.length - 1) appendSyntheticBlockText(builder, '\n');
+    });
+
+    blocks.push({
+      text: builder.text,
+      filename: createEmbeddedLintBlockFilename(filename, 'expression'),
+      boundaryMap: builder.boundaryMap,
+      syntheticRanges: builder.syntheticRanges,
+    });
+  };
+
+  const buildStatementBlock = () => {
+    if (statementSites.length === 0) return;
+    const builder: EmbeddedLintBlockBuilder = {
+      text: '',
+      boundaryMap: [],
+      syntheticRanges: [],
+    };
+
+    statementSites.forEach((site, index) => {
+      appendSyntheticBlockText(builder, '(() => {\n');
+      appendMappedCodeWithIndent(builder, site.code, site.boundaryMap, '  ');
+      appendSyntheticBlockText(builder, '\n})()\n');
+      if (index < statementSites.length - 1) appendSyntheticBlockText(builder, '\n');
+    });
+
+    blocks.push({
+      text: builder.text,
+      filename: createEmbeddedLintBlockFilename(filename, 'statement'),
+      boundaryMap: builder.boundaryMap,
+      syntheticRanges: builder.syntheticRanges,
+    });
+  };
+
+  buildExpressionBlock();
+  buildStatementBlock();
+  return blocks;
+}
+
 function rebaseFormattedRegion(
   text: string,
   baseIndent: string,
@@ -371,11 +495,11 @@ function normalizeSyntheticWrapperClosingIndent(
 
 function applyFormatterLintPasses(text: string, filename: string): string {
   const lintConfig: any[] = getFormatterLintConfig(filename)
-  // We lint the generated, formatter-normalized JSX/TSX rather than the raw
-  // original Pug source. That keeps semantic diagnostics inside `${...}` blocks
-  // accurate and avoids transform-specific indent noise, but it also means
-  // purely formatting-only, auto-fixable source mistakes inside `${...}` are
-  // currently normalized away instead of being reported back to the user.
+  // This pass shapes the generated JSX/TSX surface only. Embedded JS expression
+  // sites such as `${...}`, `#{...}`, attr expressions and inline handler bodies
+  // also get a separate source-faithful lint surface below, but generated-region
+  // autofixes/suggestions are still intentionally dropped because they are not
+  // safely mappable back through the transform today.
   const pretty = prettier.format(text, {
     parser: isTypeScriptLikeFilename(filename) ? 'babel-ts' : 'babel',
     semi: false,
@@ -744,6 +868,98 @@ function mapLintMessage(
   };
 }
 
+function mapEmbeddedLintOffsetToOriginal(
+  block: EmbeddedLintBlockState,
+  offset: number,
+): number | null {
+  const clamped = Math.max(0, Math.min(offset, block.text.length));
+  return block.boundaryMap[clamped] ?? null;
+}
+
+function findLineBounds(text: string, offset: number): { start: number; end: number } {
+  const clamped = Math.max(0, Math.min(offset, text.length));
+  const start = text.lastIndexOf('\n', Math.max(0, clamped - 1)) + 1;
+  const nextNewline = text.indexOf('\n', clamped);
+  return {
+    start,
+    end: nextNewline >= 0 ? nextNewline : text.length,
+  };
+}
+
+function findFirstMappableOffsetOnLine(
+  block: EmbeddedLintBlockState,
+  offset: number,
+): number | null {
+  const { start, end } = findLineBounds(block.text, offset);
+  for (let index = Math.max(start, Math.min(offset, end)); index <= end; index += 1) {
+    if (block.boundaryMap[index] != null) return index;
+  }
+  return null;
+}
+
+function findLastMappableOffsetOnLine(
+  block: EmbeddedLintBlockState,
+  offset: number,
+): number | null {
+  const { start, end } = findLineBounds(block.text, offset);
+  for (let index = Math.max(start, Math.min(offset, end)); index >= start; index -= 1) {
+    if (block.boundaryMap[index] != null) return index;
+  }
+  return null;
+}
+
+function mapEmbeddedLintMessage(
+  message: EslintLintMessage,
+  block: EmbeddedLintBlockState,
+  originalText: string,
+): EslintLintMessage | null {
+  if (typeof message.ruleId !== 'string' || !message.ruleId.startsWith('@stylistic/')) {
+    return null;
+  }
+  if (message.line == null || message.column == null) return null;
+
+  const start = lineColumnToOffset(block.text, message.line, message.column);
+  const end = (message.endLine != null && message.endColumn != null)
+    ? lineColumnToOffset(block.text, message.endLine, message.endColumn)
+    : start + 1;
+  let mappedStartOffset = start;
+  let mappedEndOffset = Math.max(start + 1, end);
+
+  if (overlapsRangeList(block.syntheticRanges, mappedStartOffset, mappedEndOffset)) {
+    const relocatedStart = findFirstMappableOffsetOnLine(block, mappedStartOffset);
+    const relocatedEnd = findLastMappableOffsetOnLine(block, mappedEndOffset);
+    if (relocatedStart == null || relocatedEnd == null) return null;
+    mappedStartOffset = relocatedStart;
+    mappedEndOffset = Math.max(relocatedStart + 1, relocatedEnd);
+  }
+
+  const originalStart = mapEmbeddedLintOffsetToOriginal(block, mappedStartOffset);
+  const originalEnd = mapEmbeddedLintOffsetToOriginal(block, mappedEndOffset);
+  if (originalStart == null || originalEnd == null) return null;
+
+  const startLc = offsetToLineColumn(originalText, originalStart);
+  const endLc = offsetToLineColumn(originalText, originalEnd);
+
+  return {
+    ...Object.fromEntries(Object.entries(message).filter(([key]) => key !== 'fix' && key !== 'suggestions')),
+    line: startLc.line,
+    column: startLc.column,
+    endLine: endLc.line,
+    endColumn: endLc.column,
+  };
+}
+
+function lintMessageDedupKey(message: EslintLintMessage): string {
+  return JSON.stringify([
+    message.ruleId ?? null,
+    message.message ?? null,
+    message.line ?? null,
+    message.column ?? null,
+    message.endLine ?? null,
+    message.endColumn ?? null,
+  ]);
+}
+
 function createReactPugProcessor(
   options: EslintReactPugProcessorOptions = {},
 ): EslintProcessorLike {
@@ -774,6 +990,7 @@ function createReactPugProcessor(
           formatted: null,
           legacyStyleStatementRanges,
           syntheticStyleCallRanges: [],
+          embeddedLintBlocks: [],
         });
       } else {
         cache.delete(filename);
@@ -806,18 +1023,30 @@ function createReactPugProcessor(
         || containsJsxSyntax(text, filename)
       );
       const formatted = hasTransformedPug ? formatLintCode(transformed, filename) : null;
+      const embeddedLintBlocks = hasTransformedPug
+        ? createEmbeddedLintBlocks(transformed, filename)
+        : [];
       cache.set(filename, {
         originalText: text,
         transformed,
         formatted,
         legacyStyleStatementRanges,
         syntheticStyleCallRanges: collectMappedInsertionRangesByKind(transformed, 'style-call'),
+        embeddedLintBlocks,
       });
-      if (!shouldUseVirtualJsxFilename) return [transformed.code];
-      return [{
-        text: hasTransformedPug ? (formatted?.code ?? transformed.code) : transformed.code,
-        filename: getVirtualLintFilename(filename),
-      }];
+      const mainBlock: string | { text: string; filename: string } = shouldUseVirtualJsxFilename
+        ? {
+            text: hasTransformedPug ? (formatted?.code ?? transformed.code) : transformed.code,
+            filename: getVirtualLintFilename(filename),
+          }
+        : transformed.code;
+      return [
+        mainBlock,
+        ...embeddedLintBlocks.map(block => ({
+          text: block.text,
+          filename: block.filename,
+        })),
+      ];
     },
 
     postprocess(messages: EslintLintMessage[][], filename: string): EslintLintMessage[] {
@@ -827,9 +1056,31 @@ function createReactPugProcessor(
       const flat = messages.flat();
       if (!cached) return flat;
 
-      return flat
-        .map((msg) => mapLintMessage(msg, cached))
-        .filter((msg): msg is EslintLintMessage => msg != null);
+      const [mainMessages = [], ...embeddedMessages] = messages;
+      const mapped = [
+        ...mainMessages
+          .map((msg) => mapLintMessage(msg, cached))
+          .filter((msg): msg is EslintLintMessage => msg != null),
+      ];
+
+      embeddedMessages.forEach((blockMessages, index) => {
+        const block = cached.embeddedLintBlocks[index];
+        if (!block) return;
+        for (const message of blockMessages) {
+          const mappedMessage = mapEmbeddedLintMessage(message, block, cached.originalText);
+          if (mappedMessage) mapped.push(mappedMessage);
+        }
+      });
+
+      const deduped: EslintLintMessage[] = [];
+      const seen = new Set<string>();
+      for (const message of mapped) {
+        const key = lintMessageDedupKey(message);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(message);
+      }
+      return deduped;
     },
 
     supportsAutofix: true,

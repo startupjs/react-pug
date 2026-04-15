@@ -387,6 +387,7 @@ export function buildShadowDocument(
     region.parseError = compiled.parseError;
     region.transformError = compiled.transformError;
     region.styleBlock = compiled.styleBlock;
+    region.embeddedJsLintSites = compiled.embeddedJsLintSites;
 
     if (region.styleBlock && region.transformError == null) {
       if (!analysis.tagImportSource) {

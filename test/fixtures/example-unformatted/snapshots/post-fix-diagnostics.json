@@ -1,0 +1,163 @@
+[
+  {
+    "filePath": "src/App.tsx",
+    "ruleId": "@stylistic/quotes",
+    "line": 44,
+    "column": 39,
+    "message": "Strings must use singlequote."
+  },
+  {
+    "filePath": "src/App.tsx",
+    "ruleId": "@stylistic/space-infix-ops",
+    "line": 50,
+    "column": 8,
+    "message": "Operator '===' must be spaced."
+  },
+  {
+    "filePath": "src/App.tsx",
+    "ruleId": "@stylistic/arrow-spacing",
+    "line": 54,
+    "column": 73,
+    "message": "Missing space before =>."
+  },
+  {
+    "filePath": "src/App.tsx",
+    "ruleId": "@stylistic/space-infix-ops",
+    "line": 58,
+    "column": 6,
+    "message": "Operator '>' must be spaced."
+  },
+  {
+    "filePath": "src/App.tsx",
+    "ruleId": "@stylistic/arrow-spacing",
+    "line": 61,
+    "column": 87,
+    "message": "Missing space before =>."
+  },
+  {
+    "filePath": "src/StartupjsUiMdxComponents.js",
+    "ruleId": "@stylistic/indent",
+    "line": 269,
+    "column": 9,
+    "message": "Expected indentation of 4 spaces but found 6."
+  },
+  {
+    "filePath": "src/StartupjsUiMdxComponents.js",
+    "ruleId": "@stylistic/indent",
+    "line": 270,
+    "column": 16,
+    "message": "Expected indentation of 2 spaces but found 4."
+  },
+  {
+    "filePath": "src/StartupjsUiMdxComponents.js",
+    "ruleId": "@stylistic/arrow-spacing",
+    "line": 304,
+    "column": 40,
+    "message": "Missing space before =>."
+  },
+  {
+    "filePath": "src/StartupjsUiTextInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 213,
+    "column": 5,
+    "message": "Expected indentation of 4 spaces but found 6."
+  },
+  {
+    "filePath": "src/StartupjsUiTextInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 214,
+    "column": 5,
+    "message": "Expected indentation of 4 spaces but found 6."
+  },
+  {
+    "filePath": "src/StartupjsUiTextInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 216,
+    "column": 4,
+    "message": "Expected indentation of 2 spaces but found 4."
+  },
+  {
+    "filePath": "src/StartupjsUiWrapInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 166,
+    "column": 11,
+    "message": "Expected indentation of 4 spaces but found 6."
+  },
+  {
+    "filePath": "src/StartupjsUiWrapInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 180,
+    "column": 19,
+    "message": "Expected indentation of 4 spaces but found 8."
+  },
+  {
+    "filePath": "src/StartupjsUiWrapInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 181,
+    "column": 13,
+    "message": "Expected indentation of 4 spaces but found 8."
+  },
+  {
+    "filePath": "src/StartupjsUiWrapInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 182,
+    "column": 18,
+    "message": "Expected indentation of 4 spaces but found 8."
+  },
+  {
+    "filePath": "src/StartupjsUiWrapInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 182,
+    "column": 41,
+    "message": "Expected indentation of 2 spaces but found 6."
+  },
+  {
+    "filePath": "src/StartupjsUiWrapInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 228,
+    "column": 13,
+    "message": "Expected indentation of 4 spaces but found 8."
+  },
+  {
+    "filePath": "src/StartupjsUiWrapInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 229,
+    "column": 7,
+    "message": "Expected indentation of 4 spaces but found 8."
+  },
+  {
+    "filePath": "src/StartupjsUiWrapInput.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 231,
+    "column": 15,
+    "message": "Expected indentation of 2 spaces but found 6."
+  },
+  {
+    "filePath": "src/TypeScriptErrorsInPug.tsx",
+    "ruleId": "@stylistic/no-extra-parens",
+    "line": 23,
+    "column": 24,
+    "message": "Unnecessary parentheses around expression."
+  },
+  {
+    "filePath": "src/TypeScriptErrorsInPug.tsx",
+    "ruleId": "@stylistic/no-extra-parens",
+    "line": 26,
+    "column": 3,
+    "message": "Unnecessary parentheses around expression."
+  },
+  {
+    "filePath": "src/TypeScriptInPug.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 49,
+    "column": 16,
+    "message": "Expected indentation of 2 spaces but found 3."
+  },
+  {
+    "filePath": "src/TypeScriptInPug.tsx",
+    "ruleId": "@stylistic/no-extra-parens",
+    "line": 51,
+    "column": 21,
+    "message": "Unnecessary parentheses around expression."
+  }
+]

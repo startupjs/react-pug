@@ -256,4 +256,22 @@ describe('lintTransform', () => {
     expect(styleCallText).toContain('styl`')
     expect(styleCallText).toContain('.root')
   })
+
+  it('maps embedded JS lint sites back to original file offsets', () => {
+    const source = [
+      "import { pug } from 'startupjs'",
+      'const view = pug`',
+      '  Button(',
+      "    label='Show' + title + ' today'",
+      '    onClick=() => run(item.id)',
+      '  ) Save',
+      '`',
+    ].join('\n')
+
+    const result = createLintTransform(source, 'file.jsx')
+    expect(result.embeddedJsLintSites.map(site => source.slice(site.originalStart, site.originalEnd).trimEnd())).toEqual([
+      "'Show' + title + ' today'",
+      '() => run(item.id)',
+    ])
+  })
 })

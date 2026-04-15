@@ -618,6 +618,25 @@ describe('eslint-plugin-react-pug processor', () => {
     `);
   });
 
+  it('emits dedicated embedded-JS lint blocks for expression and statement sites', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  Button(onClick=() => run()) Save',
+      '  - const visible = ready',
+      '`',
+    ].join('\n');
+
+    const blocks = processor.preprocess(input, 'file.jsx');
+    expect(blocks).toHaveLength(3);
+    expect(blocks[1]).toMatchObject({
+      filename: '../../../pug-react-embedded-expression.jsx',
+    });
+    expect(blocks[2]).toMatchObject({
+      filename: '../../../pug-react-embedded-statement.jsx',
+    });
+  });
+
   it('suppresses legacy styl warnings without hiding normal linting', () => {
     const processor = createReactPugProcessor();
     const input = [

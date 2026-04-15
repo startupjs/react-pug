@@ -1262,6 +1262,41 @@ describe('code blocks', () => {
     expect(result.tsx).toContain('return ');
   });
 
+  it('collects embedded expression lint sites for attr values and #{}/${} interpolation bodies', () => {
+    const pug = [
+      'Button(',
+      "  label='Show' + title + ' today'",
+      '  onClick=() => {',
+      '    if (ready) {',
+      '      run()',
+      '    }',
+      '  }',
+      ') Save',
+      'Span.text= ${count != null',
+      "  ? format(count)",
+      "  : fallback('n/a')",
+      '}',
+      'p Hello #{title + suffix}',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.embeddedJsLintSites.filter(site => site.kind === 'expression').map(site => site.code)).toEqual([
+      "'Show' + title + ' today'",
+      "() => {\n    if (ready) {\n      run()\n    }\n  }",
+      "count != null\n  ? format(count)\n  : fallback('n/a')",
+      'title + suffix',
+    ]);
+  });
+
+  it('collects embedded statement lint sites for unbuffered code blocks', () => {
+    const pug = '- const visible = ready\nDiv Done';
+
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.embeddedJsLintSites.filter(site => site.kind === 'statement').map(site => site.code)).toEqual([
+      'const visible = ready',
+    ]);
+  });
+
   it('code-only block (no JSX) wraps in IIFE returning null', () => {
     const pug = '- console.log("hello")';
     const result = compilePugToTsx(pug);

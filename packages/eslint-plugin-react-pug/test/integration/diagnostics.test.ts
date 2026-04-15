@@ -249,7 +249,7 @@ describe('eslint processor diagnostic mapping', () => {
     expect(unknown?.endColumn).toBe(expected.column + 'unknownSuffix'.length)
   })
 
-  it('currently normalizes source-formatting mistakes inside ${} interpolations instead of reporting indent diagnostics', async () => {
+  it('reports original indent diagnostics inside ${} interpolations', async () => {
     const filePath = resolve(repoRoot, 'nested-template-source-indent-gap.js')
     const input = [
       "import { pug } from 'startupjs'",
@@ -289,6 +289,51 @@ describe('eslint processor diagnostic mapping', () => {
     })
 
     const [result] = await eslint.lintText(input, { filePath })
-    expect(result.messages.filter(message => message.ruleId === '@stylistic/indent')).toEqual([])
+    const indentMessages = result.messages.filter(message => message.ruleId === '@stylistic/indent')
+    expect(indentMessages.length).toBeGreaterThan(0)
+    expect(indentMessages.every(message => (message.line ?? 0) >= 10 && (message.line ?? 0) <= 13)).toBe(true)
+  })
+
+  it('reports original indent diagnostics inside inline handler bodies', async () => {
+    const filePath = resolve(repoRoot, 'embedded-handler-indent.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      'const ready = true',
+      'const run = () => {}',
+      '',
+      'const view = pug`',
+      '  Button(',
+      '    onClick=() => {',
+      '      if (ready) {',
+      '            run()',
+      '      }',
+      '    }',
+      '  ) Save',
+      '`',
+      '',
+    ].join('\n')
+
+    const eslint = new ESLint({
+      cwd: repoRoot,
+      fix: false,
+      ignore: false,
+      overrideConfigFile: true,
+      overrideConfig: [
+        ...neostandard({
+          ts: true,
+        }),
+        {
+          plugins: {
+            'react-pug': reactPugPlugin as any,
+          },
+          processor: 'react-pug/react-pug',
+        },
+      ] as any,
+    })
+
+    const [result] = await eslint.lintText(input, { filePath })
+    const indentMessages = result.messages.filter(message => message.ruleId === '@stylistic/indent')
+    expect(indentMessages.length).toBeGreaterThan(0)
+    expect(indentMessages.some(message => (message.line ?? 0) >= 8 && (message.line ?? 0) <= 10)).toBe(true)
   })
 })

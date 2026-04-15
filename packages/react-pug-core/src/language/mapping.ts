@@ -103,6 +103,24 @@ export interface ExtractedStyleBlock {
   column: number;
 }
 
+export type EmbeddedJsLintSiteKind = 'expression' | 'statement';
+
+export interface EmbeddedJsLintSite {
+  /** Whether the original embedded JS must parse as an expression or statement list */
+  kind: EmbeddedJsLintSiteKind;
+  /** Start offset within stripped pug text */
+  sourceStart: number;
+  /** End offset within stripped pug text */
+  sourceEnd: number;
+  /** Normalized JS source to lint for this embedded site */
+  code: string;
+  /**
+   * Boundary map from normalized code offsets back into stripped pug text offsets.
+   * Length is always `code.length + 1`.
+   */
+  boundaryMap: number[];
+}
+
 // ── PugToken ────────────────────────────────────────────────────
 
 /** Minimal pug lexer token shape (retained for sub-expression position resolution) */
@@ -204,6 +222,9 @@ export interface PugRegion {
 
   /** Extracted terminal style block, if present */
   styleBlock: ExtractedStyleBlock | null;
+
+  /** Embedded JS sites that can be linted directly against original source */
+  embeddedJsLintSites: EmbeddedJsLintSite[];
 }
 
 // ── PugDocument ─────────────────────────────────────────────────

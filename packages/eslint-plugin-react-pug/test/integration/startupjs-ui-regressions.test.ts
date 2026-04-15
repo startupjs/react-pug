@@ -89,7 +89,9 @@ describe('startupjs-ui regressions', () => {
       }))
     ))
 
-    expect(messages).toEqual([])
+    expect(messages.every(message => String(message.ruleId).startsWith('@stylistic/'))).toBe(true)
+    expect(messages.some(message => message.ruleId === '@stylistic/indent')).toBe(true)
+    expect(messages.some(message => message.ruleId === '@stylistic/arrow-spacing')).toBe(true)
   })
 
   it('still reports jsx-boolean-value for intrinsic boolean attrs inside pug', async () => {

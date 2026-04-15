@@ -98,7 +98,7 @@ describe('eslint diagnostics for example-unformatted fixture', () => {
     expect(startupjsUiPrompt?.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
 
     const startupjsUiMdxComponents = results.find(result => result.filePath.endsWith('/src/StartupjsUiMdxComponents.js'))
-    expect(startupjsUiMdxComponents?.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
+    expect(startupjsUiMdxComponents?.messages.some(message => message.ruleId === 'no-undef')).toBe(false)
 
     const startupjsUiMultiSelect = results.find(result => result.filePath.endsWith('/src/StartupjsUiMultiSelect.tsx'))
     expect(startupjsUiMultiSelect?.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)

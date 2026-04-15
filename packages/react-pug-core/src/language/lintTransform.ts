@@ -1,9 +1,10 @@
 import generate from '@babel/generator';
 import { parse, parseExpression } from '@babel/parser';
 import * as t from '@babel/types';
-import type { ShadowInsertion, ShadowMappedRegion } from './mapping';
+import type { EmbeddedJsLintSite, ShadowInsertion, ShadowMappedRegion } from './mapping';
 import type { SourceTransformOptions, SourceTransformResult } from './sourceTransform';
 import { transformSourceFile } from './sourceTransform';
+import { strippedToRawOffset } from './regionOffsetMapping';
 
 export interface RewrittenCopySegment {
   rewrittenStart: number;
@@ -45,8 +46,17 @@ export interface BoundaryMappedExpression {
 
 export interface LintTransformResult extends RewrittenPugRegionsResult {
   baseTransform: SourceTransformResult;
+  embeddedJsLintSites: MappedEmbeddedJsLintSite[];
   mapGeneratedOffsetToOriginal: (offset: number) => number | null;
   mapBaseOffsetToOriginal: (offset: number) => number | null;
+}
+
+export interface MappedEmbeddedJsLintSite {
+  kind: EmbeddedJsLintSite['kind'];
+  originalStart: number;
+  originalEnd: number;
+  code: string;
+  boundaryMap: number[];
 }
 
 export type RegionContainerKind =
@@ -907,6 +917,46 @@ export function collectMappedInsertionRangesByKind(
   return ranges;
 }
 
+function mapEmbeddedJsLintSitesToOriginal(baseTransform: SourceTransformResult): MappedEmbeddedJsLintSite[] {
+  const sites: MappedEmbeddedJsLintSite[] = [];
+
+  for (const region of baseTransform.regions) {
+    for (const site of region.embeddedJsLintSites) {
+      const boundaryMap = site.boundaryMap.map((offset) => (
+        region.pugTextStart + strippedToRawOffset(
+          region.pugText,
+          offset,
+          region.commonIndent,
+        )
+      ));
+      const originalStart = boundaryMap[0] ?? (
+        region.pugTextStart + strippedToRawOffset(
+          region.pugText,
+          site.sourceStart,
+          region.commonIndent,
+        )
+      );
+      const originalEnd = boundaryMap[boundaryMap.length - 1] ?? (
+        region.pugTextStart + strippedToRawOffset(
+          region.pugText,
+          site.sourceEnd,
+          region.commonIndent,
+        )
+      );
+
+      sites.push({
+        kind: site.kind,
+        originalStart,
+        originalEnd,
+        code: site.code,
+        boundaryMap,
+      });
+    }
+  }
+
+  return sites;
+}
+
 export function createLintTransform(
   sourceText: string,
   fileName: string,
@@ -919,10 +969,12 @@ export function createLintTransform(
   const rewritten = rewriteMappedPugRegions(baseTransform, fileName, (expr, _region, currentFileName) => (
     normalizePugExpressionForLint(expr, currentFileName)
   ));
+  const embeddedJsLintSites = mapEmbeddedJsLintSitesToOriginal(baseTransform);
 
   return {
     ...rewritten,
     baseTransform,
+    embeddedJsLintSites,
     mapGeneratedOffsetToOriginal: (offset: number) => {
       const baseOffset = rewritten.mapRewrittenOffsetToBase(offset);
       return baseOffset == null ? null : baseTransform.mapGeneratedOffsetToOriginal(baseOffset);

@@ -45,15 +45,14 @@ Used `pug` import bindings are removed from the processor's transformed view aut
 The processor is designed to preserve useful JavaScript/TypeScript diagnostics inside Pug regions:
 
 - real JS/TS rule violations inside `#{...}`, `${...}`, `tag= ...`, attribute expressions, and inline handler/function bodies are reported back at the original Pug location
+- formatting diagnostics for those embedded expression sites are linted against source-faithful JS wrappers rather than only against generated JSX
 - diagnostics caused only by synthetic generated helper code are filtered out
 - the formatter tries to converge to the consuming project's own `@stylistic` setup when that package is available locally
 
 Current limitation:
 
-- purely formatting-only, auto-fixable source mistakes inside nested expression sites such as `${...}` can be normalized away by the processor's generated-JSX formatting pass instead of being reported back as original-source indent/style diagnostics
+- multiline unbuffered `- ...` statements that are authored across several Pug lines do not yet get the same source-faithful formatting-diagnostic surface as embedded expression sites
 - autofixes and suggestions are currently not mapped back for files that contain transformed Pug regions, so transformed-region diagnostics are report-only today
-
-That means semantic errors and real rule violations inside embedded JS should still surface, but some raw source-formatting mistakes inside embedded Pug expression blocks are not yet part of the processor's reported lint contract.
 
 ## Exports
 
