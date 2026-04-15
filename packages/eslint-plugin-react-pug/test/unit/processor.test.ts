@@ -622,7 +622,11 @@ describe('eslint-plugin-react-pug processor', () => {
     const processor = createReactPugProcessor();
     const input = [
       'const view = pug`',
-      '  Button(onClick=() => run()) Save',
+      '  Button(',
+      '    label=knownAttr + missingAttrValue',
+      '    onClick=() => run(item.id)',
+      '  ) Save',
+      '  p Hello #{knownInterpolation + missingInterpolationValue}',
       '  - const visible = ready',
       '`',
     ].join('\n');
@@ -635,6 +639,10 @@ describe('eslint-plugin-react-pug processor', () => {
     expect(blocks[2]).toMatchObject({
       filename: '../../../pug-react-embedded-statement.jsx',
     });
+    expect((blocks[1] as any).text).toContain('const __reactPugExpr0 = (\n  knownAttr + missingAttrValue\n)');
+    expect((blocks[1] as any).text).toContain('const __reactPugExpr1 = (\n  () => run(item.id)\n)');
+    expect((blocks[1] as any).text).toContain('const __reactPugExpr2 = (\n  knownInterpolation + missingInterpolationValue\n)');
+    expect((blocks[2] as any).text).toContain('(() => {\n  const visible = ready\n})()');
   });
 
   it('suppresses legacy styl warnings without hiding normal linting', () => {

@@ -1288,6 +1288,35 @@ describe('code blocks', () => {
     ]);
   });
 
+  it('collects embedded lint sites across all supported source positions in source order', () => {
+    const pug = [
+      'Button(',
+      '  label=knownAttr + missingAttrValue',
+      '  onClick=() => {',
+      '    return missingHandlerValue',
+      '  }',
+      ') Save',
+      'p= knownBuffered + missingBufferedValue',
+      'p Hello #{knownInterpolation + missingInterpolationValue}',
+      'Span.text= ${knownTemplate + missingTemplateValue}',
+      '- const local = knownStatement + missingStatementValue',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.embeddedJsLintSites).toHaveLength(6);
+    expect(result.embeddedJsLintSites.map(site => ({
+      kind: site.kind,
+      code: site.code,
+    }))).toEqual(expect.arrayContaining([
+      { kind: 'expression', code: 'knownAttr + missingAttrValue' },
+      { kind: 'expression', code: '() => {\n    return missingHandlerValue\n  }' },
+      { kind: 'expression', code: 'knownBuffered + missingBufferedValue' },
+      { kind: 'expression', code: 'knownInterpolation + missingInterpolationValue' },
+      { kind: 'expression', code: 'knownTemplate + missingTemplateValue' },
+      { kind: 'statement', code: 'const local = knownStatement + missingStatementValue' },
+    ]));
+  });
+
   it('collects embedded statement lint sites for unbuffered code blocks', () => {
     const pug = '- const visible = ready\nDiv Done';
 

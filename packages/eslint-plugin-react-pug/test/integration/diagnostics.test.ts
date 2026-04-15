@@ -15,6 +15,55 @@ function offsetToLineColumn(text: string, offset: number) {
   }
 }
 
+function createProcessorEslint() {
+  return new ESLint({
+    cwd: repoRoot,
+    fix: false,
+    ignore: false,
+    overrideConfigFile: true,
+    overrideConfig: [
+      ...neostandard({
+        ts: true,
+      }),
+      {
+        plugins: {
+          'react-pug': reactPugPlugin as any,
+        },
+        processor: 'react-pug/react-pug',
+      },
+    ] as any,
+  })
+}
+
+function expectExactMappedMessage(
+  input: string,
+  messages: EslintLintMessage[],
+  ruleId: string,
+  snippet: string,
+) {
+  const matches = messages.filter((message) => (
+    message.ruleId === ruleId
+    && message.message.includes(snippet)
+  ))
+
+  expect(matches).toHaveLength(1)
+  const expectedStart = input.indexOf(snippet)
+  expect(expectedStart).toBeGreaterThanOrEqual(0)
+  const expected = offsetToLineColumn(input, expectedStart)
+  expect(matches[0].line).toBe(expected.line)
+  expect(matches[0].column).toBe(expected.column)
+  expect(matches[0].endLine).toBe(expected.line)
+  expect(matches[0].endColumn).toBe(expected.column + snippet.length)
+}
+
+function findLineIndex(lines: string[], snippet: string, fromIndex = 0) {
+  const index = lines.findIndex((line, lineIndex) => lineIndex >= fromIndex && line === snippet)
+  expect(index).toBeGreaterThanOrEqual(0)
+  return index
+}
+
+type EslintLintMessage = Awaited<ReturnType<ESLint['lintText']>>[number]['messages'][number]
+
 describe('eslint processor diagnostic mapping', () => {
   it('suppresses legacy styl tagged-template statement warnings', async () => {
     const filePath = resolve(repoRoot, 'legacy-styl.js')
@@ -33,23 +82,7 @@ describe('eslint processor diagnostic mapping', () => {
       '',
     ].join('\n')
 
-    const eslint = new ESLint({
-      cwd: repoRoot,
-      fix: false,
-      ignore: false,
-      overrideConfigFile: true,
-      overrideConfig: [
-        ...neostandard({
-          ts: true,
-        }),
-        {
-          plugins: {
-            'react-pug': reactPugPlugin as any,
-          },
-          processor: 'react-pug/react-pug',
-        },
-      ] as any,
-    })
+    const eslint = createProcessorEslint()
 
     const [result] = await eslint.lintText(input, { filePath })
     expect(result.messages.some(message => message.ruleId === 'no-unused-expressions')).toBe(false)
@@ -88,23 +121,7 @@ describe('eslint processor diagnostic mapping', () => {
       '',
     ].join('\n')
 
-    const eslint = new ESLint({
-      cwd: repoRoot,
-      fix: false,
-      ignore: false,
-      overrideConfigFile: true,
-      overrideConfig: [
-        ...neostandard({
-          ts: true,
-        }),
-        {
-          plugins: {
-            'react-pug': reactPugPlugin as any,
-          },
-          processor: 'react-pug/react-pug',
-        },
-      ] as any,
-    })
+    const eslint = createProcessorEslint()
 
     const [result] = await eslint.lintText(input, { filePath })
     expect(result.messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
@@ -122,23 +139,7 @@ describe('eslint processor diagnostic mapping', () => {
       ].join('\n'),
     )
 
-    const eslint = new ESLint({
-      cwd: repoRoot,
-      fix: false,
-      ignore: false,
-      overrideConfigFile: true,
-      overrideConfig: [
-        ...neostandard({
-          ts: true,
-        }),
-        {
-          plugins: {
-            'react-pug': reactPugPlugin as any,
-          },
-          processor: 'react-pug/react-pug',
-        },
-      ] as any,
-    })
+    const eslint = createProcessorEslint()
 
     const [result] = await eslint.lintText(input, { filePath })
     const unused = result.messages.find((message) => (
@@ -173,23 +174,7 @@ describe('eslint processor diagnostic mapping', () => {
       '',
     ].join('\n')
 
-    const eslint = new ESLint({
-      cwd: repoRoot,
-      fix: false,
-      ignore: false,
-      overrideConfigFile: true,
-      overrideConfig: [
-        ...neostandard({
-          ts: true,
-        }),
-        {
-          plugins: {
-            'react-pug': reactPugPlugin as any,
-          },
-          processor: 'react-pug/react-pug',
-        },
-      ] as any,
-    })
+    const eslint = createProcessorEslint()
 
     const [result] = await eslint.lintText(input, { filePath })
     expect(result.messages.filter(message => message.ruleId === '@stylistic/indent')).toEqual([])
@@ -216,23 +201,7 @@ describe('eslint processor diagnostic mapping', () => {
       '',
     ].join('\n')
 
-    const eslint = new ESLint({
-      cwd: repoRoot,
-      fix: false,
-      ignore: false,
-      overrideConfigFile: true,
-      overrideConfig: [
-        ...neostandard({
-          ts: true,
-        }),
-        {
-          plugins: {
-            'react-pug': reactPugPlugin as any,
-          },
-          processor: 'react-pug/react-pug',
-        },
-      ] as any,
-    })
+    const eslint = createProcessorEslint()
 
     const [result] = await eslint.lintText(input, { filePath })
     const unknown = result.messages.find((message) => (
@@ -270,23 +239,7 @@ describe('eslint processor diagnostic mapping', () => {
       '',
     ].join('\n')
 
-    const eslint = new ESLint({
-      cwd: repoRoot,
-      fix: false,
-      ignore: false,
-      overrideConfigFile: true,
-      overrideConfig: [
-        ...neostandard({
-          ts: true,
-        }),
-        {
-          plugins: {
-            'react-pug': reactPugPlugin as any,
-          },
-          processor: 'react-pug/react-pug',
-        },
-      ] as any,
-    })
+    const eslint = createProcessorEslint()
 
     const [result] = await eslint.lintText(input, { filePath })
     const indentMessages = result.messages.filter(message => message.ruleId === '@stylistic/indent')
@@ -313,27 +266,185 @@ describe('eslint processor diagnostic mapping', () => {
       '',
     ].join('\n')
 
-    const eslint = new ESLint({
-      cwd: repoRoot,
-      fix: false,
-      ignore: false,
-      overrideConfigFile: true,
-      overrideConfig: [
-        ...neostandard({
-          ts: true,
-        }),
-        {
-          plugins: {
-            'react-pug': reactPugPlugin as any,
-          },
-          processor: 'react-pug/react-pug',
-        },
-      ] as any,
-    })
+    const eslint = createProcessorEslint()
 
     const [result] = await eslint.lintText(input, { filePath })
     const indentMessages = result.messages.filter(message => message.ruleId === '@stylistic/indent')
     expect(indentMessages.length).toBeGreaterThan(0)
     expect(indentMessages.some(message => (message.line ?? 0) >= 8 && (message.line ?? 0) <= 10)).toBe(true)
+  })
+
+  it('maps exact no-undef ranges across the embedded JS site matrix, including unbuffered statement lines', async () => {
+    const filePath = resolve(repoRoot, 'embedded-site-matrix.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      "const knownAttr = 'attr'",
+      "const knownBuffered = 'buffered'",
+      "const knownInterpolation = 'interp'",
+      'const knownTemplate = 1',
+      'const knownStatement = 2',
+      'const ready = true',
+      '',
+      'export default pug`',
+      '  Button(',
+      '    label=knownAttr + missingAttrValue',
+      '    onClick=() => {',
+      '      if (ready) {',
+      '        return missingHandlerValue',
+      '      }',
+      '      return knownAttr',
+      '    }',
+      '  ) Save',
+      '  p= knownBuffered + missingBufferedValue',
+      '  p Hello #{knownInterpolation + missingInterpolationValue}',
+      '  Span.text= ${knownTemplate + missingTemplateValue}',
+      '  - const local = knownStatement + missingStatementValue',
+      '  if local',
+      '    p Visible',
+      '`',
+      '',
+    ].join('\n')
+
+    const eslint = createProcessorEslint()
+    const [result] = await eslint.lintText(input, { filePath })
+
+    expectExactMappedMessage(input, result.messages, 'no-undef', 'missingAttrValue')
+    expectExactMappedMessage(input, result.messages, 'no-undef', 'missingHandlerValue')
+    expectExactMappedMessage(input, result.messages, 'no-undef', 'missingBufferedValue')
+    expectExactMappedMessage(input, result.messages, 'no-undef', 'missingInterpolationValue')
+    expectExactMappedMessage(input, result.messages, 'no-undef', 'missingTemplateValue')
+    expectExactMappedMessage(input, result.messages, 'no-undef', 'missingStatementValue')
+  })
+
+  it.fails('maps exact @typescript-eslint/no-unused-vars ranges across complex embedded TS expression sites', async () => {
+    const filePath = resolve(repoRoot, 'embedded-ts-site-matrix.tsx')
+    const input = [
+      "import { pug } from 'startupjs'",
+      "const known = 'ok'",
+      "const item = { id: '1' }",
+      '',
+      'export default pug`',
+      '  Button(',
+      '    label=((value: string) => {',
+      '      const unusedAttrValue = value',
+      '      return value',
+      '    })(known)',
+      '    onClick=() => {',
+      '      const unusedHandlerValue = item.id',
+      '      return item.id',
+      '    }',
+      '  ) Save',
+      '  p= (() => {',
+      '    const unusedBufferedValue = known',
+      '    return known',
+      '  })()',
+      '  p Hello #{(() => {',
+      '    const unusedInterpolationValue = known',
+      '    return known',
+      '  })()}',
+      '  Span.text= ${(() => {',
+      '    const unusedTemplateValue = known',
+      '    return known',
+      '  })()}',
+      '`',
+      '',
+    ].join('\n')
+
+    const eslint = createProcessorEslint()
+    const [result] = await eslint.lintText(input, { filePath })
+
+    expectExactMappedMessage(input, result.messages, '@typescript-eslint/no-unused-vars', 'unusedAttrValue')
+    expectExactMappedMessage(input, result.messages, '@typescript-eslint/no-unused-vars', 'unusedHandlerValue')
+    expectExactMappedMessage(input, result.messages, '@typescript-eslint/no-unused-vars', 'unusedBufferedValue')
+    expectExactMappedMessage(input, result.messages, '@typescript-eslint/no-unused-vars', 'unusedInterpolationValue')
+    expectExactMappedMessage(input, result.messages, '@typescript-eslint/no-unused-vars', 'unusedTemplateValue')
+  })
+
+  it.fails('reports source-faithful indent diagnostics across the embedded expression-site matrix without synthetic noise', async () => {
+    const filePath = resolve(repoRoot, 'embedded-style-matrix.js')
+    const lines = [
+      "import { pug } from 'startupjs'",
+      'const ready = true',
+      'const formatLabel = (value) => value',
+      "const fallbackLabel = 'fallback'",
+      'const runHandler = () => {}',
+      'const runBuffered = () => {}',
+      'const runInterpolation = () => {}',
+      "const label = 'label'",
+      "const suffix = 'suffix'",
+      'const count = 1',
+      '',
+      'export default pug`',
+      '  Button(',
+      '    label=(',
+      '      ready',
+      '            ? formatLabel(label)',
+      '      : fallbackLabel',
+      '    )',
+      '    onClick=() => {',
+      '      if (ready) {',
+      '            runHandler()',
+      '      }',
+      '      return label',
+      '    }',
+      '  ) Save',
+      '  p= (() => {',
+      '    if (ready) {',
+      '          runBuffered()',
+      '    }',
+      '    return label',
+      '  })()',
+      '  p Hello #{(() => {',
+      '    if (ready) {',
+      '          runInterpolation()',
+      '    }',
+      '    return suffix',
+      '  })()}',
+      '  Span.text= ${count',
+      '          ? label',
+      '    : suffix',
+      '  }',
+      '`',
+      '',
+    ]
+    const input = lines.join('\n')
+    const eslint = createProcessorEslint()
+    const [result] = await eslint.lintText(input, { filePath })
+    const indentMessages = result.messages.filter(message => message.ruleId === '@stylistic/indent')
+
+    expect(indentMessages.length).toBeGreaterThan(0)
+
+    const attrStart = findLineIndex(lines, '    label=(') + 1
+    const attrEnd = findLineIndex(lines, '    )', attrStart) + 1
+    const handlerStart = findLineIndex(lines, '    onClick=() => {') + 1
+    const handlerEnd = findLineIndex(lines, '    }', handlerStart) + 1
+    const bufferedStart = findLineIndex(lines, '  p= (() => {') + 1
+    const bufferedEnd = findLineIndex(lines, '  })()', bufferedStart) + 1
+    const interpolationStart = findLineIndex(lines, '  p Hello #{(() => {') + 1
+    const interpolationEnd = findLineIndex(lines, '  })()}', interpolationStart) + 1
+    const templateStart = findLineIndex(lines, '  Span.text= ${count') + 1
+    const templateEnd = findLineIndex(lines, '  }', templateStart) + 1
+
+    const expectedRanges = [
+      { start: attrStart, end: attrEnd },
+      { start: handlerStart, end: handlerEnd },
+      { start: bufferedStart, end: bufferedEnd },
+      { start: interpolationStart, end: interpolationEnd },
+      { start: templateStart, end: templateEnd },
+    ]
+
+    for (const range of expectedRanges) {
+      expect(indentMessages.some((message) => (
+        (message.line ?? 0) >= range.start
+        && (message.line ?? 0) <= range.end
+      ))).toBe(true)
+    }
+
+    expect(indentMessages.every((message) => (
+      expectedRanges.some((range) => (
+        (message.line ?? 0) >= range.start
+        && (message.line ?? 0) <= range.end
+      ))
+    ))).toBe(true)
   })
 })

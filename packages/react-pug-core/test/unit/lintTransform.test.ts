@@ -274,4 +274,38 @@ describe('lintTransform', () => {
       '() => run(item.id)',
     ])
   })
+
+  it('maps the embedded JS site matrix back to exact original source starts in order', () => {
+    const source = [
+      "import { pug } from 'startupjs'",
+      'export default pug`',
+      '  Button(',
+      '    label=knownAttr + missingAttrValue',
+      '    onClick=() => {',
+      '      return missingHandlerValue',
+      '    }',
+      '  ) Save',
+      '  p= knownBuffered + missingBufferedValue',
+      '  p Hello #{knownInterpolation + missingInterpolationValue}',
+      '  Span.text= ${knownTemplate + missingTemplateValue}',
+      '  - const local = knownStatement + missingStatementValue',
+      '`',
+    ].join('\n')
+
+    const result = createLintTransform(source, 'file.jsx')
+    const expectedSites = [
+      { kind: 'expression', source: 'knownAttr + missingAttrValue' },
+      { kind: 'expression', source: '() => {\n      return missingHandlerValue\n    }' },
+      { kind: 'expression', source: 'knownBuffered + missingBufferedValue' },
+      { kind: 'expression', source: 'knownInterpolation + missingInterpolationValue' },
+      { kind: 'expression', source: 'knownTemplate + missingTemplateValue' },
+      { kind: 'statement', source: 'const local = knownStatement + missingStatementValue' },
+    ]
+    const actualSites = [...result.embeddedJsLintSites]
+      .sort((a, b) => a.originalStart - b.originalStart)
+    expect(actualSites.map(site => site.kind)).toEqual(expectedSites.map(site => site.kind))
+    expectedSites.forEach((expectedSite, index) => {
+      expect(source.startsWith(expectedSite.source, actualSites[index].originalStart)).toBe(true)
+    })
+  })
 })
