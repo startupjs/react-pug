@@ -48,6 +48,58 @@ test('supports multiline buffered TypeScript expressions with continuation keywo
   );
 });
 
+test('supports multiline buffered expressions continued by line-leading nullish operators', () => {
+  const tokens = lex(
+    [
+      'p= maybeValue',
+      '  ?? fallbackValue',
+    ].join('\n'),
+    { filename: 'multiline-buffered-nullish.pug' },
+  );
+
+  expect(findToken(tokens, 'code')).toEqual(
+    expect.objectContaining({
+      val: [
+        'maybeValue',
+        '  ?? fallbackValue',
+      ].join('\n'),
+    }),
+  );
+});
+
+test('stops multiline buffered code collection before the next sibling tag once the expression is complete', () => {
+  const tokens = lex(
+    [
+      'p= formatValue(',
+      '  source,',
+      ')',
+      'span Done',
+    ].join('\n'),
+    { filename: 'multiline-buffered-stop-before-sibling.pug' },
+  );
+
+  expect(tokens).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: 'code',
+        val: [
+          'formatValue(',
+          '  source,',
+          ')',
+        ].join('\n'),
+      }),
+      expect.objectContaining({
+        type: 'tag',
+        val: 'span',
+      }),
+      expect.objectContaining({
+        type: 'text',
+        val: 'Done',
+      }),
+    ]),
+  );
+});
+
 test('supports multiline text interpolation with nested objects and trailing text', () => {
   const tokens = lex(
     [
