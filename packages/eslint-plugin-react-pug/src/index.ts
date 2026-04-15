@@ -89,6 +89,9 @@ interface EslintProcessorLike {
 const FLAT_LINT_FILES = ['**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}'];
 const LEGACY_STYLE_HELPERS = new Set(['styl', 'css', 'sass', 'scss']);
 const LEGACY_STYLE_SUPPRESSED_RULES = new Set(['no-unused-expressions', 'no-unreachable']);
+const EMBEDDED_BLOCK_RULE_ALLOWLIST = new Set([
+  '@typescript-eslint/no-unused-vars',
+]);
 const stylisticPluginCache = new Map<string, any>();
 const FORMAT_RULE_CONFIG: any = {
   languageOptions: {
@@ -1027,7 +1030,14 @@ function mapEmbeddedLintMessage(
     includeSuggestions?: boolean;
   } = {},
 ): EslintLintMessage | null {
-  if (typeof message.ruleId !== 'string' || !message.ruleId.startsWith('@stylistic/')) {
+  if (
+    typeof message.ruleId === 'string'
+    && !message.ruleId.startsWith('@stylistic/')
+    && (
+      !EMBEDDED_BLOCK_RULE_ALLOWLIST.has(message.ruleId)
+      || block.site.kind !== 'expression'
+    )
+  ) {
     return null;
   }
   if (message.line == null || message.column == null) return null;

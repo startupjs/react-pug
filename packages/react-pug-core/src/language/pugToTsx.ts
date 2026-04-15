@@ -380,6 +380,7 @@ function findInterpolationEnd(text: string, exprStart: number): number | null {
   let inLineComment = false;
   let inBlockComment = false;
   let escaped = false;
+  const templateExpressionDepths: number[] = [];
 
   while (i < text.length) {
     const ch = text[i];
@@ -433,7 +434,9 @@ function findInterpolationEnd(text: string, exprStart: number): number | null {
       } else if (ch === '`') {
         inTemplate = false;
       } else if (ch === '$' && next === '{') {
+        templateExpressionDepths.push(depth);
         depth += 1;
+        inTemplate = false;
         i += 2;
         continue;
       }
@@ -474,6 +477,13 @@ function findInterpolationEnd(text: string, exprStart: number): number | null {
     if (ch === '}') {
       depth -= 1;
       if (depth === 0) return i;
+      if (
+        templateExpressionDepths.length > 0
+        && templateExpressionDepths[templateExpressionDepths.length - 1] === depth
+      ) {
+        templateExpressionDepths.pop();
+        inTemplate = true;
+      }
       i += 1;
       continue;
     }
@@ -652,6 +662,251 @@ function recordEmbeddedJsLintSite(
     code: trimmedCode,
     boundaryMap: trimmedBoundaryMap,
   });
+}
+
+function canParseEmbeddedExpression(text: string): boolean {
+  try {
+    parseExpression(text, {
+      plugins: ['jsx', 'decorators-legacy', 'typescript'],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getJavaScriptDelimiterBalance(text: string): {
+  paren: number;
+  brace: number;
+  bracket: number;
+} {
+  let paren = 0;
+  let brace = 0;
+  let bracket = 0;
+  let i = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inTemplate = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let escaped = false;
+
+  while (i < text.length) {
+    const ch = text[i];
+    const next = text[i + 1] ?? '';
+
+    if (inLineComment) {
+      if (ch === '\n') inLineComment = false;
+      i += 1;
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false;
+        i += 2;
+      } else {
+        i += 1;
+      }
+      continue;
+    }
+
+    if (inSingle) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '\'') inSingle = false;
+      i += 1;
+      continue;
+    }
+
+    if (inDouble) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inDouble = false;
+      i += 1;
+      continue;
+    }
+
+    if (inTemplate) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '`') {
+        inTemplate = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      inLineComment = true;
+      i += 2;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      i += 2;
+      continue;
+    }
+    if (ch === '\'') {
+      inSingle = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '`') {
+      inTemplate = true;
+      i += 1;
+      continue;
+    }
+
+    if (ch === '(') paren += 1;
+    else if (ch === ')') paren = Math.max(0, paren - 1);
+    else if (ch === '{') brace += 1;
+    else if (ch === '}') brace = Math.max(0, brace - 1);
+    else if (ch === '[') bracket += 1;
+    else if (ch === ']') bracket = Math.max(0, bracket - 1);
+
+    i += 1;
+  }
+
+  return { paren, brace, bracket };
+}
+
+function hasOpenJavaScriptDelimiters(text: string): boolean {
+  const balance = getJavaScriptDelimiterBalance(text);
+  return balance.paren > 0 || balance.brace > 0 || balance.bracket > 0;
+}
+
+function lineStartOffsets(text: string): number[] {
+  const starts = [0];
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === '\n' && i + 1 < text.length) starts.push(i + 1);
+  }
+  return starts;
+}
+
+function looksLikeTagAttrListStart(trimmedLine: string): boolean {
+  return /^[A-Za-z_$][\w$]*(?:[.:][A-Za-z_$][\w$-]*)*(?:[.#][A-Za-z_$][\w-]*)*\s*\($/.test(trimmedLine);
+}
+
+function collectRawEmbeddedExpressionSite(
+  lines: string[],
+  starts: number[],
+  startLineIndex: number,
+  startColumn: number,
+): { text: string; sourceStart: number; endLineIndex: number } {
+  const baseIndent = countIndent(lines[startLineIndex]);
+  let endLineIndex = startLineIndex;
+  let text = lines[startLineIndex].slice(startColumn);
+
+  while (endLineIndex + 1 < lines.length) {
+    if (canParseEmbeddedExpression(text) && !hasOpenJavaScriptDelimiters(text)) break;
+
+    const nextLineIndex = endLineIndex + 1;
+    const nextLine = lines[nextLineIndex];
+    const nextTrimmed = nextLine.trim();
+    const nextIndent = countIndent(nextLine);
+    const shouldContinue = (
+      nextTrimmed.length === 0
+      || nextIndent > baseIndent
+      || hasOpenJavaScriptDelimiters(text)
+      || nextTrimmed.startsWith(')')
+      || nextTrimmed.startsWith(']')
+      || nextTrimmed.startsWith('}')
+      || nextTrimmed.startsWith('?')
+      || nextTrimmed.startsWith(':')
+    );
+
+    if (!shouldContinue) break;
+
+    text += `\n${nextLine}`;
+    endLineIndex = nextLineIndex;
+  }
+
+  return {
+    text,
+    sourceStart: starts[startLineIndex] + startColumn,
+    endLineIndex,
+  };
+}
+
+function extractEmbeddedJsLintSitesFromRawPugText(pugText: string): void {
+  // This is a recovery-only path. Valid multiline embedded expressions should
+  // be handled by the vendored pug lexer/parser directly. We keep this raw scan
+  // only so ESLint can still surface source-faithful embedded-JS diagnostics
+  // while the template is malformed or temporarily incomplete during typing.
+  for (let i = 0; i < pugText.length; i += 1) {
+    const marker = pugText[i];
+    if ((marker === '#' || marker === '!') && pugText[i + 1] === '{') {
+      const exprStart = i + 2;
+      const exprEnd = findInterpolationEnd(pugText, exprStart);
+      if (exprEnd != null) {
+        recordEmbeddedJsLintSite('expression', pugText.slice(exprStart, exprEnd), exprStart);
+        i = exprEnd;
+      }
+    }
+  }
+
+  const lines = pugText.split('\n');
+  const starts = lineStartOffsets(pugText);
+  let inAttrList = false;
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+
+    if (inAttrList) {
+      if (trimmed.startsWith(')')) {
+        inAttrList = false;
+        continue;
+      }
+
+      const attrMatch = line.match(/^\s*([A-Za-z_$][\w:$-]*)\s*=\s*(.*)$/);
+      if (attrMatch) {
+        const equalsIndex = line.indexOf('=');
+        let startColumn = equalsIndex + 1;
+        while (startColumn < line.length && /\s/u.test(line[startColumn])) startColumn += 1;
+        const site = collectRawEmbeddedExpressionSite(lines, starts, lineIndex, startColumn);
+        recordEmbeddedJsLintSite('expression', site.text, site.sourceStart);
+        lineIndex = site.endLineIndex;
+        if (lines[lineIndex]?.trim().startsWith(')')) inAttrList = false;
+        continue;
+      }
+
+      continue;
+    }
+
+    if (looksLikeTagAttrListStart(trimmed)) {
+      inAttrList = true;
+      continue;
+    }
+
+    const statementMatch = line.match(/^\s*-\s+(.*)$/);
+    if (statementMatch) {
+      const startColumn = line.indexOf('-') + 2;
+      const site = collectRawEmbeddedExpressionSite(lines, starts, lineIndex, startColumn);
+      recordEmbeddedJsLintSite('statement', site.text, site.sourceStart);
+      lineIndex = site.endLineIndex;
+      continue;
+    }
+
+    const bufferedMatch = line.match(/^\s*([A-Za-z_$][\w$]*(?:[.:][A-Za-z_$][\w$-]*)*(?:[.#][A-Za-z_$][\w-]*)*)\s*=\s*(.*)$/);
+    if (bufferedMatch) {
+      const equalsIndex = line.indexOf('=');
+      let startColumn = equalsIndex + 1;
+      while (startColumn < line.length && /\s/u.test(line[startColumn])) startColumn += 1;
+      const site = collectRawEmbeddedExpressionSite(lines, starts, lineIndex, startColumn);
+      recordEmbeddedJsLintSite('expression', site.text, site.sourceStart);
+      lineIndex = site.endLineIndex;
+    }
+  }
 }
 
 function countIndent(line: string): number {
@@ -1986,6 +2241,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
         try {
           tokens = lex(recoveredText, { filename: 'template.pug' });
         } catch {
+          extractEmbeddedJsLintSitesFromRawPugText(pugTextForParse);
           return {
             tsx: fallbackNullExpression(mode),
             mappings: [],
@@ -1997,6 +2253,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
           };
         }
       } else {
+        extractEmbeddedJsLintSitesFromRawPugText(pugTextForParse);
         return {
           tsx: fallbackNullExpression(mode),
           mappings: [],
@@ -2044,6 +2301,7 @@ export function compilePugToTsx(pugText: string, options: CompileOptions = {}): 
       }
 
       if (!ast) {
+        extractEmbeddedJsLintSitesFromRawPugText(pugTextForParse);
         return {
           tsx: fallbackNullExpression(mode),
           mappings: [],

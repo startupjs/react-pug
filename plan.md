@@ -463,7 +463,12 @@ Those now rely on the generic core segmented-region rewrite helper instead.
 ### Known non-goal for this branch
 - removing the internal dependency on deprecated `@stylistic/jsx-indent`
   - this remains a follow-up
+  - one serious attempt to remove it already failed because formatter convergence regressed and real consumer diagnostics started drifting again
+  - treat this as dedicated future work, not a small cleanup
   - correctness and stable diagnostics matter more than removing that warning in this branch
+- mapping autofixes that arise only on the generated JSX surface of transformed Pug regions
+  - embedded source-faithful JS sites now map fixes/suggestions back correctly
+  - generated-JSX-surface fixes are still a future improvement and should be treated as a separate reconstruction problem, not as a quick range-mapping tweak
 
 ## Current Architectural Assessment
 

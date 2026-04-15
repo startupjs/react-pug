@@ -316,7 +316,7 @@ describe('eslint processor diagnostic mapping', () => {
     expectExactMappedMessage(input, result.messages, 'no-undef', 'missingStatementValue')
   })
 
-  it.fails('maps exact @typescript-eslint/no-unused-vars ranges across complex embedded TS expression sites', async () => {
+  it('maps exact @typescript-eslint/no-unused-vars ranges across complex embedded TS expression sites', async () => {
     const filePath = resolve(repoRoot, 'embedded-ts-site-matrix.tsx')
     const input = [
       "import { pug } from 'startupjs'",
@@ -360,7 +360,7 @@ describe('eslint processor diagnostic mapping', () => {
     expectExactMappedMessage(input, result.messages, '@typescript-eslint/no-unused-vars', 'unusedTemplateValue')
   })
 
-  it.fails('reports source-faithful indent diagnostics across the embedded expression-site matrix without synthetic noise', async () => {
+  it('reports source-faithful indent diagnostics across the embedded expression-site matrix without synthetic noise', async () => {
     const filePath = resolve(repoRoot, 'embedded-style-matrix.js')
     const lines = [
       "import { pug } from 'startupjs'",

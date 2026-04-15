@@ -84,29 +84,23 @@ describe('TsxEmitter', () => {
 describe('tag compilation', () => {
   it('compiles bare tag: div -> <div />', () => {
     const result = compilePugToTsx('div');
-    expect(result.tsx).toContain('<div');
-    expect(result.tsx).toContain('/>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div />)"`);
     expect(result.parseError).toBeNull();
   });
 
   it('compiles component tag: Button -> <Button />', () => {
     const result = compilePugToTsx('Button');
-    expect(result.tsx).toContain('<Button');
-    expect(result.tsx).toContain('/>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button />)"`);
   });
 
   it('compiles tag with children', () => {
     const result = compilePugToTsx('div\n  span');
-    expect(result.tsx).toContain('<div>');
-    expect(result.tsx).toContain('<span');
-    expect(result.tsx).toContain('</div>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div><span /></div>)"`);
   });
 
   it('does not treat capitalized components like Link as void html tags', () => {
     const result = compilePugToTsx("Link(href='/x')\n  Button(label='A')");
-    expect(result.tsx).toContain('<Link');
-    expect(result.tsx).toContain('</Link>');
-    expect(result.tsx).toContain('<Button');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Link href='/x'><Button label='A' /></Link>)"`);
   });
 });
 
@@ -115,25 +109,22 @@ describe('tag compilation', () => {
 describe('class and ID shorthands', () => {
   it('.card -> <div className="card" />', () => {
     const result = compilePugToTsx('.card');
-    expect(result.tsx).toContain('<div');
-    expect(result.tsx).toContain('className="card"');
-    expect(result.tsx).toContain('/>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div className=\"card\" />)"`);
   });
 
   it('.foo.bar -> <div className="foo bar" />', () => {
     const result = compilePugToTsx('.foo.bar');
-    expect(result.tsx).toContain('className="foo bar"');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div className=\"foo bar\" />)"`);
   });
 
   it('.foo.bar#baz -> className="foo bar" id="baz"', () => {
     const result = compilePugToTsx('.foo.bar#baz');
-    expect(result.tsx).toContain('className="foo bar"');
-    expect(result.tsx).toContain('id="baz"');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div className=\"foo bar\" id=\"baz\" />)"`);
   });
 
   it('#myId -> <div id="myId" />', () => {
     const result = compilePugToTsx('#myId');
-    expect(result.tsx).toContain('id="myId"');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div id=\"myId\" />)"`);
   });
 });
 
@@ -142,65 +133,72 @@ describe('class and ID shorthands', () => {
 describe('attributes', () => {
   it('expression attribute: onClick=handler -> onClick={handler}', () => {
     const result = compilePugToTsx('Button(onClick=handler)');
-    expect(result.tsx).toContain('onClick=');
-    expect(result.tsx).toContain('{handler}');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button onClick={handler} />)"`);
   });
 
   it('boolean attribute uses JSX shorthand', () => {
     const result = compilePugToTsx('Button(disabled)');
-    expect(result.tsx).toContain('disabled');
-    expect(result.tsx).not.toContain('{true}');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button disabled />)"`);
   });
 
   it('boolean attribute uses JSX shorthand in runtime mode too', () => {
     const result = compilePugToTsx('Button(disabled)', { mode: 'runtime' });
-    expect(result.tsx).toContain('disabled');
-    expect(result.tsx).not.toContain('{true}');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button disabled />)"`);
   });
 
   it('string attribute uses JSX string literal form', () => {
     const result = compilePugToTsx('Button(label="Hello")');
-    expect(result.tsx).toContain('label="Hello"');
-    expect(result.tsx).not.toContain('label={"Hello"}');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button label=\"Hello\" />)"`);
   });
 
   it('keeps concatenated string attribute expressions wrapped in braces', () => {
     const result = compilePugToTsx("Button(label='Show Done' + getTitle() + ' today')");
-    expect(result.tsx).toContain("label={'Show Done' + getTitle() + ' today'}");
-    expect(result.tsx).not.toContain("label='Show Done' + getTitle() + ' today'");
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button label={'Show Done' + getTitle() + ' today'} />)"`);
   });
 
   it('keeps dynamic id concatenations as expressions instead of static literals', () => {
     const result = compilePugToTsx("Button(id='prefix-' + getId())");
-    expect(result.tsx).toContain("id={'prefix-' + getId()}");
-    expect(result.tsx).not.toContain("id='prefix-' + getId()");
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button id={'prefix-' + getId()} />)"`);
   });
 
   it('multiple attributes', () => {
     const result = compilePugToTsx('Button(onClick=handler, label="Hi")');
-    expect(result.tsx).toContain('onClick');
-    expect(result.tsx).toContain('label');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button onClick={handler} label=\"Hi\" />)"`);
   });
 
   it('spread attribute: ...props -> {...props}', () => {
     const result = compilePugToTsx('Button(...props)');
-    expect(result.tsx).toContain('{...props}');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button {...props} />)"`);
   });
 
   it('supports ${} interpolation in attribute expressions', () => {
     const result = compilePugToTsx('Button(tooltip=${submitDescription})');
     expect(result.parseError).toBeNull();
-    expect(result.tsx).toContain('tooltip=');
-    expect(result.tsx).toContain('submitDescription');
-    expect(result.tsx).not.toContain('${');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button tooltip={submitDescription} />)"`);
   });
 
   it('supports nested pug inside ${} interpolation', () => {
     const result = compilePugToTsx('Button(tooltip=${pug`span= submitDescription`})');
     expect(result.parseError).toBeNull();
-    expect(result.tsx).toContain('<span');
-    expect(result.tsx).toContain('submitDescription');
-    expect(result.tsx).not.toContain('pug`span=');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Button tooltip={(<span>{submitDescription}</span>)} />)"`);
+  });
+
+  it('supports multiline ${} interpolation in attribute expressions', () => {
+    const result = compilePugToTsx([
+      'Button(',
+      '  tooltip=${(() => {',
+      "    const value = { label: submitDescription }",
+      '    return value.label',
+      '  })()}',
+      ')',
+    ].join('\n'));
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`
+      "(<Button tooltip={(() => {
+          const value = { label: submitDescription }
+          return value.label
+        })()} />)"
+    `);
   });
 });
 
@@ -209,18 +207,12 @@ describe('attributes', () => {
 describe('text content', () => {
   it('inline text: p Hello -> <p>Hello</p>', () => {
     const result = compilePugToTsx('p Hello');
-    expect(result.tsx).toContain('<p');
-    expect(result.tsx).toContain('>');
-    expect(result.tsx).toContain('Hello');
-    expect(result.tsx).toContain('</p>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<p>Hello</p>)"`);
   });
 
   it('text with interpolation: p Hello #{name}', () => {
     const result = compilePugToTsx('p Hello #{name}');
-    expect(result.tsx).toContain('<p');
-    expect(result.tsx).toContain('</p>');
-    // Interpolation should produce {name} in the output
-    expect(result.tsx).toContain('{name}');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<p>Hello {name}</p>)"`);
   });
 
   it('keeps concatenated expressions intact inside interpolations', () => {
@@ -230,14 +222,42 @@ describe('text content', () => {
 
   it('tag with = buffered code: p= expr', () => {
     const result = compilePugToTsx('p= myVar');
-    expect(result.tsx).toContain('<p');
-    expect(result.tsx).toContain('{');
-    expect(result.tsx).toContain('myVar');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<p>{myVar}</p>)"`);
   });
 
   it('keeps concatenated expressions intact in buffered code', () => {
     const result = compilePugToTsx("p= title + ' ' + description");
     expect(result.tsx).toBe("(<p>{title + ' ' + description}</p>)");
+  });
+
+  it('supports multiline ${} interpolation in buffered text positions', () => {
+    const result = compilePugToTsx([
+      'Span.text= ${(() => {',
+      "  const value = { label: submitDescription }",
+      '  return value.label',
+      '})()}',
+    ].join('\n'));
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`
+      "(<Span className=\"text\">{(() => {
+        const value = { label: submitDescription }
+        return value.label
+      })()}</Span>)"
+    `);
+  });
+
+  it('supports multiline ${} interpolation containing nested JS template literals', () => {
+    const result = compilePugToTsx([
+      'Span.text= ${(() => {',
+      '  return `prefix ${submitDescription}`',
+      '})()}',
+    ].join('\n'));
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`
+      "(<Span className=\"text\">{(() => {
+        return \`prefix \${submitDescription}\`
+      })()}</Span>)"
+    `);
   });
 
   it('supports piped text nodes across multiple lines', () => {
@@ -248,10 +268,10 @@ describe('text content', () => {
     ].join('\n');
     const result = compilePugToTsx(pug);
     expect(result.parseError).toBeNull();
-    expect(result.tsx).toContain('<span>');
-    expect(result.tsx).toContain('Hello');
-    expect(result.tsx).toContain('World');
-    expect(result.tsx).toContain('</span>');
+    expect(result.tsx).toMatchInlineSnapshot(`
+      "(<span>Hello
+      World</span>)"
+    `);
   });
 
   it('supports piped text nodes with interpolation', () => {
@@ -261,8 +281,7 @@ describe('text content', () => {
     ].join('\n');
     const result = compilePugToTsx(pug);
     expect(result.parseError).toBeNull();
-    expect(result.tsx).toContain('Hello');
-    expect(result.tsx).toContain('{user.name}');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<span>Hello {user.name}</span>)"`);
   });
 });
 
@@ -273,26 +292,14 @@ describe('nesting and children', () => {
     const pug = '.card\n  h1 Title\n  p Body';
     const result = compilePugToTsx(pug);
 
-    expect(result.tsx).toContain('<div');
-    expect(result.tsx).toContain('className="card"');
-    expect(result.tsx).toContain('<h1');
-    expect(result.tsx).toContain('Title');
-    expect(result.tsx).toContain('<p');
-    expect(result.tsx).toContain('Body');
-    expect(result.tsx).toContain('</div>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div className=\"card\"><h1>Title</h1><p>Body</p></div>)"`);
   });
 
   it('deeply nested tags', () => {
     const pug = 'div\n  span\n    a Hello';
     const result = compilePugToTsx(pug);
 
-    expect(result.tsx).toContain('<div>');
-    expect(result.tsx).toContain('<span>');
-    expect(result.tsx).toContain('<a');
-    expect(result.tsx).toContain('Hello');
-    expect(result.tsx).toContain('</a>');
-    expect(result.tsx).toContain('</span>');
-    expect(result.tsx).toContain('</div>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div><span><a>Hello</a></span></div>)"`);
   });
 });
 
@@ -301,16 +308,12 @@ describe('nesting and children', () => {
 describe('multiple roots', () => {
   it('multiple root tags wrapped in fragment', () => {
     const result = compilePugToTsx('div\nspan');
-    expect(result.tsx).toContain('<>');
-    expect(result.tsx).toContain('</>');
-    expect(result.tsx).toContain('<div');
-    expect(result.tsx).toContain('<span');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<><div /><span /></>)"`);
   });
 
   it('single root tag not wrapped in fragment', () => {
     const result = compilePugToTsx('div');
-    expect(result.tsx).not.toContain('<>');
-    expect(result.tsx).not.toContain('</>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div />)"`);
   });
 });
 
@@ -319,22 +322,17 @@ describe('multiple roots', () => {
 describe('void elements', () => {
   it('input is self-closing', () => {
     const result = compilePugToTsx('input(type="text")');
-    expect(result.tsx).toContain('<input');
-    expect(result.tsx).toContain('/>');
-    expect(result.tsx).not.toContain('</input>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<input type=\"text\" />)"`);
   });
 
   it('br is self-closing', () => {
     const result = compilePugToTsx('br');
-    expect(result.tsx).toContain('<br');
-    expect(result.tsx).toContain('/>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<br />)"`);
   });
 
   it('img is self-closing', () => {
     const result = compilePugToTsx('img(src="photo.jpg")');
-    expect(result.tsx).toContain('<img');
-    expect(result.tsx).toContain('/>');
-    expect(result.tsx).not.toContain('</img>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<img src=\"photo.jpg\" />)"`);
   });
 });
 
@@ -690,37 +688,21 @@ describe('conditionals', () => {
   it('if without else -> condition ? <body> : null', () => {
     const pug = 'if show\n  span Hello';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('show');
-    expect(result.tsx).toContain('?');
-    expect(result.tsx).toContain('<span');
-    expect(result.tsx).toContain('Hello');
-    // No else branch -> null
-    expect(result.tsx).toContain(': null');
+    expect(result.tsx).toMatchInlineSnapshot(`"(show ? <span>Hello</span> : null)"`);
     expect(result.parseError).toBeNull();
   });
 
   it('if/else -> condition ? <consequent> : <alternate>', () => {
     const pug = 'if isLoggedIn\n  span Welcome\nelse\n  span Login';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('isLoggedIn');
-    expect(result.tsx).toContain('?');
-    expect(result.tsx).toContain(':');
-    expect(result.tsx).toContain('Welcome');
-    expect(result.tsx).toContain('Login');
+    expect(result.tsx).toMatchInlineSnapshot(`"(isLoggedIn ? <span>Welcome</span> : <span>Login</span>)"`);
     expect(result.parseError).toBeNull();
   });
 
   it('if/else-if/else -> chained ternary', () => {
     const pug = 'if status === "active"\n  span Active\nelse if status === "pending"\n  span Pending\nelse\n  span Unknown';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('status === "active"');
-    expect(result.tsx).toContain('status === "pending"');
-    expect(result.tsx).toContain('Active');
-    expect(result.tsx).toContain('Pending');
-    expect(result.tsx).toContain('Unknown');
-    // Should have at least two ternary operators for chained if/else-if/else
-    const qmarks = result.tsx.match(/\?/g) ?? [];
-    expect(qmarks.length).toBeGreaterThanOrEqual(2);
+    expect(result.tsx).toMatchInlineSnapshot(`"(status === \"active\" ? <span>Active</span> : status === \"pending\" ? <span>Pending</span> : <span>Unknown</span>)"`);
     expect(result.parseError).toBeNull();
   });
 
@@ -746,22 +728,13 @@ describe('conditionals', () => {
   it('nested conditional inside tag', () => {
     const pug = 'div\n  if visible\n    span Show\n  else\n    span Hide';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('<div>');
-    expect(result.tsx).toContain('visible');
-    expect(result.tsx).toContain('?');
-    expect(result.tsx).toContain('Show');
-    expect(result.tsx).toContain('Hide');
-    expect(result.tsx).toContain('</div>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div>{visible ? <span>Show</span> : <span>Hide</span>}</div>)"`);
   });
 
   it('conditional as root node', () => {
     const pug = 'if active\n  div Hello';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('active');
-    expect(result.tsx).toContain('?');
-    expect(result.tsx).toContain('<div');
-    expect(result.tsx).toContain('Hello');
-    expect(result.tsx).not.toContain('{active ?');
+    expect(result.tsx).toMatchInlineSnapshot(`"(active ? <div>Hello</div> : null)"`);
     expect(result.parseError).toBeNull();
   });
 
@@ -792,24 +765,14 @@ describe('each loops', () => {
   it('basic each -> for..of accumulator IIFE', () => {
     const pug = 'each item in items\n  li= item';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('for (const item of items)');
-    expect(result.tsx).toContain('const __pugEachResult: JSX.Element[] = []');
-    expect(result.tsx).toContain('item');
-    expect(result.tsx).toContain('__pugEachResult.push(');
-    expect(result.tsx).toContain('<li');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const __pugEachResult: JSX.Element[] = [];for (const item of items) {__pugEachResult.push(<li>{item}</li>);}return __pugEachResult;})())"`);
     expect(result.parseError).toBeNull();
   });
 
   it('each with key -> for..of plus index binding', () => {
     const pug = 'each item, i in items\n  li= item';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('for (const item of items)');
-    expect(result.tsx).toContain('item');
-    expect(result.tsx).toContain('let __pugEachIndex = 0;');
-    expect(result.tsx).toContain('const i = __pugEachIndex;');
-    expect(result.tsx).toContain('__pugEachIndex++;');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const __pugEachResult: JSX.Element[] = [];let __pugEachIndex = 0;for (const item of items) {const i = __pugEachIndex;__pugEachResult.push(<li>{item}</li>);__pugEachIndex++;}return __pugEachResult;})())"`);
   });
 
   it('obj expression is mapped with FULL_FEATURES', () => {
@@ -843,14 +806,7 @@ describe('each loops', () => {
   it('each with nested body', () => {
     const pug = 'each user in users\n  .card\n    h2= user.name\n    p= user.email';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('users');
-    expect(result.tsx).toContain('for (const user of users)');
-    expect(result.tsx).toContain('<div');
-    expect(result.tsx).toContain('className="card"');
-    expect(result.tsx).toContain('<h2');
-    expect(result.tsx).toContain('user.name');
-    expect(result.tsx).toContain('user.email');
-    expect(result.tsx).toContain('</div>');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const __pugEachResult: JSX.Element[] = [];for (const user of users) {__pugEachResult.push(<div className=\"card\"><h2>{user.name}</h2><p>{user.email}</p></div>);}return __pugEachResult;})())"`);
   });
 
   it('each with empty body -> parse error or null pushed', () => {
@@ -865,10 +821,7 @@ describe('each loops', () => {
   it('each as root node', () => {
     const pug = 'each item in list\n  div= item';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('list');
-    expect(result.tsx).toContain('for (const item of list)');
-    expect(result.tsx).not.toContain('.map(');
-    expect(result.tsx).toContain('<div');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const __pugEachResult: JSX.Element[] = [];for (const item of list) {__pugEachResult.push(<div>{item}</div>);}return __pugEachResult;})())"`);
     expect(result.parseError).toBeNull();
   });
 
@@ -880,16 +833,13 @@ describe('each loops', () => {
       '  p.empty No cats',
     ].join('\n');
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('for (const cat of cats)');
-    expect(result.tsx).toContain('return __pugEachResult.length ? __pugEachResult : ');
-    expect(result.tsx).toContain('<p className="empty">No cats</p>');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const __pugEachResult: JSX.Element[] = [];for (const cat of cats) {__pugEachResult.push(<li>{cat.name}</li>);}return __pugEachResult.length ? __pugEachResult : <p className=\"empty\">No cats</p>;})())"`);
     expect(result.parseError).toBeNull();
   });
 
   it('emits runtime-safe each loop output without TS annotations', () => {
     const result = compilePugToTsx('each item in list\n  span= item', { mode: 'runtime' });
-    expect(result.tsx).toContain('const __pugEachResult = []');
-    expect(result.tsx).not.toContain('JSX.Element[]');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const __pugEachResult = [];for (const item of list) {__pugEachResult.push(<span>{item}</span>);}return __pugEachResult;})())"`);
   });
 });
 
@@ -1338,6 +1288,100 @@ describe('code blocks', () => {
     expect(result.embeddedJsLintSites.filter(site => site.kind === 'statement').map(site => site.code)).toEqual([
       'const visible = ready',
     ]);
+  });
+
+  it('parses valid multiline embedded expression sites through the normal pug AST path', () => {
+    const pug = [
+      'Button(',
+      '  label=((value: string) => {',
+      '    const unusedAttrValue = value',
+      '    return value',
+      '  })(known)',
+      '  onClick=() => {',
+      '    const unusedHandlerValue = item.id',
+      '    return item.id',
+      '  }',
+      ') Save',
+      'p= (() => {',
+      '  const unusedBufferedValue = known',
+      '  return known',
+      '})()',
+      'p Hello #{(() => {',
+      '  const unusedInterpolationValue = known',
+      '  return known',
+      '})()}',
+      'Span.text= ${(() => {',
+      '  const unusedTemplateValue = known',
+      '  return known',
+      '})()}',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeNull();
+    expect(result.embeddedJsLintSites.map(site => ({
+      kind: site.kind,
+      code: site.code,
+    }))).toEqual(expect.arrayContaining([
+      {
+        kind: 'expression',
+        code: '((value: string) => {\n    const unusedAttrValue = value\n    return value\n  })(known)',
+      },
+      {
+        kind: 'expression',
+        code: '() => {\n    const unusedHandlerValue = item.id\n    return item.id\n  }',
+      },
+      {
+        kind: 'expression',
+        code: '(() => {\n  const unusedBufferedValue = known\n  return known\n})()',
+      },
+      {
+        kind: 'expression',
+        code: '(() => {\n  const unusedInterpolationValue = known\n  return known\n})()',
+      },
+      {
+        kind: 'expression',
+        code: '(() => {\n  const unusedTemplateValue = known\n  return known\n})()',
+      },
+    ]));
+  });
+
+  it('recovers embedded lint sites from raw pug text when the pug AST path fails on malformed multiline expression sites', () => {
+    const pug = [
+      'Button(',
+      '  label=((value: string) => {',
+      '    const unusedAttrValue = value',
+      '    return value',
+      '  })(known)',
+      '  onClick=() => {',
+      '    const unusedHandlerValue = item.id',
+      '    return item.id',
+      '  }',
+      ') Save',
+      'p= (() => {',
+      '  const unusedBufferedValue = known',
+      '  return known',
+      '})(',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    expect(result.parseError).toBeTruthy();
+    expect(result.embeddedJsLintSites.map(site => ({
+      kind: site.kind,
+      code: site.code,
+    }))).toEqual(expect.arrayContaining([
+      {
+        kind: 'expression',
+        code: '((value: string) => {\n    const unusedAttrValue = value\n    return value\n  })(known)',
+      },
+      {
+        kind: 'expression',
+        code: '() => {\n    const unusedHandlerValue = item.id\n    return item.id\n  }',
+      },
+      {
+        kind: 'expression',
+        code: '(() => {\n  const unusedBufferedValue = known\n  return known\n})(',
+      },
+    ]));
   });
 
   it('code-only block (no JSX) wraps in IIFE returning null', () => {
