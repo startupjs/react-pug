@@ -106,7 +106,10 @@ function lintStylisticIndent(code: string, filename = 'file.jsx') {
           ],
           offsetTernaryExpressions: true,
         }],
-        '@stylistic/jsx-indent': ['error', 2],
+        '@stylistic/jsx-indent': ['error', 2, {
+          checkAttributes: false,
+          indentLogicalExpressions: true,
+        }],
         '@stylistic/jsx-indent-props': ['error', 2],
         '@stylistic/jsx-wrap-multilines': ['error', {
           declaration: 'parens-new-line',
@@ -406,7 +409,7 @@ describe('eslint-plugin-react-pug processor', () => {
       }"
     `);
 
-    const lintMessages = lintStylisticIndent(code, 'file.jsx');
+    const lintMessages = lintStartupjsUiStyle(code, 'file.jsx');
     const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
     expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
   });
@@ -571,6 +574,48 @@ describe('eslint-plugin-react-pug processor', () => {
 
     expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
     expect(mapped.filter(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toEqual([]);
+  });
+
+  it('formats nested multiline ternaries inside ${} interpolations with consumer-aligned indentation', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const monthAmount = 10',
+      'const yearAmount = 100',
+      'const view = pug`',
+      '  Span.text= ${monthAmount != null && yearAmount != null',
+      "    ? t(msg`Each business you add is {monthAmount}/month or {yearAmount}/year.`, { monthAmount: '$' + monthAmount, yearAmount: '$' + yearAmount })",
+      '    : monthAmount != null',
+      "      ? t(msg`Each business you add is {amount}/month.`, { amount: '$' + monthAmount })",
+      "      : t(msg`Each business you add is {amount}/year.`, { amount: '$' + yearAmount })",
+      '  }',
+      '`',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    expect(code).toMatchInlineSnapshot(`
+      "const monthAmount = 10
+      const yearAmount = 100
+      const view = (
+        <Span className='text'>
+          {monthAmount != null && yearAmount != null
+            ? t(
+              msg\`Each business you add is {monthAmount}/month or {yearAmount}/year.\`,
+              {
+                monthAmount: '$' + monthAmount,
+                yearAmount: '$' + yearAmount
+              }
+            )
+            : monthAmount != null
+              ? t(msg\`Each business you add is {amount}/month.\`, {
+                amount: '$' + monthAmount
+              })
+              : t(msg\`Each business you add is {amount}/year.\`, {
+                amount: '$' + yearAmount
+              })}
+        </Span>
+      )"
+    `);
   });
 
   it('suppresses legacy styl warnings without hiding normal linting', () => {

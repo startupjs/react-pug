@@ -154,4 +154,141 @@ describe('eslint processor diagnostic mapping', () => {
     expect(unused?.endLine).toBe(expected.line)
     expect(unused?.endColumn).toBe(expected.column + 'myValue'.length)
   })
+
+  it('does not report false indent diagnostics for nested multiline ternaries inside ${} interpolations', async () => {
+    const filePath = resolve(repoRoot, 'nested-template-ternary-indent.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      'const monthAmount = 10',
+      'const yearAmount = 100',
+      '',
+      'const view = pug`',
+      '  Span.text= ${monthAmount != null && yearAmount != null',
+      "    ? t(msg`Each business you add is {monthAmount}/month or {yearAmount}/year.`, { monthAmount: '$' + monthAmount, yearAmount: '$' + yearAmount })",
+      '    : monthAmount != null',
+      "      ? t(msg`Each business you add is {amount}/month.`, { amount: '$' + monthAmount })",
+      "      : t(msg`Each business you add is {amount}/year.`, { amount: '$' + yearAmount })",
+      '  }',
+      '`',
+      '',
+    ].join('\n')
+
+    const eslint = new ESLint({
+      cwd: repoRoot,
+      fix: false,
+      ignore: false,
+      overrideConfigFile: true,
+      overrideConfig: [
+        ...neostandard({
+          ts: true,
+        }),
+        {
+          plugins: {
+            'react-pug': reactPugPlugin as any,
+          },
+          processor: 'react-pug/react-pug',
+        },
+      ] as any,
+    })
+
+    const [result] = await eslint.lintText(input, { filePath })
+    expect(result.messages.filter(message => message.ruleId === '@stylistic/indent')).toEqual([])
+  })
+
+  it('maps real no-undef inside ${} interpolations to the exact original symbol', async () => {
+    const filePath = resolve(repoRoot, 'nested-template-real-error.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      'const Span = "span"',
+      'const t = (value) => value',
+      'const msg = (strings) => strings[0]',
+      'const monthAmount = 10',
+      'const yearAmount = 100',
+      '',
+      'const view = pug`',
+      '  Span.text= ${monthAmount != null && yearAmount != null',
+      "    ? t(msg`Each business you add is {monthAmount}/month or {yearAmount}/year.`, { monthAmount: '$' + monthAmount, yearAmount: '$' + yearAmount + unknownSuffix })",
+      '    : monthAmount != null',
+      "      ? t(msg`Each business you add is {amount}/month.`, { amount: '$' + monthAmount })",
+      "      : t(msg`Each business you add is {amount}/year.`, { amount: '$' + yearAmount })",
+      '  }',
+      '`',
+      '',
+    ].join('\n')
+
+    const eslint = new ESLint({
+      cwd: repoRoot,
+      fix: false,
+      ignore: false,
+      overrideConfigFile: true,
+      overrideConfig: [
+        ...neostandard({
+          ts: true,
+        }),
+        {
+          plugins: {
+            'react-pug': reactPugPlugin as any,
+          },
+          processor: 'react-pug/react-pug',
+        },
+      ] as any,
+    })
+
+    const [result] = await eslint.lintText(input, { filePath })
+    const unknown = result.messages.find((message) => (
+      message.ruleId === 'no-undef'
+      && message.message.includes('unknownSuffix')
+    ))
+
+    expect(unknown).toBeTruthy()
+    const expectedStart = input.indexOf('unknownSuffix')
+    const expected = offsetToLineColumn(input, expectedStart)
+    expect(unknown?.line).toBe(expected.line)
+    expect(unknown?.column).toBe(expected.column)
+    expect(unknown?.endLine).toBe(expected.line)
+    expect(unknown?.endColumn).toBe(expected.column + 'unknownSuffix'.length)
+  })
+
+  it('currently normalizes source-formatting mistakes inside ${} interpolations instead of reporting indent diagnostics', async () => {
+    const filePath = resolve(repoRoot, 'nested-template-source-indent-gap.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      'const Span = "span"',
+      'const t = (value) => value',
+      'const msg = (strings) => strings[0]',
+      'const monthAmount = 10',
+      'const yearAmount = 100',
+      '',
+      'const view = pug`',
+      '  Span.text= ${monthAmount != null && yearAmount != null',
+      "          ? t(msg`Each business you add is {monthAmount}/month or {yearAmount}/year.`, { monthAmount: '$' + monthAmount, yearAmount: '$' + yearAmount })",
+      '      : monthAmount != null',
+      "                  ? t(msg`Each business you add is {amount}/month.`, { amount: '$' + monthAmount })",
+      "        : t(msg`Each business you add is {amount}/year.`, { amount: '$' + yearAmount })",
+      '  }',
+      '`',
+      '',
+    ].join('\n')
+
+    const eslint = new ESLint({
+      cwd: repoRoot,
+      fix: false,
+      ignore: false,
+      overrideConfigFile: true,
+      overrideConfig: [
+        ...neostandard({
+          ts: true,
+        }),
+        {
+          plugins: {
+            'react-pug': reactPugPlugin as any,
+          },
+          processor: 'react-pug/react-pug',
+        },
+      ] as any,
+    })
+
+    const [result] = await eslint.lintText(input, { filePath })
+    expect(result.messages.filter(message => message.ruleId === '@stylistic/indent')).toEqual([])
+  })
 })

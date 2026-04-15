@@ -18,8 +18,10 @@ import {
   type StartupjsCssxjsOption,
 } from '@react-pug/react-pug-core';
 import { parse } from '@babel/parser';
+import { createRequire } from 'node:module';
+import { isAbsolute, resolve } from 'node:path';
 import { Linter, SourceCode } from 'eslint';
-import stylisticPlugin from '@stylistic/eslint-plugin';
+import bundledStylisticPlugin from '@stylistic/eslint-plugin';
 import prettier from '@prettier/sync';
 const tsParser = require('@typescript-eslint/parser');
 
@@ -76,6 +78,7 @@ interface EslintProcessorLike {
 const FLAT_LINT_FILES = ['**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}'];
 const LEGACY_STYLE_HELPERS = new Set(['styl', 'css', 'sass', 'scss']);
 const LEGACY_STYLE_SUPPRESSED_RULES = new Set(['no-unused-expressions', 'no-unreachable']);
+const stylisticPluginCache = new Map<string, any>();
 const FORMAT_RULE_CONFIG: any = {
   languageOptions: {
     ecmaVersion: 2022 as const,
@@ -87,7 +90,7 @@ const FORMAT_RULE_CONFIG: any = {
     },
   },
   plugins: {
-    '@stylistic': stylisticPlugin,
+    '@stylistic': bundledStylisticPlugin,
   },
   rules: {
     '@stylistic/indent': ['error', 2, {
@@ -132,7 +135,10 @@ const FORMAT_RULE_CONFIG: any = {
       ],
       offsetTernaryExpressions: true,
     }],
-    '@stylistic/jsx-indent': ['error', 2],
+    '@stylistic/jsx-indent': ['error', 2, {
+      checkAttributes: false,
+      indentLogicalExpressions: true,
+    }],
     '@stylistic/jsx-indent-props': ['error', 2],
     '@stylistic/jsx-wrap-multilines': ['error', {
       declaration: 'parens-new-line',
@@ -364,18 +370,12 @@ function normalizeSyntheticWrapperClosingIndent(
 }
 
 function applyFormatterLintPasses(text: string, filename: string): string {
-  const lintConfig: any[] = [{
-    files: FLAT_LINT_FILES,
-    ...FORMAT_RULE_CONFIG,
-    ...(isTypeScriptLikeFilename(filename)
-      ? {
-        languageOptions: {
-          ...FORMAT_RULE_CONFIG.languageOptions,
-          parser: tsParser as any,
-        },
-      }
-      : {}),
-  }];
+  const lintConfig: any[] = getFormatterLintConfig(filename)
+  // We lint the generated, formatter-normalized JSX/TSX rather than the raw
+  // original Pug source. That keeps semantic diagnostics inside `${...}` blocks
+  // accurate and avoids transform-specific indent noise, but it also means
+  // purely formatting-only, auto-fixable source mistakes inside `${...}` are
+  // currently normalized away instead of being reported back to the user.
   const pretty = prettier.format(text, {
     parser: isTypeScriptLikeFilename(filename) ? 'babel-ts' : 'babel',
     semi: false,
@@ -399,6 +399,61 @@ function applyFormatterLintPasses(text: string, filename: string): string {
   ).output;
 }
 
+function getFormatterLintConfig(filename: string): any[] {
+  const stylisticPlugin = resolveStylisticPluginForFormatting(filename);
+  return [{
+    files: FLAT_LINT_FILES,
+    ...FORMAT_RULE_CONFIG,
+    plugins: {
+      ...FORMAT_RULE_CONFIG.plugins,
+      '@stylistic': stylisticPlugin,
+    },
+    ...(isTypeScriptLikeFilename(filename)
+      ? {
+        languageOptions: {
+          ...FORMAT_RULE_CONFIG.languageOptions,
+          parser: tsParser as any,
+        },
+      }
+      : {}),
+  }];
+}
+
+function looksLikeStylisticPlugin(candidate: unknown): candidate is { rules: Record<string, unknown> } {
+  return !!candidate && typeof candidate === 'object' && typeof (candidate as any).rules === 'object';
+}
+
+function getFormatterResolutionKey(filename: string): string {
+  return isAbsolute(filename) ? filename : resolve(process.cwd(), filename);
+}
+
+function loadStylisticPluginFrom(request: NodeRequire): any | null {
+  try {
+    const resolved = request('@stylistic/eslint-plugin');
+    return looksLikeStylisticPlugin(resolved) ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveStylisticPluginForFormatting(filename: string): any {
+  const resolutionKey = getFormatterResolutionKey(filename);
+  const cached = stylisticPluginCache.get(resolutionKey);
+  if (cached) return cached;
+
+  const candidates = [resolutionKey, resolve(process.cwd(), '__react-pug-formatter__.js')];
+  for (const candidate of candidates) {
+    const resolved = loadStylisticPluginFrom(createRequire(candidate));
+    if (resolved) {
+      stylisticPluginCache.set(resolutionKey, resolved);
+      return resolved;
+    }
+  }
+
+  stylisticPluginCache.set(resolutionKey, bundledStylisticPlugin);
+  return bundledStylisticPlugin;
+}
+
 function normalizeFormattedExpressionForLint(
   text: string,
   wrapperLineIndentWidth: number,
@@ -410,7 +465,7 @@ function normalizeFormattedExpressionForLint(
   hasSyntheticWrapperLines?: boolean;
 } {
   if (
-    formattingContext.containerKind !== 'standalone'
+    needsSyntheticRootJsxWrapper(formattingContext.containerKind)
     && text.includes('\n')
     && isRootJsxExpression(text, filename)
   ) {
@@ -434,6 +489,16 @@ function normalizeFormattedExpressionForLint(
     code: text,
     wrapperLineIndentWidth,
   };
+}
+
+function needsSyntheticRootJsxWrapper(
+  containerKind: RegionFormattingContext['containerKind'],
+): boolean {
+  return (
+    containerKind === 'call-argument'
+    || containerKind === 'conditional-branch'
+    || containerKind === 'logical-operand'
+  );
 }
 
 function getSyntheticWrapperLineRanges(text: string): InsertionOffsetRange[] {
