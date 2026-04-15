@@ -4,7 +4,7 @@ import * as t from '@babel/types';
 import type { EmbeddedJsLintSite, ShadowInsertion, ShadowMappedRegion } from './mapping';
 import type { SourceTransformOptions, SourceTransformResult } from './sourceTransform';
 import { transformSourceFile } from './sourceTransform';
-import { strippedToRawOffset } from './regionOffsetMapping';
+import { regionStrippedOffsetToOriginalOffset, strippedToRawOffset } from './regionOffsetMapping';
 
 export interface RewrittenCopySegment {
   rewrittenStart: number;
@@ -923,25 +923,17 @@ function mapEmbeddedJsLintSitesToOriginal(baseTransform: SourceTransformResult):
   for (const region of baseTransform.regions) {
     for (const site of region.embeddedJsLintSites) {
       const boundaryMap = site.boundaryMap.map((offset) => (
-        region.pugTextStart + strippedToRawOffset(
-          region.pugText,
-          offset,
-          region.commonIndent,
-        )
+        regionStrippedOffsetToOriginalOffset(baseTransform.document, region, offset)
       ));
-      const originalStart = boundaryMap[0] ?? (
-        region.pugTextStart + strippedToRawOffset(
-          region.pugText,
-          site.sourceStart,
-          region.commonIndent,
-        )
+      const originalStart = boundaryMap[0] ?? regionStrippedOffsetToOriginalOffset(
+        baseTransform.document,
+        region,
+        site.sourceStart,
       );
-      const originalEnd = boundaryMap[boundaryMap.length - 1] ?? (
-        region.pugTextStart + strippedToRawOffset(
-          region.pugText,
-          site.sourceEnd,
-          region.commonIndent,
-        )
+      const originalEnd = boundaryMap[boundaryMap.length - 1] ?? regionStrippedOffsetToOriginalOffset(
+        baseTransform.document,
+        region,
+        site.sourceEnd,
       );
 
       sites.push({

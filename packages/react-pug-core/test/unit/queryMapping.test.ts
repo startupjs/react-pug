@@ -31,6 +31,16 @@ describe('regionOffsetMapping helpers', () => {
     expect(rawToStrippedOffset(rawText, 1, 4)).toBeNull();
   });
 
+  it('caps removed indent on dedented lines instead of collapsing later offsets', () => {
+    const rawText = ['  Button(', 'Span.text= ${label+suffix}', ''].join('\n');
+    const rawOffset = rawText.indexOf('label+suffix');
+    const stripped = rawToStrippedOffset(rawText, rawOffset, 2);
+
+    expect(stripped).not.toBeNull();
+    expect(strippedToRawOffset(rawText, stripped!, 2)).toBe(rawOffset);
+    expect(strippedToRawOffset(rawText, stripped! + 'label+suffix'.length, 2)).toBe(rawOffset + 'label+suffix'.length);
+  });
+
   it('maps original file offsets to stripped region offsets and back', () => {
     const source = ['const view = pug`', '  Button(onClick=handler)', '`;'].join('\n');
     const doc = makeDoc(source);

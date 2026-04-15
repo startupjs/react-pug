@@ -1,5 +1,5 @@
 /Users/cray0000/ws/www/vscode-pug-react/test/fixtures/real-project/event-tabs-breed.js
-  79:21  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  81:15  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
+  79:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  80:5  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
 
 Found 2 errors in 1 files.

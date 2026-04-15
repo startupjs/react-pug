@@ -1,2 +1,2 @@
-23:24  error  @stylistic/no-extra-parens  Unnecessary parentheses around expression.
-26:3  error  @stylistic/no-extra-parens  Unnecessary parentheses around expression.
+23:20  error  @stylistic/no-extra-parens  Unnecessary parentheses around expression.
+26:18  error  @stylistic/no-extra-parens  Unnecessary parentheses around expression.

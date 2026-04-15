@@ -1114,7 +1114,13 @@ function emitAttributeValueAsExpression(
   }
 
   const attrOffset = lineColToOffset(pugText, attr.line, attr.column);
-  const valOffset = attrOffset + attr.name.length + 1;
+  const valOffset = findValueOffsetOnLine(
+    pugText,
+    attr.line,
+    attr.column,
+    attr.val,
+    attrOffset + attr.name.length + 1,
+  );
   const val = attr.val;
 
   if (getStaticStringLiteralValue(val) != null) {
@@ -1351,17 +1357,21 @@ function emitAttribute(
   // Value attribute: onClick=handler -> onClick={handler}
   if (typeof attr.val === 'string') {
     const val = attr.val;
+    const valOffset = findValueOffsetOnLine(
+      pugText,
+      attr.line,
+      attr.column,
+      val,
+      attrOffset + attr.name.length + 1,
+    );
 
     // JSX string literal attribute: label="Hello"
     if (getStaticStringLiteralValue(val) != null) {
       emitter.emitSynthetic('=');
-      // Find the value offset: after "name=" in the source
-      const valOffset = attrOffset + attr.name.length + 1; // +1 for '='
       emitter.emitMapped(val, valOffset, FULL_FEATURES);
     } else {
       // Expression value
       emitter.emitSynthetic('={');
-      const valOffset = attrOffset + attr.name.length + 1;
       emitExpressionWithTemplateInterpolations(val, valOffset, emitter, FULL_FEATURES);
       emitter.emitSynthetic('}');
     }

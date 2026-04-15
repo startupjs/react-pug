@@ -13,6 +13,7 @@ import {
   offsetToLineColumn,
   rewriteSegmentedPugRegions,
   type BoundaryMappedExpression,
+  type MappedEmbeddedJsLintSite,
   type RewrittenPugRegionsResult,
   type RegionFormattingContext,
   type StartupjsCssxjsOption,
@@ -70,7 +71,9 @@ interface CachedLintState {
 interface EmbeddedLintBlockState {
   text: string;
   filename: string;
+  site: MappedEmbeddedJsLintSite;
   boundaryMap: Array<number | null>;
+  endBoundaryMap: Array<number | null>;
   syntheticRanges: InsertionOffsetRange[];
 }
 
@@ -311,6 +314,7 @@ function getExpressionParserPlugins(filename: string): any[] {
 interface EmbeddedLintBlockBuilder {
   text: string;
   boundaryMap: Array<number | null>;
+  endBoundaryMap: Array<number | null>;
   syntheticRanges: InsertionOffsetRange[];
 }
 
@@ -322,27 +326,41 @@ function appendSyntheticBlockText(
   const start = builder.text.length;
   if (builder.boundaryMap.length === 0) builder.boundaryMap.push(null);
   else builder.boundaryMap[builder.boundaryMap.length - 1] = null;
+  if (builder.endBoundaryMap.length === 0) builder.endBoundaryMap.push(null);
   builder.text += text;
-  for (let i = 0; i < text.length; i += 1) builder.boundaryMap.push(null);
+  for (let i = 0; i < text.length; i += 1) {
+    builder.boundaryMap.push(null);
+    builder.endBoundaryMap.push(null);
+  }
   builder.syntheticRanges.push({ start, end: builder.text.length });
 }
 
 function appendMappedBlockText(
   builder: EmbeddedLintBlockBuilder,
   text: string,
-  boundaryMap: number[],
+  boundaryMap: Array<number | null>,
 ): void {
   if (text.length === 0) {
-    if (builder.boundaryMap.length === 0) builder.boundaryMap.push(boundaryMap[0] ?? null);
+    if (builder.boundaryMap.length === 0) {
+      builder.boundaryMap.push(boundaryMap[0] ?? null);
+      builder.endBoundaryMap.push(boundaryMap[0] ?? null);
+    }
     return;
   }
 
-  if (builder.boundaryMap.length === 0) builder.boundaryMap.push(boundaryMap[0] ?? null);
-  else builder.boundaryMap[builder.boundaryMap.length - 1] = boundaryMap[0] ?? null;
+  if (builder.boundaryMap.length === 0) {
+    builder.boundaryMap.push(boundaryMap[0] ?? null);
+    builder.endBoundaryMap.push(boundaryMap[0] ?? null);
+  } else {
+    builder.boundaryMap[builder.boundaryMap.length - 1] = boundaryMap[0] ?? null;
+    builder.endBoundaryMap[builder.endBoundaryMap.length - 1] = boundaryMap[0] ?? null;
+  }
 
   builder.text += text;
   for (let i = 0; i < text.length; i += 1) {
-    builder.boundaryMap.push(boundaryMap[i + 1] ?? null);
+    const mappedBoundary = boundaryMap[i + 1] ?? null;
+    builder.boundaryMap.push(mappedBoundary);
+    builder.endBoundaryMap.push(mappedBoundary);
   }
 }
 
@@ -363,64 +381,44 @@ function appendMappedCodeWithIndent(
 function createEmbeddedLintBlockFilename(
   filename: string,
   kind: 'expression' | 'statement',
+  index: number,
 ): string {
   const suffix = isTypeScriptLikeFilename(filename) ? 'tsx' : 'jsx';
-  return `../../../pug-react-embedded-${kind}.${suffix}`;
+  return `../../../pug-react-embedded-${kind}-${index}.${suffix}`;
 }
 
 function createEmbeddedLintBlocks(transformed: LintTransformState, filename: string): EmbeddedLintBlockState[] {
-  const expressionSites = transformed.embeddedJsLintSites.filter(site => site.kind === 'expression');
-  const statementSites = transformed.embeddedJsLintSites.filter(site => site.kind === 'statement');
   const blocks: EmbeddedLintBlockState[] = [];
 
-  const buildExpressionBlock = () => {
-    if (expressionSites.length === 0) return;
+  transformed.embeddedJsLintSites.forEach((site, index) => {
     const builder: EmbeddedLintBlockBuilder = {
       text: '',
       boundaryMap: [],
+      endBoundaryMap: [],
       syntheticRanges: [],
     };
+    const siteBoundaryMap = Array.from({ length: site.code.length + 1 }, (_, offset) => offset);
 
-    expressionSites.forEach((site, index) => {
-      appendSyntheticBlockText(builder, `const __reactPugExpr${index} = (\n`);
-      appendMappedCodeWithIndent(builder, site.code, site.boundaryMap, '  ');
+    if (site.kind === 'expression') {
+      appendSyntheticBlockText(builder, 'const __reactPugExpr = (\n');
+      appendMappedCodeWithIndent(builder, site.code, siteBoundaryMap, '  ');
       appendSyntheticBlockText(builder, '\n)\n');
-      if (index < expressionSites.length - 1) appendSyntheticBlockText(builder, '\n');
-    });
-
-    blocks.push({
-      text: builder.text,
-      filename: createEmbeddedLintBlockFilename(filename, 'expression'),
-      boundaryMap: builder.boundaryMap,
-      syntheticRanges: builder.syntheticRanges,
-    });
-  };
-
-  const buildStatementBlock = () => {
-    if (statementSites.length === 0) return;
-    const builder: EmbeddedLintBlockBuilder = {
-      text: '',
-      boundaryMap: [],
-      syntheticRanges: [],
-    };
-
-    statementSites.forEach((site, index) => {
+    } else {
       appendSyntheticBlockText(builder, '(() => {\n');
-      appendMappedCodeWithIndent(builder, site.code, site.boundaryMap, '  ');
+      appendMappedCodeWithIndent(builder, site.code, siteBoundaryMap, '  ');
       appendSyntheticBlockText(builder, '\n})()\n');
-      if (index < statementSites.length - 1) appendSyntheticBlockText(builder, '\n');
-    });
+    }
 
     blocks.push({
       text: builder.text,
-      filename: createEmbeddedLintBlockFilename(filename, 'statement'),
+      filename: createEmbeddedLintBlockFilename(filename, site.kind, index),
+      site,
       boundaryMap: builder.boundaryMap,
+      endBoundaryMap: builder.endBoundaryMap,
       syntheticRanges: builder.syntheticRanges,
     });
-  };
+  });
 
-  buildExpressionBlock();
-  buildStatementBlock();
   return blocks;
 }
 
@@ -868,12 +866,28 @@ function mapLintMessage(
   };
 }
 
-function mapEmbeddedLintOffsetToOriginal(
+function mapEmbeddedLintOffsetToSite(
   block: EmbeddedLintBlockState,
   offset: number,
 ): number | null {
   const clamped = Math.max(0, Math.min(offset, block.text.length));
   return block.boundaryMap[clamped] ?? null;
+}
+
+function mapEmbeddedLintEndOffsetToSite(
+  block: EmbeddedLintBlockState,
+  offset: number,
+): number | null {
+  const clamped = Math.max(0, Math.min(offset, block.text.length));
+  return block.endBoundaryMap[clamped] ?? null;
+}
+
+function mapEmbeddedSiteOffsetToOriginal(
+  site: MappedEmbeddedJsLintSite,
+  offset: number,
+): number | null {
+  const clamped = Math.max(0, Math.min(offset, site.code.length));
+  return site.boundaryMap[clamped] ?? null;
 }
 
 function findLineBounds(text: string, offset: number): { start: number; end: number } {
@@ -903,15 +917,115 @@ function findLastMappableOffsetOnLine(
 ): number | null {
   const { start, end } = findLineBounds(block.text, offset);
   for (let index = Math.max(start, Math.min(offset, end)); index >= start; index -= 1) {
-    if (block.boundaryMap[index] != null) return index;
+    if (block.endBoundaryMap[index] != null) return index;
   }
   return null;
+}
+
+function mapEmbeddedLintFix(
+  fix: EslintLintMessage['fix'] | undefined,
+  block: EmbeddedLintBlockState,
+  originalText: string,
+): EslintLintMessage['fix'] | undefined {
+  if (!fix) return undefined;
+  const [start, end] = fix.range;
+  if (overlapsRangeList(block.syntheticRanges, start, end)) return undefined;
+
+  const localStart = mapEmbeddedLintOffsetToSite(block, start);
+  const localEnd = mapEmbeddedLintEndOffsetToSite(block, end);
+  if (localStart == null || localEnd == null) return undefined;
+
+  const originalStart = mapEmbeddedSiteOffsetToOriginal(block.site, localStart);
+  const originalEnd = mapEmbeddedSiteOffsetToOriginal(block.site, localEnd);
+  if (originalStart == null || originalEnd == null) return undefined;
+
+  const originalSiteText = originalText.slice(block.site.originalStart, block.site.originalEnd);
+  const relativeStart = originalStart - block.site.originalStart;
+  const relativeEnd = originalEnd - block.site.originalStart;
+  const replacedSiteText = `${originalSiteText.slice(0, relativeStart)}${fix.text}${originalSiteText.slice(relativeEnd)}`;
+
+  return {
+    ...fix,
+    range: [block.site.originalStart, block.site.originalEnd],
+    text: replacedSiteText,
+  };
+}
+
+function mapEmbeddedLintSuggestions(
+  suggestions: EslintLintMessage['suggestions'],
+  block: EmbeddedLintBlockState,
+  originalText: string,
+): EslintLintMessage['suggestions'] | undefined {
+  if (!suggestions) return undefined;
+
+  const mapped = suggestions
+    .map((suggestion) => {
+      const mappedFix = mapEmbeddedLintFix(suggestion.fix, block, originalText);
+      if (!mappedFix) return null;
+      return {
+        ...suggestion,
+        fix: mappedFix,
+      };
+    })
+    .filter((suggestion): suggestion is NonNullable<typeof suggestion> => suggestion != null);
+
+  return mapped.length > 0 ? mapped : undefined;
+}
+
+function buildEmbeddedSiteAutofix(
+  messages: EslintLintMessage[],
+  block: EmbeddedLintBlockState,
+  originalText: string,
+): EslintLintMessage['fix'] | undefined {
+  const originalSiteText = originalText.slice(block.site.originalStart, block.site.originalEnd);
+  const localFixes = messages
+    .map((message) => message.fix)
+    .filter((fix): fix is NonNullable<typeof fix> => fix != null)
+    .map((fix) => {
+      const [start, end] = fix.range;
+      if (overlapsRangeList(block.syntheticRanges, start, end)) return null;
+      const localStart = mapEmbeddedLintOffsetToSite(block, start);
+      const localEnd = mapEmbeddedLintEndOffsetToSite(block, end);
+      if (localStart == null || localEnd == null) return null;
+      return {
+        start: localStart,
+        end: localEnd,
+        text: fix.text,
+      };
+    })
+    .filter((fix): fix is NonNullable<typeof fix> => fix != null)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  if (localFixes.length === 0) return undefined;
+
+  let cursor = 0;
+  let output = '';
+  let applied = false;
+  for (const fix of localFixes) {
+    if (fix.start < cursor) continue;
+    output += originalSiteText.slice(cursor, fix.start);
+    output += fix.text;
+    cursor = fix.end;
+    applied = true;
+  }
+  output += originalSiteText.slice(cursor);
+
+  if (!applied || output === originalSiteText) return undefined;
+
+  return {
+    range: [block.site.originalStart, block.site.originalEnd],
+    text: output,
+  };
 }
 
 function mapEmbeddedLintMessage(
   message: EslintLintMessage,
   block: EmbeddedLintBlockState,
   originalText: string,
+  options: {
+    includeFix?: boolean;
+    includeSuggestions?: boolean;
+  } = {},
 ): EslintLintMessage | null {
   if (typeof message.ruleId !== 'string' || !message.ruleId.startsWith('@stylistic/')) {
     return null;
@@ -933,12 +1047,22 @@ function mapEmbeddedLintMessage(
     mappedEndOffset = Math.max(relocatedStart + 1, relocatedEnd);
   }
 
-  const originalStart = mapEmbeddedLintOffsetToOriginal(block, mappedStartOffset);
-  const originalEnd = mapEmbeddedLintOffsetToOriginal(block, mappedEndOffset);
+  const localStart = mapEmbeddedLintOffsetToSite(block, mappedStartOffset);
+  const localEnd = mapEmbeddedLintEndOffsetToSite(block, mappedEndOffset);
+  if (localStart == null || localEnd == null) return null;
+
+  const originalStart = mapEmbeddedSiteOffsetToOriginal(block.site, localStart);
+  const originalEnd = mapEmbeddedSiteOffsetToOriginal(block.site, localEnd);
   if (originalStart == null || originalEnd == null) return null;
 
   const startLc = offsetToLineColumn(originalText, originalStart);
   const endLc = offsetToLineColumn(originalText, originalEnd);
+  const mappedFix = options.includeFix === false
+    ? undefined
+    : mapEmbeddedLintFix(message.fix, block, originalText);
+  const mappedSuggestions = options.includeSuggestions === false
+    ? undefined
+    : mapEmbeddedLintSuggestions(message.suggestions, block, originalText);
 
   return {
     ...Object.fromEntries(Object.entries(message).filter(([key]) => key !== 'fix' && key !== 'suggestions')),
@@ -946,6 +1070,8 @@ function mapEmbeddedLintMessage(
     column: startLc.column,
     endLine: endLc.line,
     endColumn: endLc.column,
+    ...(mappedFix ? { fix: mappedFix } : {}),
+    ...(mappedSuggestions ? { suggestions: mappedSuggestions } : {}),
   };
 }
 
@@ -1066,19 +1192,44 @@ function createReactPugProcessor(
       embeddedMessages.forEach((blockMessages, index) => {
         const block = cached.embeddedLintBlocks[index];
         if (!block) return;
-        for (const message of blockMessages) {
-          const mappedMessage = mapEmbeddedLintMessage(message, block, cached.originalText);
-          if (mappedMessage) mapped.push(mappedMessage);
+        const mappedBlockMessages = blockMessages
+          .map((message) => mapEmbeddedLintMessage(message, block, cached.originalText, {
+            includeFix: false,
+          }));
+        const aggregatedFix = buildEmbeddedSiteAutofix(blockMessages, block, cached.originalText);
+        let aggregatedFixAttached = false;
+
+        for (const mappedMessage of mappedBlockMessages) {
+          if (!mappedMessage) continue;
+          if (!aggregatedFixAttached && aggregatedFix) {
+            mapped.push({
+              ...mappedMessage,
+              fix: aggregatedFix,
+            });
+            aggregatedFixAttached = true;
+          } else {
+            mapped.push(mappedMessage);
+          }
         }
       });
 
       const deduped: EslintLintMessage[] = [];
-      const seen = new Set<string>();
+      const seen = new Map<string, number>();
       for (const message of mapped) {
         const key = lintMessageDedupKey(message);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(message);
+        const existingIndex = seen.get(key);
+        if (existingIndex == null) {
+          seen.set(key, deduped.length);
+          deduped.push(message);
+          continue;
+        }
+
+        const existing = deduped[existingIndex];
+        const existingHasAction = !!existing.fix || ((existing.suggestions?.length ?? 0) > 0);
+        const incomingHasAction = !!message.fix || ((message.suggestions?.length ?? 0) > 0);
+        if (!existingHasAction && incomingHasAction) {
+          deduped[existingIndex] = message;
+        }
       }
       return deduped;
     },

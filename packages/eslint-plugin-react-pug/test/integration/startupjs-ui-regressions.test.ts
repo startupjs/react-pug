@@ -8,6 +8,7 @@ import reactPugPlugin from '../../src/index'
 
 const repoRoot = resolve(__dirname, '../../../..')
 const fixtureRoot = resolve(repoRoot, 'test/fixtures/example-unformatted/src')
+const fixedSnapshotRoot = resolve(repoRoot, 'test/fixtures/example-unformatted/snapshots/fixed/src')
 const reactHooksStubPlugin = {
   rules: {
     'rules-of-hooks': {
@@ -115,7 +116,7 @@ describe('startupjs-ui regressions', () => {
     expect(booleanDiagnostic?.column).toBe(12)
   })
 
-  it('does not rewrite startupjs-ui repros under eslint --fix', async () => {
+  it('rewrites startupjs-ui repros only to the expected fixed snapshots under eslint --fix', async () => {
     for (const relativePath of [
       'StartupjsUiDialogsReadme.js',
       'StartupjsUiDropdown.tsx',
@@ -130,7 +131,7 @@ describe('startupjs-ui regressions', () => {
       const filePath = resolve(fixtureRoot, relativePath)
       const input = readFileSync(filePath, 'utf8')
       const [result] = await createStartupjsUiStyleEslint(true).lintText(input, { filePath })
-      expect(result.output ?? input).toBe(input)
+      expect(result.output ?? input).toBe(readFileSync(resolve(fixedSnapshotRoot, relativePath), 'utf8'))
     }
   })
 })

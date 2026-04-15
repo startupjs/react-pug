@@ -1,8 +1,9 @@
 166:11  error  @stylistic/indent  Expected indentation of 4 spaces but found 6.
-180:19  error  @stylistic/indent  Expected indentation of 4 spaces but found 8.
-181:13  error  @stylistic/indent  Expected indentation of 4 spaces but found 8.
-182:18  error  @stylistic/indent  Expected indentation of 4 spaces but found 8.
-182:41  error  @stylistic/indent  Expected indentation of 2 spaces but found 6.
-228:13  error  @stylistic/indent  Expected indentation of 4 spaces but found 8.
+167:11  error  @stylistic/indent  Expected indentation of 4 spaces but found 6.
+180:7  error  @stylistic/indent  Expected indentation of 4 spaces but found 8.
+181:7  error  @stylistic/indent  Expected indentation of 4 spaces but found 8.
+182:7  error  @stylistic/indent  Expected indentation of 4 spaces but found 8.
+183:7  error  @stylistic/indent  Expected indentation of 2 spaces but found 6.
+228:7  error  @stylistic/indent  Expected indentation of 4 spaces but found 8.
 229:7  error  @stylistic/indent  Expected indentation of 4 spaces but found 8.
-231:15  error  @stylistic/indent  Expected indentation of 2 spaces but found 6.
+230:7  error  @stylistic/indent  Expected indentation of 2 spaces but found 6.

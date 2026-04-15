@@ -1288,6 +1288,20 @@ describe('code blocks', () => {
     ]);
   });
 
+  it('tracks the actual expression span for attr values even when spaces surround "="', () => {
+    const pug = [
+      'Button(',
+      '  label = showCompleted ? "Hide Done" : "Show Done"',
+      ')',
+    ].join('\n');
+
+    const result = compilePugToTsx(pug, { mode: 'runtime' });
+    const site = result.embeddedJsLintSites.find(site => site.code.includes('showCompleted ? "Hide Done" : "Show Done"'));
+
+    expect(site).toBeTruthy();
+    expect(pug.slice(site!.sourceStart, site!.sourceEnd)).toBe('showCompleted ? "Hide Done" : "Show Done"');
+  });
+
   it('collects embedded lint sites across all supported source positions in source order', () => {
     const pug = [
       'Button(',

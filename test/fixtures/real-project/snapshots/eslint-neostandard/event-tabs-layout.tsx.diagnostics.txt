@@ -1,26 +1,26 @@
 /Users/cray0000/ws/www/vscode-pug-react/test/fixtures/real-project/event-tabs-layout.tsx
   25:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
   26:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
-  28:5  error  Expected indentation of 2 spaces but found 4.  @stylistic/indent
+  27:5  error  Expected indentation of 2 spaces but found 4.  @stylistic/indent
   32:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
-  33:1  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
-  34:1  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  33:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  34:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
   35:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
-  36:13  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
-  39:3  error  Expected indentation of 2 spaces but found 4.  @stylistic/indent
-  42:16  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  43:20  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  46:13  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
-  50:2  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  52:5  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
-  55:26  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  56:30  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  60:4  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
-  63:6  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  64:7  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  67:11  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
-  70:3  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  70:32  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
-  72:7  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
+  36:5  error  Expected indentation of 4 spaces but found 6.  @stylistic/indent
+  37:5  error  Expected indentation of 2 spaces but found 4.  @stylistic/indent
+  42:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  43:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  44:5  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
+  49:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  50:5  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
+  55:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  56:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  57:5  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
+  62:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  63:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  64:5  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
+  69:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  70:5  error  Expected indentation of 4 spaces but found 8.  @stylistic/indent
+  71:5  error  Expected indentation of 2 spaces but found 6.  @stylistic/indent
 
 Found 23 errors in 1 files.
