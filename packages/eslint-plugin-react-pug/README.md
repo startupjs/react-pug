@@ -46,13 +46,15 @@ The processor is designed to preserve useful JavaScript/TypeScript diagnostics i
 
 - real JS/TS rule violations inside `#{...}`, `${...}`, `tag= ...`, attribute expressions, and inline handler/function bodies are reported back at the original Pug location
 - formatting diagnostics for those embedded expression sites are linted against source-faithful JS wrappers rather than only against generated JSX
+- autofixes and suggestions for those embedded expression sites are mapped back to the original Pug source
 - diagnostics caused only by synthetic generated helper code are filtered out
 - the formatter tries to converge to the consuming project's own `@stylistic` setup when that package is available locally
 
 Current limitation:
 
 - multiline unbuffered `- ...` statements that are authored across several Pug lines do not yet get the same source-faithful formatting-diagnostic surface as embedded expression sites
-- autofixes and suggestions are currently not mapped back for files that contain transformed Pug regions, so transformed-region diagnostics are report-only today
+- diagnostics that arise only on the generated JSX surface of a transformed Pug region still do not map autofixes back; those remain report-only unless they come from an embedded source-faithful JS site
+- the internal formatter still relies on deprecated `@stylistic/jsx-indent` / `@stylistic/jsx-indent-props` compatibility rules, so some dependency graphs may emit a one-time deprecation warning during an ESLint run
 
 ## Exports
 
