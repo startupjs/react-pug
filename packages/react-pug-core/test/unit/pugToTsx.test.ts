@@ -704,8 +704,7 @@ describe('source mappings', () => {
 describe('comments', () => {
   it('pug comments are stripped from output', () => {
     const result = compilePugToTsx('// this is a comment\ndiv');
-    expect(result.tsx).toContain('<div');
-    expect(result.tsx).not.toContain('this is a comment');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<><div /></>)"`);
   });
 });
 
@@ -747,9 +746,7 @@ describe('conditionals', () => {
     // This may be a parser error or produce an empty block
     const pug = 'if show';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('show');
-    expect(result.tsx).toContain('?');
-    expect(result.tsx).toContain('null');
+    expect(result.tsx).toMatchInlineSnapshot(`"(show ? null : null)"`);
   });
 
   it('nested conditional inside tag', () => {
@@ -777,12 +774,7 @@ describe('conditionals', () => {
       '  span D',
     ].join('\n');
     const result = compilePugToTsx(pug);
-    const qmarks = result.tsx.match(/\?/g) ?? [];
-    expect(qmarks.length).toBeGreaterThanOrEqual(3);
-    expect(result.tsx).toContain('A');
-    expect(result.tsx).toContain('B');
-    expect(result.tsx).toContain('C');
-    expect(result.tsx).toContain('D');
+    expect(result.tsx).toMatchInlineSnapshot(`"(a ? <span>A</span> : b ? <span>B</span> : c ? <span>C</span> : <span>D</span>)"`);
   });
 });
 
@@ -892,9 +884,7 @@ describe('while loops', () => {
   it('while with empty body -> null pushed', () => {
     const pug = 'while running';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('while (');
-    expect(result.tsx).toContain('running');
-    expect(result.tsx).toContain('null');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const __r: JSX.Element[] = [];while (running) {__r.push(null);}return __r;})())"`);
   });
 
   it('while with nested children', () => {
@@ -989,9 +979,7 @@ describe('case/when', () => {
       '    span Default',
     ].join('\n');
     const result = compilePugToTsx(pug);
-    // "a" branch should produce null, default should produce span
-    expect(result.tsx).toContain('null');
-    expect(result.tsx).toContain('Default');
+    expect(result.tsx).toMatchInlineSnapshot(`"(val === \"a\" ? null : <span>Default</span>)"`);
   });
 });
 
@@ -1395,11 +1383,7 @@ describe('control flow edge cases', () => {
       '    span= item.name',
     ].join('\n');
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('for (const item of items)');
-    expect(result.tsx).toContain('item.active');
-    expect(result.tsx).toContain('?');
-    expect(result.tsx).toContain('item.name');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const __pugEachResult: JSX.Element[] = [];for (const item of items) {__pugEachResult.push(item.active ? <span>{item.name}</span> : null);}return __pugEachResult;})())"`);
   });
 
   it('each loop inside conditional', () => {
@@ -1409,11 +1393,7 @@ describe('control flow edge cases', () => {
       '    li= item',
     ].join('\n');
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('showList');
-    expect(result.tsx).toContain('?');
-    expect(result.tsx).toContain('items');
-    expect(result.tsx).toContain('for (const item of items)');
-    expect(result.tsx).toContain('<li');
+    expect(result.tsx).toMatchInlineSnapshot(`"(showList ? (() => {const __pugEachResult: JSX.Element[] = [];for (const item of items) {__pugEachResult.push(<li>{item}</li>);}return __pugEachResult;})() : null)"`);
   });
 
   it('else branch with each emits loop expression (not object literal)', () => {
@@ -1426,17 +1406,13 @@ describe('control flow edge cases', () => {
     ].join('\n');
     const result = compilePugToTsx(pug);
     expect(result.parseError).toBeNull();
-    expect(result.tsx).toContain('for (const todo of activeTodos)');
-    expect(result.tsx).not.toMatch(/:\s*\{\s*for\s*\(/);
+    expect(result.tsx).toMatchInlineSnapshot(`"(activeTodos.length === 0 ? <p className=\"empty\">All done!</p> : (() => {const __pugEachResult: JSX.Element[] = [];for (const todo of activeTodos) {__pugEachResult.push(<span>{todo.text}</span>);}return __pugEachResult;})())"`);
   });
 
   it('control flow with sibling tags uses fragment', () => {
     const pug = 'div\nif show\n  span Hello';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('<>');
-    expect(result.tsx).toContain('<div');
-    expect(result.tsx).toContain('show');
-    expect(result.tsx).toContain('</>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<><div />{show ? <span>Hello</span> : null}</>)"`);
   });
 
   it('deeply nested control flow', () => {
@@ -1447,21 +1423,13 @@ describe('control flow edge cases', () => {
       '      span Both',
     ].join('\n');
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('<div>');
-    const qmarks = result.tsx.match(/\?/g) ?? [];
-    expect(qmarks.length).toBeGreaterThanOrEqual(2);
-    expect(result.tsx).toContain('Both');
-    expect(result.tsx).toContain('</div>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div>{a ? b ? <span>Both</span> : null : null}</div>)"`);
   });
 
   it('while loop as root with sibling', () => {
     const pug = 'div\nwhile cond\n  span Item';
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('<>');
-    expect(result.tsx).toContain('<div');
-    expect(result.tsx).toContain('while (');
-    expect(result.tsx).toContain('cond');
-    expect(result.tsx).toContain('</>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<><div />{(() => {const __r: JSX.Element[] = [];while (cond) {__r.push(<span>Item</span>);}return __r;})()}</>)"`);
   });
 
   it('case/when inside tag children', () => {
@@ -1476,15 +1444,7 @@ describe('control flow edge cases', () => {
       '      span Unknown',
     ].join('\n');
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('<div>');
-    expect(result.tsx).toContain('mode');
-    expect(result.tsx).toContain('===');
-    expect(result.tsx).toContain('"edit"');
-    expect(result.tsx).toContain('<input');
-    expect(result.tsx).toContain('"view"');
-    expect(result.tsx).toContain('Display');
-    expect(result.tsx).toContain('Unknown');
-    expect(result.tsx).toContain('</div>');
+    expect(result.tsx).toMatchInlineSnapshot(`"(<div>{mode === \"edit\" ? <input type=\"text\" /> : mode === \"view\" ? <span>Display</span> : <span>Unknown</span>}</div>)"`);
   });
 
   it('code block with conditional', () => {
@@ -1496,11 +1456,7 @@ describe('control flow edge cases', () => {
       '  span Zero or negative',
     ].join('\n');
     const result = compilePugToTsx(pug);
-    expect(result.tsx).toContain('const x = getVal()');
-    expect(result.tsx).toContain('x > 0');
-    expect(result.tsx).toContain('?');
-    expect(result.tsx).toContain('Positive');
-    expect(result.tsx).toContain('Zero or negative');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const x = getVal();return x > 0 ? <span>Positive</span> : <span>Zero or negative</span>;})())"`);
   });
 });
 
@@ -1514,8 +1470,7 @@ describe('runtime compile mode', () => {
 
   it('emits null placeholder in runtime mode for invalid pug', () => {
     const result = compilePugToTsx('div(\n  !!!invalid', { mode: 'runtime' });
-    expect(result.tsx).toContain('null');
-    expect(result.tsx).not.toContain('(null as any as JSX.Element)');
+    expect(result.tsx).toMatchInlineSnapshot(`"null"`);
     expect(result.parseError).not.toBeNull();
   });
 
@@ -1675,13 +1630,13 @@ describe('typescript syntax inside pug expressions', () => {
   it('supports TypeScript syntax in conditional tests', () => {
     const result = compilePugToTsx('if foo as boolean\n  span ok');
     expect(result.parseError).toBeNull();
-    expect(result.tsx).toContain('foo as boolean');
+    expect(result.tsx).toMatchInlineSnapshot(`"(foo as boolean ? <span>ok</span> : null)"`);
   });
 
   it('supports TypeScript syntax in each iterables', () => {
     const result = compilePugToTsx('each item in (items as string[])\n  span= item');
     expect(result.parseError).toBeNull();
-    expect(result.tsx).toContain('for (const item of (items as string[]))');
+    expect(result.tsx).toMatchInlineSnapshot(`"((() => {const __pugEachResult: JSX.Element[] = [];for (const item of (items as string[])) {__pugEachResult.push(<span>{item}</span>);}return __pugEachResult;})())"`);
   });
 
   it('keeps `satisfies` expressions intact inside attributes', () => {
