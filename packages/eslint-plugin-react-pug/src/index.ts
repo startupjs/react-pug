@@ -74,7 +74,15 @@ interface EmbeddedLintBlockState {
   site: MappedEmbeddedJsLintSite;
   boundaryMap: Array<number | null>;
   endBoundaryMap: Array<number | null>;
+  normalizedBoundaryMap: Array<number | null>;
+  normalizedEndBoundaryMap: Array<number | null>;
   syntheticRanges: InsertionOffsetRange[];
+  normalizedSiteCode: string;
+  restorationIndentWidth: number;
+}
+
+interface NormalizedEmbeddedSite extends BoundaryMappedExpression {
+  strippedContinuationIndent: number;
 }
 
 interface EslintProcessorLike {
@@ -381,6 +389,133 @@ function appendMappedCodeWithIndent(
   }
 }
 
+function stripSharedContinuationIndent(
+  code: string,
+  boundaryMap: number[],
+): NormalizedEmbeddedSite {
+  if (!code.includes('\n')) return { code, boundaryMap, strippedContinuationIndent: 0 };
+
+  const lines = code.split('\n');
+  let minIndent: number | null = null;
+
+  for (const line of lines.slice(1)) {
+    if (line.trim().length === 0) continue;
+    const indent = line.match(/^[ \t]*/)?.[0].length ?? 0;
+    minIndent = minIndent == null ? indent : Math.min(minIndent, indent);
+  }
+
+  if (minIndent == null || minIndent === 0) {
+    return { code, boundaryMap, strippedContinuationIndent: 0 };
+  }
+
+  const firstLine = lines[0]?.trimEnd() ?? '';
+  const continuationBaseIndent = (
+    /^[([{]$/.test(firstLine.trim())
+    || /[([{]\s*$/.test(firstLine)
+    || /=>\s*{\s*$/.test(firstLine)
+  )
+    ? 0
+    : 2;
+  const stripIndent = Math.max(0, minIndent - continuationBaseIndent);
+
+  if (stripIndent === 0) {
+    return { code, boundaryMap, strippedContinuationIndent: 0 };
+  }
+
+  let output = '';
+  const outputBoundaryMap: number[] = [];
+
+  const appendSlice = (start: number, end: number) => {
+    if (start >= end) return;
+    if (outputBoundaryMap.length === 0) {
+      outputBoundaryMap.push(boundaryMap[start] ?? 0);
+    } else {
+      outputBoundaryMap[outputBoundaryMap.length - 1] = boundaryMap[start] ?? 0;
+    }
+    output += code.slice(start, end);
+    for (let index = start; index < end; index += 1) {
+      outputBoundaryMap.push(boundaryMap[index + 1] ?? 0);
+    }
+  };
+
+  let cursor = 0;
+  let lineIndex = 0;
+  while (cursor < code.length) {
+    const nextNewline = code.indexOf('\n', cursor);
+    const lineEnd = nextNewline >= 0 ? nextNewline : code.length;
+    let segmentStart = cursor;
+
+    if (lineIndex > 0) {
+      let removed = 0;
+      while (
+        segmentStart < lineEnd
+        && removed < stripIndent
+        && /[ \t]/.test(code[segmentStart] ?? '')
+      ) {
+        segmentStart += 1;
+        removed += 1;
+      }
+    }
+
+    appendSlice(segmentStart, lineEnd);
+    if (nextNewline >= 0) appendSlice(nextNewline, nextNewline + 1);
+
+    cursor = nextNewline >= 0 ? nextNewline + 1 : code.length;
+    lineIndex += 1;
+  }
+
+  if (outputBoundaryMap.length === 0) {
+    outputBoundaryMap.push(boundaryMap[0] ?? 0);
+  }
+
+  return {
+    code: output,
+    boundaryMap: outputBoundaryMap,
+    strippedContinuationIndent: stripIndent,
+  };
+}
+
+function restoreSharedContinuationIndent(
+  code: string,
+  restorationIndentWidth: number,
+): string {
+  if (restorationIndentWidth <= 0 || !code.includes('\n')) return code;
+
+  const prefix = ' '.repeat(restorationIndentWidth);
+  return code
+    .split('\n')
+    .map((line, index) => {
+      if (index === 0 || line.length === 0) return line;
+      return `${prefix}${line}`;
+    })
+    .join('\n');
+}
+
+function calculateRestorationIndentWidth(
+  originalSiteText: string,
+  normalizedSiteCode: string,
+): number {
+  if (!originalSiteText.includes('\n') || !normalizedSiteCode.includes('\n')) return 0;
+
+  const originalLines = originalSiteText.split('\n');
+  const normalizedLines = normalizedSiteCode.split('\n');
+  let minDiff: number | null = null;
+
+  for (let index = 1; index < Math.min(originalLines.length, normalizedLines.length); index += 1) {
+    const originalLine = originalLines[index] ?? '';
+    const normalizedLine = normalizedLines[index] ?? '';
+    if (originalLine.trim().length === 0 || normalizedLine.trim().length === 0) continue;
+
+    const originalIndent = originalLine.match(/^[ \t]*/)?.[0].length ?? 0;
+    const normalizedIndent = normalizedLine.match(/^[ \t]*/)?.[0].length ?? 0;
+    const diff = originalIndent - normalizedIndent;
+    if (diff < 0) continue;
+    minDiff = minDiff == null ? diff : Math.min(minDiff, diff);
+  }
+
+  return minDiff ?? 0;
+}
+
 function createEmbeddedLintBlockFilename(
   filename: string,
   kind: 'expression' | 'statement',
@@ -390,7 +525,11 @@ function createEmbeddedLintBlockFilename(
   return `../../../pug-react-embedded-${kind}-${index}.${suffix}`;
 }
 
-function createEmbeddedLintBlocks(transformed: LintTransformState, filename: string): EmbeddedLintBlockState[] {
+function createEmbeddedLintBlocks(
+  transformed: LintTransformState,
+  filename: string,
+  originalText: string,
+): EmbeddedLintBlockState[] {
   const blocks: EmbeddedLintBlockState[] = [];
 
   transformed.embeddedJsLintSites.forEach((site, index) => {
@@ -400,16 +539,36 @@ function createEmbeddedLintBlocks(transformed: LintTransformState, filename: str
       endBoundaryMap: [],
       syntheticRanges: [],
     };
-    const siteBoundaryMap = Array.from({ length: site.code.length + 1 }, (_, offset) => offset);
+    const normalizedBuilder: EmbeddedLintBlockBuilder = {
+      text: '',
+      boundaryMap: [],
+      endBoundaryMap: [],
+      syntheticRanges: [],
+    };
+    const normalizedSite = stripSharedContinuationIndent(
+      site.code,
+      Array.from({ length: site.code.length + 1 }, (_, offset) => offset),
+    );
+    const originalSiteText = originalText.slice(site.originalStart, site.originalEnd);
+    const normalizedSiteIdentityMap = Array.from(
+      { length: normalizedSite.code.length + 1 },
+      (_, offset) => offset,
+    );
 
     if (site.kind === 'expression') {
       appendSyntheticBlockText(builder, 'const __reactPugExpr = (\n');
-      appendMappedCodeWithIndent(builder, site.code, siteBoundaryMap, '  ');
+      appendSyntheticBlockText(normalizedBuilder, 'const __reactPugExpr = (\n');
+      appendMappedCodeWithIndent(builder, normalizedSite.code, normalizedSite.boundaryMap, '  ');
+      appendMappedCodeWithIndent(normalizedBuilder, normalizedSite.code, normalizedSiteIdentityMap, '  ');
       appendSyntheticBlockText(builder, '\n)\n');
+      appendSyntheticBlockText(normalizedBuilder, '\n)\n');
     } else {
       appendSyntheticBlockText(builder, '(() => {\n');
-      appendMappedCodeWithIndent(builder, site.code, siteBoundaryMap, '  ');
+      appendSyntheticBlockText(normalizedBuilder, '(() => {\n');
+      appendMappedCodeWithIndent(builder, normalizedSite.code, normalizedSite.boundaryMap, '  ');
+      appendMappedCodeWithIndent(normalizedBuilder, normalizedSite.code, normalizedSiteIdentityMap, '  ');
       appendSyntheticBlockText(builder, '\n})()\n');
+      appendSyntheticBlockText(normalizedBuilder, '\n})()\n');
     }
 
     blocks.push({
@@ -419,6 +578,10 @@ function createEmbeddedLintBlocks(transformed: LintTransformState, filename: str
       boundaryMap: builder.boundaryMap,
       endBoundaryMap: builder.endBoundaryMap,
       syntheticRanges: builder.syntheticRanges,
+      normalizedBoundaryMap: normalizedBuilder.boundaryMap,
+      normalizedEndBoundaryMap: normalizedBuilder.endBoundaryMap,
+      normalizedSiteCode: normalizedSite.code,
+      restorationIndentWidth: calculateRestorationIndentWidth(originalSiteText, normalizedSite.code),
     });
   });
 
@@ -885,12 +1048,103 @@ function mapEmbeddedLintEndOffsetToSite(
   return block.endBoundaryMap[clamped] ?? null;
 }
 
+function mapEmbeddedLintOffsetToNormalizedSite(
+  block: EmbeddedLintBlockState,
+  offset: number,
+): number | null {
+  const clamped = Math.max(0, Math.min(offset, block.text.length));
+  return block.normalizedBoundaryMap[clamped] ?? null;
+}
+
+function mapEmbeddedLintEndOffsetToNormalizedSite(
+  block: EmbeddedLintBlockState,
+  offset: number,
+): number | null {
+  const clamped = Math.max(0, Math.min(offset, block.text.length));
+  return block.normalizedEndBoundaryMap[clamped] ?? null;
+}
+
 function mapEmbeddedSiteOffsetToOriginal(
   site: MappedEmbeddedJsLintSite,
   offset: number,
 ): number | null {
   const clamped = Math.max(0, Math.min(offset, site.code.length));
   return site.boundaryMap[clamped] ?? null;
+}
+
+function applyLocalFixesToText(
+  text: string,
+  fixes: Array<{ start: number; end: number; text: string }>,
+): string {
+  if (fixes.length === 0) return text;
+
+  const sorted = [...fixes].sort((a, b) => a.start - b.start || a.end - b.end);
+  let cursor = 0;
+  let output = '';
+
+  for (const fix of sorted) {
+    if (fix.start < cursor) continue;
+    output += text.slice(cursor, fix.start);
+    output += fix.text;
+    cursor = fix.end;
+  }
+
+  output += text.slice(cursor);
+  return output;
+}
+
+function getEmbeddedParserPlugins(filename: string): Array<string> {
+  const plugins: Array<string> = ['jsx', 'decorators-legacy'];
+  if (isTypeScriptLikeFilename(filename)) plugins.push('typescript');
+  return plugins;
+}
+
+function extractEmbeddedSiteCodeFromWrappedText(
+  text: string,
+  block: EmbeddedLintBlockState,
+): string {
+  const ast = parse(text, {
+    sourceType: 'module',
+    plugins: getEmbeddedParserPlugins(block.filename) as any,
+    errorRecovery: false,
+  }) as any;
+
+  const firstStatement = ast.program.body[0];
+  if (!firstStatement) return block.normalizedSiteCode;
+
+  if (block.site.kind === 'expression') {
+    const init = firstStatement.declarations?.[0]?.init;
+    if (!init || typeof init.start !== 'number' || typeof init.end !== 'number') {
+      return block.normalizedSiteCode;
+    }
+    return text.slice(init.start, init.end);
+  }
+
+  const body = firstStatement.expression?.callee?.body;
+  if (!body || body.type !== 'BlockStatement') {
+    return block.normalizedSiteCode;
+  }
+
+  const raw = text.slice(body.start + 1, body.end - 1);
+  return raw.replace(/^\n/, '').replace(/\n$/, '');
+}
+
+function stabilizeEmbeddedSiteAutofix(
+  block: EmbeddedLintBlockState,
+  code: string,
+): string {
+  const wrapped = block.site.kind === 'expression'
+    ? `const __reactPugExpr = (\n${code}\n)\n`
+    : `(() => {\n${code}\n})()\n`;
+  const pretty = prettier.format(wrapped, {
+    parser: isTypeScriptLikeFilename(block.filename) ? 'babel-ts' : 'babel',
+    semi: false,
+    singleQuote: true,
+    jsxSingleQuote: true,
+    trailingComma: 'none',
+    bracketSameLine: false,
+  });
+  return extractEmbeddedSiteCodeFromWrappedText(pretty, block);
 }
 
 function findLineBounds(text: string, offset: number): { start: number; end: number } {
@@ -980,15 +1234,14 @@ function buildEmbeddedSiteAutofix(
   block: EmbeddedLintBlockState,
   originalText: string,
 ): EslintLintMessage['fix'] | undefined {
-  const originalSiteText = originalText.slice(block.site.originalStart, block.site.originalEnd);
   const localFixes = messages
     .map((message) => message.fix)
     .filter((fix): fix is NonNullable<typeof fix> => fix != null)
     .map((fix) => {
       const [start, end] = fix.range;
       if (overlapsRangeList(block.syntheticRanges, start, end)) return null;
-      const localStart = mapEmbeddedLintOffsetToSite(block, start);
-      const localEnd = mapEmbeddedLintEndOffsetToSite(block, end);
+      const localStart = mapEmbeddedLintOffsetToNormalizedSite(block, start);
+      const localEnd = mapEmbeddedLintEndOffsetToNormalizedSite(block, end);
       if (localStart == null || localEnd == null) return null;
       return {
         start: localStart,
@@ -1001,23 +1254,19 @@ function buildEmbeddedSiteAutofix(
 
   if (localFixes.length === 0) return undefined;
 
-  let cursor = 0;
-  let output = '';
-  let applied = false;
-  for (const fix of localFixes) {
-    if (fix.start < cursor) continue;
-    output += originalSiteText.slice(cursor, fix.start);
-    output += fix.text;
-    cursor = fix.end;
-    applied = true;
-  }
-  output += originalSiteText.slice(cursor);
+  const fixedNormalizedCode = applyLocalFixesToText(block.normalizedSiteCode, localFixes);
+  const stabilizedCode = stabilizeEmbeddedSiteAutofix(block, fixedNormalizedCode);
+  const restoredCode = restoreSharedContinuationIndent(
+    stabilizedCode,
+    block.restorationIndentWidth,
+  );
+  const originalSiteText = originalText.slice(block.site.originalStart, block.site.originalEnd);
 
-  if (!applied || output === originalSiteText) return undefined;
+  if (restoredCode === originalSiteText) return undefined;
 
   return {
     range: [block.site.originalStart, block.site.originalEnd],
-    text: output,
+    text: restoredCode,
   };
 }
 
@@ -1160,7 +1409,7 @@ function createReactPugProcessor(
       );
       const formatted = hasTransformedPug ? formatLintCode(transformed, filename) : null;
       const embeddedLintBlocks = hasTransformedPug
-        ? createEmbeddedLintBlocks(transformed, filename)
+        ? createEmbeddedLintBlocks(transformed, filename, text)
         : [];
       cache.set(filename, {
         originalText: text,

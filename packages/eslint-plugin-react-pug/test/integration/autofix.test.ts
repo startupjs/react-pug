@@ -189,6 +189,7 @@ describe('eslint --fix integration for react-pug processor', () => {
       'src/Card.tsx',
       'src/ModalScreen.tsx',
       'src/RootLayout.tsx',
+      'src/StartupjsUiAvatar.tsx',
       'src/StartupjsUiDialogsReadme.js',
       'src/StartupjsUiDropdown.tsx',
       'src/StartupjsUiDraggableReadme.js',

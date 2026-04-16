@@ -1,3 +1,1 @@
-269:9  error  @stylistic/indent  Expected indentation of 4 spaces but found 6.
-270:9  error  @stylistic/indent  Expected indentation of 2 spaces but found 4.
 304:28  error  @stylistic/arrow-spacing  Missing space before =>.

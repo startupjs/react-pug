@@ -68,6 +68,7 @@ function createStartupjsUiStyleEslint(fix: boolean): ESLint {
 describe('startupjs-ui regressions', () => {
   it('does not report false processor diagnostics for startupjs-ui repros', async () => {
     const files = [
+      resolve(fixtureRoot, 'StartupjsUiAvatar.tsx'),
       resolve(fixtureRoot, 'StartupjsUiDialogsReadme.js'),
       resolve(fixtureRoot, 'StartupjsUiDropdown.tsx'),
       resolve(fixtureRoot, 'StartupjsUiDraggableReadme.js'),
@@ -91,7 +92,7 @@ describe('startupjs-ui regressions', () => {
     ))
 
     expect(messages.every(message => String(message.ruleId).startsWith('@stylistic/'))).toBe(true)
-    expect(messages.some(message => message.ruleId === '@stylistic/indent')).toBe(true)
+    expect(messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
     expect(messages.some(message => message.ruleId === '@stylistic/arrow-spacing')).toBe(true)
   })
 
@@ -119,6 +120,7 @@ describe('startupjs-ui regressions', () => {
   it('rewrites startupjs-ui repros only to the expected fixed snapshots under eslint --fix', async () => {
     for (const relativePath of [
       'StartupjsUiDialogsReadme.js',
+      'StartupjsUiAvatar.tsx',
       'StartupjsUiDropdown.tsx',
       'StartupjsUiDraggableReadme.js',
       'StartupjsUiMdxComponents.js',

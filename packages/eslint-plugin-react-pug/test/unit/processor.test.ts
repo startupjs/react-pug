@@ -651,6 +651,52 @@ describe('eslint-plugin-react-pug processor', () => {
     expect((blocks[4] as any).text).toContain('const __reactPugExpr = (\n  knownInterpolation + missingInterpolationValue\n)');
   });
 
+  it('dedents shared continuation indent in multiline embedded expression blocks', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  Button(',
+      '    style={',
+      '      borderTopColor: ready ? "green" : "red",',
+      '      left: geometry.arrowLeft,',
+      '      top: geometry.arrowTop',
+      '    }',
+      '    onClick=() => {',
+      '      setInputValue(selectedLabel)',
+      '      onClose()',
+      '    }',
+      '  ) Save',
+      '`',
+    ].join('\n');
+
+    const blocks = processor.preprocess(input, 'file.jsx') as Array<{ text: string; filename: string }>;
+    expect(blocks[1]).toMatchObject({
+      filename: '../../../pug-react-embedded-expression-0.jsx',
+      text: [
+        'const __reactPugExpr = (',
+        '  {',
+        '    borderTopColor: ready ? "green" : "red",',
+        '    left: geometry.arrowLeft,',
+        '    top: geometry.arrowTop',
+        '  }',
+        ')',
+        '',
+      ].join('\n'),
+    });
+    expect(blocks[2]).toMatchObject({
+      filename: '../../../pug-react-embedded-expression-1.jsx',
+      text: [
+        'const __reactPugExpr = (',
+        '  () => {',
+        '    setInputValue(selectedLabel)',
+        '    onClose()',
+        '  }',
+        ')',
+        '',
+      ].join('\n'),
+    });
+  });
+
   it('maps embedded-source autofix edits back to original pug ranges', () => {
     const processor = createReactPugProcessor();
     const input = [

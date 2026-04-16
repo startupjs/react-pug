@@ -274,6 +274,88 @@ describe('eslint processor diagnostic mapping', () => {
     expect(indentMessages.some(message => (message.line ?? 0) >= 8 && (message.line ?? 0) <= 10)).toBe(true)
   })
 
+  it('does not report false indent diagnostics for correctly indented multiline embedded attr and handler sites', async () => {
+    const filePath = resolve(repoRoot, 'embedded-correct-indent-matrix.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      "const currentLayout = 'inline'",
+      "const descriptionPosition = 'right'",
+      'const isLabelClickable = true',
+      'const _onLabelPress = () => {}',
+      "const selectedLabel = 'Selected'",
+      'const setInputValue = () => {}',
+      'const onClose = () => {}',
+      'const flattenedStyle = { backgroundColor: "white" }',
+      'const geometry = { arrowLeft: 1, arrowTop: 2 }',
+      '',
+      'export default pug`',
+      '  TouchableWithoutFeedback(onPress=() => {',
+      '    setInputValue(selectedLabel)',
+      '    onClose()',
+      '  })',
+      '    View.overlay',
+      '  Span.label(',
+      '    styleName=[',
+      '      currentLayout,',
+      '      descriptionPosition,',
+      "      currentLayout + '-' + descriptionPosition",
+      '    ]',
+      '    onPress=isLabelClickable',
+      '      ? _onLabelPress',
+      '      : undefined',
+      '  ) Label',
+      '  View.arrow(',
+      '    style={',
+      '      borderTopColor: flattenedStyle?.backgroundColor,',
+      '      left: geometry.arrowLeft,',
+      '      top: geometry.arrowTop',
+      '    }',
+      '  )',
+      '`',
+      '',
+    ].join('\n')
+
+    const eslint = createProcessorEslint()
+    const [result] = await eslint.lintText(input, { filePath })
+
+    expect(result.messages.filter(message => message.ruleId === '@stylistic/indent')).toEqual([])
+  })
+
+  it('still reports real embedded arrow-spacing and object-curly style diagnostics', async () => {
+    const filePath = resolve(repoRoot, 'embedded-real-style-rules.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      'const active = true',
+      'const onChangeMonth = () => {}',
+      "const ScrollView = 'div'",
+      "const Icon = 'i'",
+      "const Button = 'button'",
+      '',
+      'export default pug`',
+      '  ScrollView(contentContainerStyle={flex: 1})',
+      '  Icon(styleName={active})',
+      '  Button(onPress=()=> onChangeMonth(-1)) Prev',
+      '`',
+      '',
+    ].join('\n')
+
+    const eslint = createProcessorEslint()
+    const [result] = await eslint.lintText(input, { filePath })
+    const messages = result.messages.map(message => ({
+      ruleId: message.ruleId,
+      line: message.line,
+      column: message.column,
+    }))
+
+    expect(messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ruleId: '@stylistic/object-curly-spacing', line: 9, column: 36 }),
+      expect.objectContaining({ ruleId: '@stylistic/object-curly-spacing', line: 9, column: 44 }),
+      expect.objectContaining({ ruleId: '@stylistic/object-curly-spacing', line: 10, column: 18 }),
+      expect.objectContaining({ ruleId: '@stylistic/object-curly-spacing', line: 10, column: 25 }),
+      expect.objectContaining({ ruleId: '@stylistic/arrow-spacing', line: 11, column: 19 }),
+    ]))
+  })
+
   it('maps exact no-undef ranges across the embedded JS site matrix, including unbuffered statement lines', async () => {
     const filePath = resolve(repoRoot, 'embedded-site-matrix.js')
     const input = [

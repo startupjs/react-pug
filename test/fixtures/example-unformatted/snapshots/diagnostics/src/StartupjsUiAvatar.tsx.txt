@@ -1,0 +1,4 @@
+79:19  error  @stylistic/object-curly-newline  Expected a line break after this opening brace.
+79:19  error  @stylistic/object-curly-spacing  A space is required after '{'.
+82:15  error  @stylistic/object-curly-newline  Expected a line break before this closing brace.
+82:15  error  @stylistic/object-curly-spacing  A space is required before '}'.
