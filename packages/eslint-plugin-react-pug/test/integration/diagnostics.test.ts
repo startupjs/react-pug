@@ -356,6 +356,31 @@ describe('eslint processor diagnostic mapping', () => {
     ]))
   })
 
+  it('does not report transformed-surface indent noise for single-line call expressions with object literal args', async () => {
+    const filePath = resolve(repoRoot, 'embedded-children-call-indent.ts')
+    const input = [
+      "import { pug } from 'startupjs'",
+      'const loading = false',
+      'const connectInfo = { clientId: true }',
+      'const startFlow = () => {}',
+      'const children = () => null',
+      '',
+      'export default pug`',
+      '  Div',
+      "    if typeof children === 'function'",
+      '      = children({ isLoading: loading || !connectInfo.clientId, onConnect: startFlow })',
+      '    else',
+      '      = children',
+      '`',
+      '',
+    ].join('\n')
+
+    const eslint = createProcessorEslint()
+    const [result] = await eslint.lintText(input, { filePath })
+
+    expect(result.messages.filter(message => message.ruleId === '@stylistic/indent')).toEqual([])
+  })
+
   it('maps exact no-undef ranges across the embedded JS site matrix, including unbuffered statement lines', async () => {
     const filePath = resolve(repoRoot, 'embedded-site-matrix.js')
     const input = [
