@@ -1,6 +1,6 @@
 {
   "name": "@react-pug/check-types",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "type": "module",
   "main": "./src/index.js",
   "bin": {
@@ -17,6 +17,6 @@
     "typescript": "*"
   },
   "dependencies": {
-    "@react-pug/typescript-plugin-react-pug": "^0.1.17"
+    "@react-pug/typescript-plugin-react-pug": "^0.1.18"
   }
 }
