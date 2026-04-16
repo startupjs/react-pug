@@ -1,6 +1,6 @@
 {
   "name": "@react-pug/pug-lexer",
-  "version": "0.1.7",
+  "version": "0.1.17",
   "publishConfig": {
     "access": "public"
   },
