@@ -929,6 +929,19 @@ function shouldSuppressOriginalRangeMessage(
   return false;
 }
 
+function isRangeFullyWithinEmbeddedLintSite(
+  cached: CachedLintState,
+  start: number,
+  end: number,
+): boolean {
+  if (!cached.transformed) return false;
+
+  return cached.transformed.embeddedJsLintSites.some((site) => (
+    start >= site.originalStart
+    && end <= site.originalEnd
+  ));
+}
+
 function shouldSuppressGeneratedRangeMessage(
   cached: CachedLintState,
   message: EslintLintMessage,
@@ -1007,6 +1020,13 @@ function mapLintMessage(
 
   if (!mapped) return message;
   if (shouldSuppressOriginalRangeMessage(cached, message, mapped.start, mapped.end)) {
+    return null;
+  }
+  if (
+    typeof message.ruleId === 'string'
+    && message.ruleId.startsWith('@stylistic/')
+    && isRangeFullyWithinEmbeddedLintSite(cached, mapped.start, mapped.end)
+  ) {
     return null;
   }
 

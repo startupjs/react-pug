@@ -607,6 +607,19 @@ describe('babel-plugin-react-pug transform', () => {
     `);
   });
 
+  it('preserves dashed computed keys in classnames-style styleName objects', () => {
+    const out = transform([
+      'import { pug } from "startupjs";',
+      "const view = pug`Div.button(styleName={ ['non-responsive']: disabled })`;",
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "import "startupjs";
+      const view = <Div styleName={['button', {
+        ['non-responsive']: disabled
+      }]} />;"
+    `);
+  });
+
   it('allows forcing class shorthand property and merge strategy', () => {
     const transformed = transformReactPugSourceForBabel(
       'const view = pug`span.title(class=isActive)`;',

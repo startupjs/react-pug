@@ -136,6 +136,15 @@ describe('single pug region', () => {
     expect(doc.shadowText).not.toContain('className="title"');
   });
 
+  it('preserves dashed computed keys in classnames-style styleName objects', () => {
+    const text = [
+      'import { pug } from "startupjs";',
+      "const v = pug`Div.button(styleName={ ['non-responsive']: disabled })`;",
+    ].join('\n');
+    const doc = buildShadowDocument(text, 'test.tsx');
+    expect(doc.shadowText).toContain("styleName={['button', { ['non-responsive']: disabled }]}");
+  });
+
   it('removes the pug import binding from shadow output', () => {
     const text = [
       'import { pug, observer } from "startupjs";',

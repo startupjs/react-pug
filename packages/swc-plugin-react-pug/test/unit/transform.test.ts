@@ -37,6 +37,15 @@ describe('swc-plugin-react-pug transform', () => {
     expect(result.code).toContain("styleName={['title', active]}");
   });
 
+  it('preserves dashed computed keys in classnames-style styleName objects', () => {
+    const source = [
+      'import { pug } from "startupjs";',
+      "const view = pug`Div.button(styleName={ ['non-responsive']: disabled })`;",
+    ].join('\n');
+    const result = transformReactPugSourceForSwc(source, 'fixture.tsx');
+    expect(result.code).toContain("styleName={['button', { ['non-responsive']: disabled }]}");
+  });
+
   it('allows forcing class shorthand property and merge strategy', () => {
     const source = 'const view = pug`span.title(class=isActive)`;';
     const result = transformReactPugSourceForSwc(source, 'fixture.tsx', {

@@ -300,6 +300,29 @@ describe('eslint-plugin-react-pug processor', () => {
     `);
   });
 
+  it('preserves dashed computed keys in classnames-style styleName objects', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'import { pug } from "startupjs";',
+      "const view = pug`Div.button(styleName={ ['non-responsive']: disabled })`;",
+    ].join('\n');
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    expect(code).toMatchInlineSnapshot(`
+      "import "startupjs";
+      const view = (
+        <Div
+          styleName={[
+            'button',
+            {
+              ['non-responsive']: disabled
+            }
+          ]}
+        />
+      );"
+    `);
+  });
+
   it('supports forcing class shorthand property and merge strategy', () => {
     const processor = createReactPugProcessor({
       classShorthandProperty: 'class',
