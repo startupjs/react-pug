@@ -122,6 +122,18 @@ describe('transformSourceFile', () => {
     `);
   });
 
+  it('preserves dashed computed keys in classnames-style styleName objects', () => {
+    const source = [
+      "import { pug } from 'startupjs';",
+      "const view = pug`Div.button(styleName={ ['non-responsive']: disabled })`;",
+    ].join('\n');
+    const result = transformSourceFile(source, 'file.tsx', { compileMode: 'runtime' });
+    expect(result.code).toMatchInlineSnapshot(`
+      "import 'startupjs';
+      const view = (<Div styleName={['button', { ['non-responsive']: disabled }]} />);"
+    `);
+  });
+
   it('can force class target and merge strategy explicitly', () => {
     const source = 'const view = pug`span.title(styleName=active)`;';
     const result = transformSourceFile(source, 'file.tsx', {

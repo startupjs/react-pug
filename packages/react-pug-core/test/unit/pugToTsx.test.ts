@@ -1525,6 +1525,22 @@ describe('class shorthand strategy', () => {
     expect(result.tsx).toMatchInlineSnapshot(`"(<span styleName={['title', 'bold']} />)"`);
   });
 
+  it('preserves dashed computed keys in classnames-style styleName objects', () => {
+    const result = compilePugToTsx("Div.button(styleName={ ['non-responsive']: disabled })", {
+      classAttribute: 'styleName',
+      classMerge: 'classnames',
+    });
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Div styleName={['button', { ['non-responsive']: disabled }]} />)"`);
+  });
+
+  it('preserves nested classnames-style arrays and objects when merging shorthand classes', () => {
+    const result = compilePugToTsx("Div.button(styleName=['base', { ['non-responsive']: disabled }, isActive && 'active'])", {
+      classAttribute: 'styleName',
+      classMerge: 'classnames',
+    });
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Div styleName={['button', ['base', { ['non-responsive']: disabled }, isActive && 'active']]} />)"`);
+  });
+
   it('keeps mapping for existing className attr when merged with shorthand class', () => {
     const pug = "h1.active(className='hello')";
     const result = compilePugToTsx(pug);

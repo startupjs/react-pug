@@ -45,6 +45,17 @@ describe('esbuild-plugin-react-pug', () => {
     `);
   });
 
+  it('preserves dashed computed keys in classnames-style styleName objects', () => {
+    const transformed = transformReactPugSourceForEsbuild([
+      'import { pug } from "startupjs";',
+      "const view = pug`Div.button(styleName={ ['non-responsive']: disabled })`;",
+    ].join('\n'), 'fixture.tsx');
+    expect(transformed.code).toMatchInlineSnapshot(`
+      "import "startupjs";
+      const view = (<Div styleName={['button', { ['non-responsive']: disabled }]} />);"
+    `);
+  });
+
   it('allows forcing class shorthand property and merge strategy', () => {
     const transformed = transformReactPugSourceForEsbuild(
       'const view = pug`span.title(class=isActive)`;',
