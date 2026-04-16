@@ -48,7 +48,7 @@ export default function TypeScriptInPug () {
       if maybeTitle != null
         p #{ maybeTitle as string }
 
-      each item in (items as string[])
+      each item in items as string[]
         Card(title = item!)
   `
 }

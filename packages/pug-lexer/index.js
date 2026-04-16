@@ -30,6 +30,23 @@ function startsWithTypeScriptContinuation(str, index, whitespaceRe) {
   return true;
 }
 
+function hasOpenJavaScriptSyntax(str) {
+  var state = characterParser.default(str);
+  return state.isNesting() || state.isString();
+}
+
+function endsWithJavaScriptContinuation(str) {
+  var trimmed = str.replace(/[ \t]+$/, '');
+  return /(?:=>|[([{,:?+\-*/%&|^=!<>]|\b(?:as|satisfies|in|instanceof)\b)$/.test(trimmed);
+}
+
+function startsWithJavaScriptContinuationLine(str) {
+  var trimmed = str.trim();
+  if (!trimmed) return false;
+
+  return /^(?:\?|:|&&|\|\||\?\?|as\b|satisfies\b|instanceof\b|in\b)/.test(trimmed);
+}
+
 /**
  * Initialize `Lexer` with the given `str`.
  *
@@ -125,6 +142,48 @@ Lexer.prototype = {
         'Nesting must match on expression `' + exp + '`'
       );
     }
+  },
+
+  incrementPositionByText: function(text) {
+    var lines = text.split('\n');
+    var newlineCount = lines.length - 1;
+    if (newlineCount === 0) {
+      this.incrementColumn(text.length);
+      return;
+    }
+
+    this.incrementLine(newlineCount);
+    this.incrementColumn(lines[newlineCount].length);
+  },
+
+  collectMultilineCodeFragment: function(startIndex, initialCode) {
+    var consumed = startIndex + initialCode.length;
+    var code = initialCode;
+
+    while (consumed < this.input.length && this.input[consumed] === '\n') {
+      var nextLineStart = consumed + 1;
+      var nextLineEnd = this.input.indexOf('\n', nextLineStart);
+      if (nextLineEnd === -1) {
+        nextLineEnd = this.input.length;
+      }
+      var nextLine = this.input.slice(nextLineStart, nextLineEnd);
+      var shouldContinue =
+        hasOpenJavaScriptSyntax(code) ||
+        endsWithJavaScriptContinuation(code) ||
+        startsWithJavaScriptContinuationLine(nextLine);
+
+      if (!shouldContinue) {
+        break;
+      }
+
+      code += this.input.slice(consumed, nextLineEnd);
+      consumed = nextLineEnd;
+    }
+
+    return {
+      code: code,
+      consumed: consumed,
+    };
   },
 
   /**
@@ -619,11 +678,12 @@ Lexer.prototype = {
       }
 
       var rest = matchOfStringInterp[3];
+      var fullRest = rest + this.input;
       var range;
       tok = this.tok('interpolated-code');
       this.incrementColumn(2);
       try {
-        range = characterParser.parseUntil(rest, '}');
+        range = characterParser.parseUntil(fullRest, '}');
       } catch (ex) {
         if (ex.index !== undefined) {
           this.incrementColumn(ex.index);
@@ -643,15 +703,24 @@ Lexer.prototype = {
       tok.buffer = true;
       tok.val = range.src;
       this.assertExpression(range.src);
+      var consumedFromRest = range.end + 1;
+      var extraInputConsumed = Math.max(0, consumedFromRest - rest.length);
+      var tailInValue =
+        consumedFromRest < rest.length ? rest.substr(consumedFromRest) : '';
 
-      if (range.end + 1 < rest.length) {
-        rest = rest.substr(range.end + 1);
-        this.incrementColumn(range.end + 1);
-        this.tokens.push(this.tokEnd(tok));
-        this.addText(type, rest);
-      } else {
-        this.incrementColumn(rest.length);
-        this.tokens.push(this.tokEnd(tok));
+      this.input = this.input.substr(extraInputConsumed);
+      this.incrementPositionByText(range.src);
+      this.incrementColumn(1);
+      this.tokens.push(this.tokEnd(tok));
+
+      var tailFromInput = '';
+      if (this.input.length && this.input[0] !== '\n' && this.input[0] !== ']') {
+        tailFromInput = /^[^\n\]]*/.exec(this.input)[0];
+        this.consume(tailFromInput.length);
+      }
+
+      if (tailInValue || tailFromInput) {
+        this.addText(type, tailInValue + tailFromInput);
       }
       return;
     }
@@ -1153,6 +1222,8 @@ Lexer.prototype = {
       var flags = captures[1];
       var code = captures[2];
       var shortened = 0;
+      var prefixLength = captures[0].length - captures[2].length;
+      var consumed = captures[0].length;
       if (this.interpolated) {
         var parsed;
         try {
@@ -1174,8 +1245,12 @@ Lexer.prototype = {
         }
         shortened = code.length - parsed.end;
         code = parsed.src;
+        consumed -= shortened;
+      } else if (flags.charAt(0) === '=' || flags.charAt(1) === '=') {
+        var collected = this.collectMultilineCodeFragment(prefixLength, code);
+        code = collected.code;
+        consumed = collected.consumed;
       }
-      var consumed = captures[0].length - shortened;
       this.consume(consumed);
       var tok = this.tok('code', code);
       tok.mustEscape = flags.charAt(0) === '=';
@@ -1194,7 +1269,7 @@ Lexer.prototype = {
       //     ---            captures[2]
       // ----               captures[0] - captures[2]
       //     ^              after colno
-      this.incrementColumn(captures[0].length - captures[2].length);
+      this.incrementColumn(prefixLength);
       if (tok.buffer) this.assertExpression(code);
       this.tokens.push(tok);
 
@@ -1209,7 +1284,7 @@ Lexer.prototype = {
       //                    shortened
       //     ---            code
       //        ^           after colno
-      this.incrementColumn(code.length);
+      this.incrementPositionByText(code);
       this.tokEnd(tok);
       return true;
     }

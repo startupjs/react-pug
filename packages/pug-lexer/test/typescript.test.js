@@ -100,3 +100,49 @@ test('supports TypeScript syntax in conditionals, loops, interpolation, and hand
     }),
   );
 });
+
+test('supports multiline buffered TypeScript expressions on code lines', () => {
+  const tokens = lex(
+    [
+      'p= (() => {',
+      '  const value = known as string',
+      '  return value',
+      '})()',
+    ].join('\n'),
+    { filename: 'multiline-buffered-expression.pug' },
+  );
+
+  expect(tokens).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: 'code',
+        val: ['(() => {', '  const value = known as string', '  return value', '})()'].join('\n'),
+      }),
+    ]),
+  );
+});
+
+test('supports multiline TypeScript interpolations inside text', () => {
+  const tokens = lex(
+    [
+      'p Hello #{(() => {',
+      '  const value = known as string',
+      '  return value',
+      '})()} world',
+    ].join('\n'),
+    { filename: 'multiline-interpolation.pug' },
+  );
+
+  expect(tokens).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: 'interpolated-code',
+        val: ['(() => {', '  const value = known as string', '  return value', '})()'].join('\n'),
+      }),
+      expect.objectContaining({
+        type: 'text',
+        val: ' world',
+      }),
+    ]),
+  );
+});

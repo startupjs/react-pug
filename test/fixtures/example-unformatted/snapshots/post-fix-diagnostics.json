@@ -1,0 +1,9 @@
+[
+  {
+    "filePath": "src/TypeScriptInPug.tsx",
+    "ruleId": "@stylistic/indent",
+    "line": 49,
+    "column": 13,
+    "message": "Expected indentation of 2 spaces but found 3."
+  }
+]

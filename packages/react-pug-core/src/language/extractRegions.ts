@@ -360,6 +360,7 @@ function extractWithRegex(text: string, tagName: string = 'pug'): PugRegion[] {
       parseError: null,
       transformError: null,
       styleBlock: null,
+      embeddedJsLintSites: [],
     });
   }
 
@@ -486,6 +487,7 @@ export function extractPugAnalysis(
       parseError: null,
       transformError: null,
       styleBlock: null,
+      embeddedJsLintSites: [],
     };
 
     regions.push(region);

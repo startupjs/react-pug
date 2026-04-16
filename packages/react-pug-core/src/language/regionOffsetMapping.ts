@@ -7,13 +7,13 @@ export function rawToStrippedOffset(rawText: string, rawOffset: number, commonIn
   const lines = rawText.split('\n');
   for (const line of lines) {
     const lineEnd = raw + line.length;
+    const actualIndent = line.match(/^[ \t]*/)?.[0].length ?? 0;
+    const indentToRemove = line.trim().length === 0 ? line.length : Math.min(commonIndent, actualIndent);
     if (rawOffset <= lineEnd) {
       const colInRaw = rawOffset - raw;
-      const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
       if (indentToRemove > 0 && colInRaw < indentToRemove) return null;
       return stripped + Math.max(0, colInRaw - indentToRemove);
     }
-    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
     stripped += Math.max(0, line.length - indentToRemove) + 1;
     raw = lineEnd + 1;
   }
@@ -26,7 +26,8 @@ export function strippedToRawOffset(rawText: string, strippedOffset: number, com
   let raw = 0;
   const lines = rawText.split('\n');
   for (const line of lines) {
-    const indentToRemove = line.trim().length === 0 ? line.length : commonIndent;
+    const actualIndent = line.match(/^[ \t]*/)?.[0].length ?? 0;
+    const indentToRemove = line.trim().length === 0 ? line.length : Math.min(commonIndent, actualIndent);
     const strippedLineLength = Math.max(0, line.length - indentToRemove);
     if (strippedOffset <= stripped + strippedLineLength) {
       return raw + indentToRemove + (strippedOffset - stripped);

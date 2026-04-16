@@ -60,7 +60,11 @@ const Profile = observer(({ $cat, $event }) => {
             <Div styleName={['hackSidePadding']} />
             )
           : (
-            <Button variant='text' icon={faPen} onPress={() => $showEdit.set(true)}>
+            <Button
+              variant='text'
+              icon={faPen}
+              onPress={() => $showEdit.set(true)}
+            >
               {tablet ? 'Edit cat profile' : 'Edit'}
             </Button>
             )}
@@ -82,8 +86,8 @@ function renderExpired () {
       <Alert variant='error'>
         <Span>
           Cat profile link is incorrect or already expired. Your cat meetup
-          profile link is only valid for a limited period of time. If you believe
-          this is an error, please contact the cat meetup organizer.
+          profile link is only valid for a limited period of time. If you
+          believe this is an error, please contact the cat meetup organizer.
         </Span>
       </Alert>
     </Content>

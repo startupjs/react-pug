@@ -8,6 +8,7 @@ import reactPugPlugin from '../../src/index'
 
 const repoRoot = resolve(__dirname, '../../../..')
 const fixtureRoot = resolve(repoRoot, 'test/fixtures/example-unformatted/src')
+const fixedSnapshotRoot = resolve(repoRoot, 'test/fixtures/example-unformatted/snapshots/fixed/src')
 const reactHooksStubPlugin = {
   rules: {
     'rules-of-hooks': {
@@ -67,6 +68,7 @@ function createStartupjsUiStyleEslint(fix: boolean): ESLint {
 describe('startupjs-ui regressions', () => {
   it('does not report false processor diagnostics for startupjs-ui repros', async () => {
     const files = [
+      resolve(fixtureRoot, 'StartupjsUiAvatar.tsx'),
       resolve(fixtureRoot, 'StartupjsUiDialogsReadme.js'),
       resolve(fixtureRoot, 'StartupjsUiDropdown.tsx'),
       resolve(fixtureRoot, 'StartupjsUiDraggableReadme.js'),
@@ -89,7 +91,9 @@ describe('startupjs-ui regressions', () => {
       }))
     ))
 
-    expect(messages).toEqual([])
+    expect(messages.every(message => String(message.ruleId).startsWith('@stylistic/'))).toBe(true)
+    expect(messages.some(message => message.ruleId === '@stylistic/indent')).toBe(false)
+    expect(messages.some(message => message.ruleId === '@stylistic/arrow-spacing')).toBe(true)
   })
 
   it('still reports jsx-boolean-value for intrinsic boolean attrs inside pug', async () => {
@@ -113,9 +117,10 @@ describe('startupjs-ui regressions', () => {
     expect(booleanDiagnostic?.column).toBe(12)
   })
 
-  it('does not rewrite startupjs-ui repros under eslint --fix', async () => {
+  it('rewrites startupjs-ui repros only to the expected fixed snapshots under eslint --fix', async () => {
     for (const relativePath of [
       'StartupjsUiDialogsReadme.js',
+      'StartupjsUiAvatar.tsx',
       'StartupjsUiDropdown.tsx',
       'StartupjsUiDraggableReadme.js',
       'StartupjsUiMdxComponents.js',
@@ -128,7 +133,7 @@ describe('startupjs-ui regressions', () => {
       const filePath = resolve(fixtureRoot, relativePath)
       const input = readFileSync(filePath, 'utf8')
       const [result] = await createStartupjsUiStyleEslint(true).lintText(input, { filePath })
-      expect(result.output ?? input).toBe(input)
+      expect(result.output ?? input).toBe(readFileSync(resolve(fixedSnapshotRoot, relativePath), 'utf8'))
     }
   })
 })

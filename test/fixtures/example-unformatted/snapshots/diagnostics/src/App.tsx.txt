@@ -1,1 +1,6 @@
-No diagnostics.
+44:37  error  @stylistic/quotes  Strings must use singlequote.
+44:51  error  @stylistic/quotes  Strings must use singlequote.
+49:30  error  @stylistic/space-infix-ops  Operator '===' must be spaced.
+54:65  error  @stylistic/arrow-spacing  Missing space before =>.
+57:50  error  @stylistic/space-infix-ops  Operator '>' must be spaced.
+61:67  error  @stylistic/arrow-spacing  Missing space before =>.

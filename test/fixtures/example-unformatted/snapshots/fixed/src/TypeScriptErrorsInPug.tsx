@@ -20,9 +20,9 @@ export default function TypeScriptErrorsInPug () {
       if missingConditionFlag
         Card(title="Shown")
 
-      each item in (missingItemsSource as Item[])
+      each item in missingItemsSource as Item[]
         Card(title=item.title)
 
-      Card(title=(maybeLabel as number))
+      Card(title=maybeLabel as number)
   `
 }

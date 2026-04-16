@@ -106,7 +106,10 @@ function lintStylisticIndent(code: string, filename = 'file.jsx') {
           ],
           offsetTernaryExpressions: true,
         }],
-        '@stylistic/jsx-indent': ['error', 2],
+        '@stylistic/jsx-indent': ['error', 2, {
+          checkAttributes: false,
+          indentLogicalExpressions: true,
+        }],
         '@stylistic/jsx-indent-props': ['error', 2],
         '@stylistic/jsx-wrap-multilines': ['error', {
           declaration: 'parens-new-line',
@@ -406,7 +409,7 @@ describe('eslint-plugin-react-pug processor', () => {
       }"
     `);
 
-    const lintMessages = lintStylisticIndent(code, 'file.jsx');
+    const lintMessages = lintStartupjsUiStyle(code, 'file.jsx');
     const mapped = processor.postprocess([lintMessages as any], 'file.jsx');
     expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
   });
@@ -571,6 +574,227 @@ describe('eslint-plugin-react-pug processor', () => {
 
     expect(mapped.filter(message => String(message.ruleId).includes('indent'))).toEqual([]);
     expect(mapped.filter(message => message.ruleId === '@stylistic/jsx-closing-tag-location')).toEqual([]);
+  });
+
+  it('formats nested multiline ternaries inside ${} interpolations with consumer-aligned indentation', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const monthAmount = 10',
+      'const yearAmount = 100',
+      'const view = pug`',
+      '  Span.text= ${monthAmount != null && yearAmount != null',
+      "    ? t(msg`Each business you add is {monthAmount}/month or {yearAmount}/year.`, { monthAmount: '$' + monthAmount, yearAmount: '$' + yearAmount })",
+      '    : monthAmount != null',
+      "      ? t(msg`Each business you add is {amount}/month.`, { amount: '$' + monthAmount })",
+      "      : t(msg`Each business you add is {amount}/year.`, { amount: '$' + yearAmount })",
+      '  }',
+      '`',
+    ].join('\n');
+
+    const [block] = processor.preprocess(input, 'file.jsx');
+    const code = typeof block === 'string' ? block : block.text;
+    expect(code).toMatchInlineSnapshot(`
+      "const monthAmount = 10
+      const yearAmount = 100
+      const view = (
+        <Span className='text'>
+          {monthAmount != null && yearAmount != null
+            ? t(
+              msg\`Each business you add is {monthAmount}/month or {yearAmount}/year.\`,
+              {
+                monthAmount: '$' + monthAmount,
+                yearAmount: '$' + yearAmount
+              }
+            )
+            : monthAmount != null
+              ? t(msg\`Each business you add is {amount}/month.\`, {
+                amount: '$' + monthAmount
+              })
+              : t(msg\`Each business you add is {amount}/year.\`, {
+                amount: '$' + yearAmount
+              })}
+        </Span>
+      )"
+    `);
+  });
+
+  it('emits dedicated embedded-JS lint blocks for expression and statement sites', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  Button(',
+      '    label=knownAttr + missingAttrValue',
+      '    onClick=() => run(item.id)',
+      '  ) Save',
+      '  p Hello #{knownInterpolation + missingInterpolationValue}',
+      '  - const visible = ready',
+      '`',
+    ].join('\n');
+
+    const blocks = processor.preprocess(input, 'file.jsx');
+    expect(blocks).toHaveLength(5);
+    expect(blocks[1]).toMatchObject({
+      filename: '../../../pug-react-embedded-statement-0.jsx',
+    });
+    expect(blocks[2]).toMatchObject({
+      filename: '../../../pug-react-embedded-expression-1.jsx',
+    });
+    expect(blocks[3]).toMatchObject({
+      filename: '../../../pug-react-embedded-expression-2.jsx',
+    });
+    expect(blocks[4]).toMatchObject({
+      filename: '../../../pug-react-embedded-expression-3.jsx',
+    });
+    expect((blocks[1] as any).text).toContain('(() => {\n  const visible = ready\n})()');
+    expect((blocks[2] as any).text).toContain('const __reactPugExpr = (\n  knownAttr + missingAttrValue\n)');
+    expect((blocks[3] as any).text).toContain('const __reactPugExpr = (\n  () => run(item.id)\n)');
+    expect((blocks[4] as any).text).toContain('const __reactPugExpr = (\n  knownInterpolation + missingInterpolationValue\n)');
+  });
+
+  it('dedents shared continuation indent in multiline embedded expression blocks', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  Button(',
+      '    style={',
+      '      borderTopColor: ready ? "green" : "red",',
+      '      left: geometry.arrowLeft,',
+      '      top: geometry.arrowTop',
+      '    }',
+      '    onClick=() => {',
+      '      setInputValue(selectedLabel)',
+      '      onClose()',
+      '    }',
+      '  ) Save',
+      '`',
+    ].join('\n');
+
+    const blocks = processor.preprocess(input, 'file.jsx') as Array<{ text: string; filename: string }>;
+    expect(blocks[1]).toMatchObject({
+      filename: '../../../pug-react-embedded-expression-0.jsx',
+      text: [
+        'const __reactPugExpr = (',
+        '  {',
+        '    borderTopColor: ready ? "green" : "red",',
+        '    left: geometry.arrowLeft,',
+        '    top: geometry.arrowTop',
+        '  }',
+        ')',
+        '',
+      ].join('\n'),
+    });
+    expect(blocks[2]).toMatchObject({
+      filename: '../../../pug-react-embedded-expression-1.jsx',
+      text: [
+        'const __reactPugExpr = (',
+        '  () => {',
+        '    setInputValue(selectedLabel)',
+        '    onClose()',
+        '  }',
+        ')',
+        '',
+      ].join('\n'),
+    });
+  });
+
+  it('maps embedded-source autofix edits back to original pug ranges', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  Button(label=label+suffix) Save',
+      '`',
+    ].join('\n');
+
+    const blocks = processor.preprocess(input, 'file.jsx') as Array<{ text: string; filename: string }>;
+    const embeddedBlock = blocks[1];
+    const fixStart = embeddedBlock.text.indexOf('label+suffix');
+    const fixEnd = fixStart + 'label+suffix'.length;
+    const startLc = offsetToLineColumn(embeddedBlock.text, fixStart);
+    const endLc = offsetToLineColumn(embeddedBlock.text, fixEnd);
+
+    const mapped = processor.postprocess([
+      [],
+      [{
+        ruleId: '@stylistic/space-infix-ops',
+        message: "Operator '+' must be spaced.",
+        line: startLc.line,
+        column: startLc.column,
+        endLine: endLc.line,
+        endColumn: endLc.column,
+        fix: {
+          range: [fixStart, fixEnd],
+          text: 'label + suffix',
+        },
+      } as any],
+    ], 'file.jsx');
+
+    const expectedStart = input.indexOf('label=label+suffix') + 'label='.length;
+    expect(mapped).toEqual([
+      expect.objectContaining({
+        ruleId: '@stylistic/space-infix-ops',
+        line: 2,
+        column: 16,
+        endLine: 2,
+        endColumn: 28,
+        fix: {
+          range: [expectedStart, expectedStart + 'label+suffix'.length],
+          text: 'label + suffix',
+        },
+      }),
+    ]);
+  });
+
+  it('maps embedded-source suggestions back to original pug ranges', () => {
+    const processor = createReactPugProcessor();
+    const input = [
+      'const view = pug`',
+      '  p Hello #{label+suffix}',
+      '`',
+    ].join('\n');
+
+    const blocks = processor.preprocess(input, 'file.jsx') as Array<{ text: string; filename: string }>;
+    const embeddedBlock = blocks[1];
+    const fixStart = embeddedBlock.text.indexOf('label+suffix');
+    const fixEnd = fixStart + 'label+suffix'.length;
+    const startLc = offsetToLineColumn(embeddedBlock.text, fixStart);
+    const endLc = offsetToLineColumn(embeddedBlock.text, fixEnd);
+
+    const mapped = processor.postprocess([
+      [],
+      [{
+        ruleId: '@stylistic/space-infix-ops',
+        message: "Operator '+' must be spaced.",
+        line: startLc.line,
+        column: startLc.column,
+        endLine: endLc.line,
+        endColumn: endLc.column,
+        suggestions: [{
+          desc: 'Add spaces around +',
+          fix: {
+            range: [fixStart, fixEnd],
+            text: 'label + suffix',
+          },
+        }],
+      } as any],
+    ], 'file.jsx');
+
+    const expectedStart = input.indexOf('label+suffix');
+    expect(mapped).toEqual([
+      expect.objectContaining({
+        ruleId: '@stylistic/space-infix-ops',
+        line: 2,
+        column: 13,
+        endLine: 2,
+        endColumn: 25,
+        suggestions: [{
+          desc: 'Add spaces around +',
+          fix: {
+            range: [expectedStart, expectedStart + 'label+suffix'.length],
+            text: 'label + suffix',
+          },
+        }],
+      }),
+    ]);
   });
 
   it('suppresses legacy styl warnings without hiding normal linting', () => {

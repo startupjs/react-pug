@@ -41,24 +41,24 @@ export default function App () {
           Button(onClick=handleReset,label="Reset",variant="secondary")
           Button(
             onClick=() => setShowCompleted(!showCompleted)
-            label = showCompleted ? "Hide Done" : "Show Done"
+            label = showCompleted ? 'Hide Done' : 'Show Done'
           )
           Modal.Header.active( onClick=handleReset , label="Reset From Modal.Header", variant="secondary" )
 
         h3 Active (#{activeTodos.length})
-        if activeTodos.length===0
+        if activeTodos.length === 0
           p.empty All done!
         else
           each todo in activeTodos
             .todo-item(key=todo.id)
-              input(type="checkbox",checked=todo.done,onChange=()=> handleToggle(todo.id))
+              input(type="checkbox",checked=todo.done,onChange=() => handleToggle(todo.id))
               span=todo.text
 
-        if showCompleted && completedTodos.length>0
+        if showCompleted && completedTodos.length > 0
           h3 Completed (#{completedTodos.length})
           each todo in completedTodos
             .todo-item.done(key=todo.id)
-              input(type="checkbox", checked=todo.done, onChange=()=> handleToggle(todo.id))
+              input(type="checkbox", checked=todo.done, onChange=() => handleToggle(todo.id))
               span= todo.text
 
     style

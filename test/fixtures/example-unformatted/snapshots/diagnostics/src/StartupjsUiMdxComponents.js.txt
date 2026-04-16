@@ -1,1 +1,1 @@
-No diagnostics.
+304:28  error  @stylistic/arrow-spacing  Missing space before =>.
