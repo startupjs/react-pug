@@ -249,8 +249,12 @@ Behavior:
 - Embedded Stylus editor IntelliSense depends on the external VS Code Stylus extension being installed.
 - Embedded Sass editor IntelliSense/highlighting depends on the VS Code extension `Syler.sass-indented` being installed. Built-in VS Code CSS support handles `css` and `scss`, but not indented `sass`.
 
-## Architecture
+## Repo Docs For Contributors / Agents
 
-Detailed design and package internals:
+If you are working on the repo itself and are cold-starting on the implementation, read these first:
 
-- [architecture.md](architecture.md)
+- [architecture.md](architecture.md): current package boundaries, transform/mapping model, ESLint/TS/VS Code architecture
+- [plan.md](plan.md): current status, known limitations, validation expectations, and recommended next work
+- [performance.md](performance.md): where cost actually lives and what is or is not worth optimizing
+
+This is mainly for contributors and agents doing actual improvements to the repo, not for normal users of the packages. Those docs capture the current architecture, the known contract boundaries, and the operational gotchas that are easy to miss if you jump straight into the code.
