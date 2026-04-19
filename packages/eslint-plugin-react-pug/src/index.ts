@@ -25,6 +25,7 @@ import { Linter, SourceCode } from 'eslint';
 import bundledStylisticPlugin from '@stylistic/eslint-plugin';
 import prettier from '@prettier/sync';
 const tsParser = require('@typescript-eslint/parser');
+const pugLexer = require('@react-pug/pug-lexer');
 
 interface EslintReactPugProcessorOptions {
   tagFunction?: string;
@@ -78,11 +79,18 @@ interface EmbeddedLintBlockState {
   normalizedEndBoundaryMap: Array<number | null>;
   syntheticRanges: InsertionOffsetRange[];
   normalizedSiteCode: string;
-  restorationIndentWidth: number;
+  restorationIndent: string;
+  inlineAttributeContainer: InlineAttributeContainer | null;
 }
 
 interface NormalizedEmbeddedSite extends BoundaryMappedExpression {
   strippedContinuationIndent: number;
+}
+
+interface InlineAttributeContainer {
+  start: number;
+  end: number;
+  lineIndent: string;
 }
 
 interface EslintProcessorLike {
@@ -477,43 +485,211 @@ function stripSharedContinuationIndent(
 
 function restoreSharedContinuationIndent(
   code: string,
-  restorationIndentWidth: number,
+  restorationIndent: string,
 ): string {
-  if (restorationIndentWidth <= 0 || !code.includes('\n')) return code;
+  if (restorationIndent.length === 0 || !code.includes('\n')) return code;
 
-  const prefix = ' '.repeat(restorationIndentWidth);
   return code
     .split('\n')
     .map((line, index) => {
       if (index === 0 || line.length === 0) return line;
-      return `${prefix}${line}`;
+      return `${restorationIndent}${line}`;
     })
     .join('\n');
 }
 
-function calculateRestorationIndentWidth(
-  originalSiteText: string,
-  normalizedSiteCode: string,
-): number {
-  if (!originalSiteText.includes('\n') || !normalizedSiteCode.includes('\n')) return 0;
+function getLineLeadingIndent(
+  text: string,
+  offset: number,
+): string {
+  const { start, end } = findLineBounds(text, offset);
+  const line = text.slice(start, end);
+  return line.match(/^[ \t]*/)?.[0] ?? '';
+}
 
-  const originalLines = originalSiteText.split('\n');
-  const normalizedLines = normalizedSiteCode.split('\n');
-  let minDiff: number | null = null;
+function findInlineAttributeContainer(
+  text: string,
+  startOffset: number,
+  endOffset: number,
+): InlineAttributeContainer | null {
+  const { start: lineStart, end: firstLineEnd } = findLineBounds(text, startOffset);
+  const firstLine = text.slice(lineStart, firstLineEnd);
+  const lineIndent = firstLine.match(/^[ \t]*/)?.[0] ?? '';
+  let quote: "'" | '"' | '`' | null = null;
+  let escaped = false;
+  let openIndex: number | null = null;
 
-  for (let index = 1; index < Math.min(originalLines.length, normalizedLines.length); index += 1) {
-    const originalLine = originalLines[index] ?? '';
-    const normalizedLine = normalizedLines[index] ?? '';
-    if (originalLine.trim().length === 0 || normalizedLine.trim().length === 0) continue;
+  for (let index = 0; index < firstLine.length; index += 1) {
+    const char = firstLine[index] ?? '';
 
-    const originalIndent = originalLine.match(/^[ \t]*/)?.[0].length ?? 0;
-    const normalizedIndent = normalizedLine.match(/^[ \t]*/)?.[0].length ?? 0;
-    const diff = originalIndent - normalizedIndent;
-    if (diff < 0) continue;
-    minDiff = minDiff == null ? diff : Math.min(minDiff, diff);
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === quote) quote = null;
+      continue;
+    }
+
+    if (char === '\'' || char === '"' || char === '`') {
+      quote = char;
+      continue;
+    }
+
+    if (char === '(') {
+      const prefix = firstLine.slice(0, index).trim();
+      const isTagLikePrefix = /^[A-Za-z0-9_.$:#-]+$/.test(prefix);
+      if (isTagLikePrefix) openIndex = lineStart + index;
+      break;
+    }
   }
 
-  return minDiff ?? 0;
+  if (openIndex == null || openIndex > startOffset) return null;
+
+  quote = null;
+  escaped = false;
+  let parenDepth = 0;
+  for (let index = openIndex; index < text.length; index += 1) {
+    const char = text[index] ?? '';
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === quote) quote = null;
+      continue;
+    }
+
+    if (char === '\'' || char === '"' || char === '`') {
+      quote = char;
+      continue;
+    }
+
+    if (char === '(') {
+      parenDepth += 1;
+      continue;
+    }
+
+    if (char === ')' && parenDepth > 0) {
+      parenDepth -= 1;
+      if (parenDepth === 0) {
+        const absoluteEnd = index + 1;
+        if (absoluteEnd < endOffset) return null;
+        return {
+          start: openIndex,
+          end: absoluteEnd,
+          lineIndent,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function normalizeMultilineAttributeValueIndent(value: string): string {
+  if (!value.includes('\n')) return value;
+
+  const lines = value.split('\n');
+  let minIndent: number | null = null;
+  for (const line of lines.slice(1)) {
+    if (line.trim().length === 0) continue;
+    const indent = line.match(/^[ \t]*/)?.[0].length ?? 0;
+    minIndent = minIndent == null ? indent : Math.min(minIndent, indent);
+  }
+
+  if (minIndent == null || minIndent === 0) return value;
+
+  return lines
+    .map((line, index) => {
+      if (index === 0 || line.length === 0) return line;
+      return line.slice(Math.min(minIndent!, line.match(/^[ \t]*/)?.[0].length ?? 0));
+    })
+    .join('\n');
+}
+
+function extractInlinePugAttributeTexts(containerText: string): string[] | null {
+  const synthetic = `Div${containerText}`;
+
+  try {
+    const tokens = pugLexer(synthetic, { filename: 'inline-attrs.pug' });
+    const attributes = tokens.filter((token: any) => token.type === 'attribute');
+    if (attributes.length === 0) return null;
+
+    return attributes.map((token: any) => {
+      if (token.val === true) return token.name;
+      const operator = token.mustEscape === false ? '!=' : '=';
+      return `${token.name}${operator}${normalizeMultilineAttributeValueIndent(token.val)}`;
+    });
+  } catch {
+    return null;
+  }
+}
+
+function countInlinePugAttributes(containerText: string): number {
+  const synthetic = `Div${containerText}`;
+
+  try {
+    const tokens = pugLexer(synthetic, { filename: 'inline-attrs.pug' });
+    return tokens.filter((token: any) => token.type === 'attribute').length;
+  } catch {
+    return 0;
+  }
+}
+
+function buildInlineAttributeContainerAutofix(
+  entries: Array<{ block: EmbeddedLintBlockState; fix: NonNullable<EslintLintMessage['fix']> }>,
+  container: InlineAttributeContainer,
+  originalText: string,
+): EslintLintMessage['fix'] | undefined {
+  const containerText = originalText.slice(container.start, container.end);
+  const localFixes = entries
+    .map(({ block, fix }) => ({
+      start: block.site.originalStart - container.start,
+      end: block.site.originalEnd - container.start,
+      text: fix.text,
+    }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const replacedContainerText = applyLocalFixesToText(containerText, localFixes);
+  if (!replacedContainerText.includes('\n')) return undefined;
+  if (!replacedContainerText.startsWith('(') || !replacedContainerText.endsWith(')')) {
+    return {
+      range: [container.start, container.end],
+      text: replacedContainerText,
+    };
+  }
+
+  const attrs = extractInlinePugAttributeTexts(replacedContainerText);
+  if (!attrs || attrs.length === 0) {
+    return {
+      range: [container.start, container.end],
+      text: replacedContainerText,
+    };
+  }
+
+  const attrIndent = `${container.lineIndent}  `;
+  const rebuilt = [
+    '(',
+    ...attrs.map(attr => attr.split('\n').map(line => `${attrIndent}${line}`).join('\n')),
+    `${container.lineIndent})`,
+  ].join('\n');
+
+  if (rebuilt === containerText) return undefined;
+
+  return {
+    range: [container.start, container.end],
+    text: rebuilt,
+  };
 }
 
 function createEmbeddedLintBlockFilename(
@@ -549,7 +725,6 @@ function createEmbeddedLintBlocks(
       site.code,
       Array.from({ length: site.code.length + 1 }, (_, offset) => offset),
     );
-    const originalSiteText = originalText.slice(site.originalStart, site.originalEnd);
     const normalizedSiteIdentityMap = Array.from(
       { length: normalizedSite.code.length + 1 },
       (_, offset) => offset,
@@ -581,7 +756,12 @@ function createEmbeddedLintBlocks(
       normalizedBoundaryMap: normalizedBuilder.boundaryMap,
       normalizedEndBoundaryMap: normalizedBuilder.endBoundaryMap,
       normalizedSiteCode: normalizedSite.code,
-      restorationIndentWidth: calculateRestorationIndentWidth(originalSiteText, normalizedSite.code),
+      restorationIndent: getLineLeadingIndent(originalText, site.originalStart),
+      inlineAttributeContainer: findInlineAttributeContainer(
+        originalText,
+        site.originalStart,
+        site.originalEnd,
+      ),
     });
   });
 
@@ -1278,7 +1458,7 @@ function buildEmbeddedSiteAutofix(
   const stabilizedCode = stabilizeEmbeddedSiteAutofix(block, fixedNormalizedCode);
   const restoredCode = restoreSharedContinuationIndent(
     stabilizedCode,
-    block.restorationIndentWidth,
+    block.restorationIndent,
   );
   const originalSiteText = originalText.slice(block.site.originalStart, block.site.originalEnd);
 
@@ -1468,6 +1648,40 @@ function createReactPugProcessor(
           .filter((msg): msg is EslintLintMessage => msg != null),
       ];
 
+      const embeddedAutofixes = cached.embeddedLintBlocks.map((block, index) => (
+        buildEmbeddedSiteAutofix(embeddedMessages[index] ?? [], block, cached.originalText)
+      ));
+      const containerAutofixes = new Map<number, NonNullable<EslintLintMessage['fix']>>();
+      const containerGroups = new Map<string, {
+        container: InlineAttributeContainer;
+        entries: Array<{ index: number; block: EmbeddedLintBlockState; fix: NonNullable<EslintLintMessage['fix']> }>;
+      }>();
+
+      cached.embeddedLintBlocks.forEach((block, index) => {
+        const fix = embeddedAutofixes[index];
+        const container = block.inlineAttributeContainer;
+        if (!fix || !container || !fix.text.includes('\n')) return;
+        if (countInlinePugAttributes(cached.originalText.slice(container.start, container.end)) <= 1) return;
+        const key = `${container.start}:${container.end}`;
+        const existing = containerGroups.get(key);
+        if (existing) {
+          existing.entries.push({ index, block, fix });
+        } else {
+          containerGroups.set(key, {
+            container,
+            entries: [{ index, block, fix }],
+          });
+        }
+      });
+
+      for (const { container, entries } of containerGroups.values()) {
+        const aggregatedFix = buildInlineAttributeContainerAutofix(entries, container, cached.originalText);
+        if (!aggregatedFix) continue;
+        for (const entry of entries) containerAutofixes.set(entry.index, aggregatedFix);
+      }
+
+      const attachedFixKeys = new Set<string>();
+
       embeddedMessages.forEach((blockMessages, index) => {
         const block = cached.embeddedLintBlocks[index];
         if (!block) return;
@@ -1475,17 +1689,25 @@ function createReactPugProcessor(
           .map((message) => mapEmbeddedLintMessage(message, block, cached.originalText, {
             includeFix: false,
           }));
-        const aggregatedFix = buildEmbeddedSiteAutofix(blockMessages, block, cached.originalText);
+        const aggregatedFix = containerAutofixes.get(index) ?? embeddedAutofixes[index];
         let aggregatedFixAttached = false;
+        const aggregatedFixKey = aggregatedFix
+          ? `${aggregatedFix.range[0]}:${aggregatedFix.range[1]}:${aggregatedFix.text}`
+          : null;
 
         for (const mappedMessage of mappedBlockMessages) {
           if (!mappedMessage) continue;
-          if (!aggregatedFixAttached && aggregatedFix) {
+          if (
+            !aggregatedFixAttached
+            && aggregatedFix
+            && (!aggregatedFixKey || !attachedFixKeys.has(aggregatedFixKey))
+          ) {
             mapped.push({
               ...mappedMessage,
               fix: aggregatedFix,
             });
             aggregatedFixAttached = true;
+            if (aggregatedFixKey) attachedFixKeys.add(aggregatedFixKey);
           } else {
             mapped.push(mappedMessage);
           }

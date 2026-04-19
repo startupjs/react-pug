@@ -160,6 +160,266 @@ describe('eslint --fix integration for react-pug processor', () => {
     expect(secondPass.messages.some(message => message.ruleId === '@stylistic/space-infix-ops')).toBe(false)
   })
 
+  it('preserves pug indentation when a single-line embedded handler autofix expands into multiline code', async () => {
+    const filePath = resolve(repoRoot, 'embedded-autofix-inline-handler.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      "const router = { push: () => {} }",
+      '',
+      'const view = pug`',
+      "  Div.logoLink(onPress=()=> { router.push('/') })",
+      '`',
+      '',
+    ].join('\n')
+
+    const [firstPass] = await createInlineEslint(true).lintText(input, { filePath })
+    const output = firstPass.output ?? input
+
+    expect(output).toMatchInlineSnapshot(`
+      "import { pug } from 'startupjs'
+      const router = { push: () => {} }
+
+      const view = pug\`
+        Div.logoLink(onPress=() => {
+          router.push('/')
+        })
+      \`
+      "
+    `)
+
+    const [secondPass] = await createInlineEslint(false).lintText(output, { filePath })
+    expect(secondPass.messages.some(message => message.ruleId === '@stylistic/arrow-spacing')).toBe(false)
+    expect(secondPass.messages.some(message => message.ruleId === '@stylistic/object-curly-newline')).toBe(false)
+  })
+
+  it('keeps complex embedded callback autofixes stable when a single-line site expands into multiline ternary and call formatting', async () => {
+    const filePath = resolve(repoRoot, 'embedded-autofix-complex-callback.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      'const isSelectable = true',
+      'const handleSelect = () => {}',
+      "const item = { id: 1, title: 'Cash', subCategory: 'bank', path: ['Assets'] }",
+      'const depth = 1',
+      "const fullPath = ['Assets', 'Cash']",
+      '',
+      'const view = pug`',
+      '  Div.item(',
+      '    onPress=!isSelectable ? undefined : () => handleSelect(',
+      '      {',
+      '        id: item.id,',
+      '        title: item.title,',
+      '        subCategory: item.subCategory,',
+      '        depth,',
+      '        path: item.path,',
+      '        pathWithSelectedAccount: fullPath',
+      '      }',
+      '    )',
+      '  )',
+      '`',
+      '',
+    ].join('\n')
+
+    const [firstPass] = await createInlineEslint(true).lintText(input, { filePath })
+    const output = firstPass.output ?? input
+
+    expect(output).toMatchInlineSnapshot(`
+      "import { pug } from 'startupjs'
+      const isSelectable = true
+      const handleSelect = () => {}
+      const item = { id: 1, title: 'Cash', subCategory: 'bank', path: ['Assets'] }
+      const depth = 1
+      const fullPath = ['Assets', 'Cash']
+
+      const view = pug\`
+        Div.item(
+          onPress=!isSelectable
+            ? undefined
+            : () =>
+                handleSelect({
+                  id: item.id,
+                  title: item.title,
+                  subCategory: item.subCategory,
+                  depth,
+                  path: item.path,
+                  pathWithSelectedAccount: fullPath
+                })
+        )
+      \`
+      "
+    `)
+
+    const [secondPass] = await createInlineEslint(false).lintText(output, { filePath })
+    expect(secondPass.messages.some(message => String(message.ruleId).startsWith('@stylistic/'))).toBe(false)
+  })
+
+  it('preserves sibling attrs when multiple single-line handlers expand into multiline code', async () => {
+    const filePath = resolve(repoRoot, 'embedded-autofix-multi-handler-attrs.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      "const router = { push: () => {} }",
+      '',
+      'const view = pug`',
+      "  Div(onPress=()=> { router.push('/') } onLongPress=()=> { router.push('/home') } variant='flat' disabled)",
+      '`',
+      '',
+    ].join('\n')
+
+    const [firstPass] = await createInlineEslint(true).lintText(input, { filePath })
+    const output = firstPass.output ?? input
+
+    expect(output).toMatchInlineSnapshot(`
+      "import { pug } from 'startupjs'
+      const router = { push: () => {} }
+
+      const view = pug\`
+        Div(
+          onPress=() => {
+            router.push('/')
+          }
+          onLongPress=() => {
+            router.push('/home')
+          }
+          variant='flat'
+          disabled
+        )
+      \`
+      "
+    `)
+
+    const [secondPass] = await createInlineEslint(false).lintText(output, { filePath })
+    expect(secondPass.messages.some(message => String(message.ruleId).startsWith('@stylistic/'))).toBe(false)
+  })
+
+  it('keeps already-multiline attr lists stable when single-line handlers expand', async () => {
+    const filePath = resolve(repoRoot, 'embedded-autofix-multiline-handler-attrs.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      "const router = { push: () => {} }",
+      '',
+      'const view = pug`',
+      '  Div(',
+      "    onPress=()=> {router.push('/')}",
+      "    onLongPress=() => {router.push('/home')}",
+      "    variant='flat'",
+      '    disabled',
+      '  )',
+      '`',
+      '',
+    ].join('\n')
+
+    const [firstPass] = await createInlineEslint(true).lintText(input, { filePath })
+    const output = firstPass.output ?? input
+
+    expect(output).toMatchInlineSnapshot(`
+      "import { pug } from 'startupjs'
+      const router = { push: () => {} }
+
+      const view = pug\`
+        Div(
+          onPress=() => {
+            router.push('/')
+          }
+          onLongPress=() => {
+            router.push('/home')
+          }
+          variant='flat'
+          disabled
+        )
+      \`
+      "
+    `)
+
+    const [secondPass] = await createInlineEslint(false).lintText(output, { filePath })
+    expect(secondPass.messages.some(message => String(message.ruleId).startsWith('@stylistic/'))).toBe(false)
+  })
+
+  it('rebuilds partially-inline attr lists when attrs before the handler stay intact', async () => {
+    const filePath = resolve(repoRoot, 'embedded-autofix-partial-inline-handler-attrs.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      "const router = { push: () => {} }",
+      '',
+      'const view = pug`',
+      "  Div(disabled variant='flat' onPress=()=> {router.push('/')}",
+      "    onLongPress=() => {",
+      "      router.push('/home')",
+      '    }',
+      '  )',
+      '`',
+      '',
+    ].join('\n')
+
+    const [firstPass] = await createInlineEslint(true).lintText(input, { filePath })
+    const output = firstPass.output ?? input
+
+    expect(output).toMatchInlineSnapshot(`
+      "import { pug } from 'startupjs'
+      const router = { push: () => {} }
+
+      const view = pug\`
+        Div(
+          disabled
+          variant='flat'
+          onPress=() => {
+            router.push('/')
+          }
+          onLongPress=() => {
+            router.push('/home')
+          }
+        )
+      \`
+      "
+    `)
+
+    const [secondPass] = await createInlineEslint(false).lintText(output, { filePath })
+    expect(secondPass.messages.some(message => String(message.ruleId).startsWith('@stylistic/'))).toBe(false)
+  })
+
+  it('preserves attr order when an already-multiline handler precedes a single-line handler that expands', async () => {
+    const filePath = resolve(repoRoot, 'embedded-autofix-mixed-handler-order.js')
+    const input = [
+      "import { pug } from 'startupjs'",
+      "const router = { push: () => {} }",
+      '',
+      'const view = pug`',
+      '  Div(',
+      "    onLongPress=() => {",
+      "      router.push('/home')",
+      '    }',
+      "    variant='flat'",
+      "    onPress=()=> {router.push('/')}",
+      '    disabled',
+      '  )',
+      '`',
+      '',
+    ].join('\n')
+
+    const [firstPass] = await createInlineEslint(true).lintText(input, { filePath })
+    const output = firstPass.output ?? input
+
+    expect(output).toMatchInlineSnapshot(`
+      "import { pug } from 'startupjs'
+      const router = { push: () => {} }
+
+      const view = pug\`
+        Div(
+          onLongPress=() => {
+            router.push('/home')
+          }
+          variant='flat'
+          onPress=() => {
+            router.push('/')
+          }
+          disabled
+        )
+      \`
+      "
+    `)
+
+    const [secondPass] = await createInlineEslint(false).lintText(output, { filePath })
+    expect(secondPass.messages.some(message => String(message.ruleId).startsWith('@stylistic/'))).toBe(false)
+  })
+
   it('does not corrupt files and preserves only the expected non-fixable diagnostics for an unformatted example fixture', async () => {
     const tempDir = createTempFixtureCopy()
 
