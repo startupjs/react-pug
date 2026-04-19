@@ -1,466 +1,307 @@
 # Performance Notes
 
-This document describes the current performance profile of `react-pug`, with focus on:
+This document describes the current performance profile of `react-pug`.
 
-1. the VS Code extension and TypeScript language-service path
-2. the compiler/lint integrations
-3. realistic future optimizations and their tradeoffs
+It is not meant to be a speculative optimization wishlist. It is meant to tell a fresh agent:
 
-It is intentionally practical. The goal is to explain where time is spent, what is cheap, what is expensive, and which improvements are worth the added complexity.
+- where time is actually spent
+- which surfaces are cheap vs expensive
+- which optimizations are realistic
+- which optimizations are not worth the complexity right now
 
-## Summary
+## 1. Executive Summary
 
-For typical usage:
+For normal usage today:
 
-- the VS Code extension cost is dominated by TypeScript language-service work, not by the Pug transform itself
-- embedded `style(...)` completions are the most expensive editor-time feature added so far
-- compiler integrations are comparatively cheap because they already operate in a build pipeline that parses/transforms source files anyway
-- source-map generation is more expensive than plain transformation, but still not the main bottleneck in normal builds
+- TypeScript language-service work is still the main editor cost, not Pug code generation
+- embedded style completion in VS Code remains the most latency-sensitive feature we own directly
+- ESLint is more expensive than raw runtime transforms because it now has dual lint surfaces and formatter passes, but it is still usually dominated by ESLint rule execution itself
+- Babel/SWC/esbuild wrappers are thin over core and are not the dominant build bottleneck in normal projects
+- detailed source maps cost more than plain transforms, but source-map fidelity is still the correct tradeoff for this repo
 
-The codebase is currently in a good place performance-wise. There are clear optimization opportunities, but most of them should only be implemented if real latency is observed in large projects.
+The current codebase is in a reasonable place performance-wise. Correctness work is still higher value than speculative optimization.
 
-## VS Code Extension Performance
+## 2. Main Performance Surfaces
 
-The VS Code extension has two main performance surfaces:
+There are four distinct performance surfaces.
 
-1. TypeScript/JavaScript IntelliSense inside `pug\`...\``
-2. embedded language support for terminal `style(...)` blocks
+1. TypeScript / tsserver path
+2. VS Code extension path
+3. compiler/runtime transform path
+4. ESLint processor path
 
-These have different cost profiles.
+They have different cost centers and should not be discussed as if they were one system.
 
-### TypeScript Plugin and Shadow Documents
+## 3. TypeScript Plugin Performance
 
-Most IntelliSense features inside Pug are powered by the TypeScript language-service plugin. The plugin:
+### 3.1 What the plugin does
 
-- finds Pug tagged templates
-- compiles them into a shadow TSX representation
-- asks the normal TS language service to work against that shadow code
-- maps diagnostics, hover, completions, definitions, references, edits, and similar results back into original Pug positions
+The TS plugin:
 
-Current cost characteristics:
+- detects whether a file contains Pug regions
+- builds or serves a shadow TSX representation
+- asks the normal TS language service to work on the shadow code
+- remaps results back to original source
 
-- Finding tagged templates requires parsing the file structure.
-- Compiling Pug to TSX is linear in the size of the relevant Pug region.
-- Mapping results back to original source is relatively cheap once region metadata exists.
-- The heaviest part is usually still TypeScript itself, especially semantic analysis and completion generation.
+### 3.2 What costs time
 
-Practical implication:
+Most cost here is still from TypeScript itself:
 
-- normal editing outside Pug is not meaningfully affected by Pug logic
-- editing inside Pug pays some extra shadow-document and mapping cost
-- large TS projects will still mostly be limited by TS language-service performance, not by `react-pug`
+- semantic analysis
+- completion generation
+- symbol lookup/navigation
+- large project graph state
 
-### TextMate Highlighting
+The extra Pug-specific cost is:
 
-Syntax highlighting for Pug and embedded style languages is comparatively cheap.
+- region extraction
+- shadow transform
+- mapping/query helpers
 
-It is grammar-based and handled by VS Code tokenization. The extension contributes:
+That extra cost is meaningful, but in practice it is still secondary to TS language-service work in large projects.
 
-- a TextMate injection grammar for Pug template literals
-- embedded language scopes for CSS, SCSS, Sass, and Stylus regions
+### 3.3 Recent architectural improvement
 
-Current cost characteristics:
+The repo now has shared mapping/query helpers in core for:
 
-- low runtime overhead
-- no heavy AST or TypeScript work involved
-- mostly limited by VS Code's normal tokenization pipeline
+- original <-> shadow spans
+- raw/stripped region offsets
+- classification remapping
+- nearby same-line fallback
 
-Practical implication:
+That matters for performance mostly because it reduces duplicated work and drift. It is more of a stability/maintainability win than a dramatic speed win.
 
-- highlighting itself is not a significant performance concern
-- incorrect scope mapping is more likely to be a correctness problem than a speed problem
+### 3.4 What to optimize first if the TS path becomes slow
 
-### Embedded `style(...)` IntelliSense
+Recommended order:
 
-This is currently the most performance-sensitive editor feature.
+1. cache document analysis per document version
+2. cache compiled region results per document version
+3. profile completion-heavy scenarios before doing anything more invasive
 
-When completion is requested inside a terminal Pug `style(...)` block, the extension:
+Do **not** jump straight to incremental AST diffing or background recomputation unless profiling shows real pain.
 
-1. analyzes the current source to find whether the cursor is inside a style block
-2. recompiles the relevant Pug region enough to recover the extracted style content
-3. maps the real cursor position into the stripped embedded style document
-4. opens or updates a hidden virtual document with the correct embedded language id
-5. asks VS Code's CSS/SCSS/Stylus/Sass provider for completions
-6. maps completion edits back into the real file
+## 4. VS Code Extension Performance
 
-Current cost characteristics:
+### 4.1 TextMate highlighting
 
-- this cost is paid only when VS Code asks for completions at a position in a JS/TS file
-- it is most noticeable during explicit completion or auto-triggered suggestion while typing in a `style(...)` block
-- it does not broadly slow down editing elsewhere in the file
+Grammar-based highlighting is cheap.
 
-Practical implication:
+It is handled by VS Code tokenization and is usually not the bottleneck. Most bugs there are correctness bugs, not speed bugs.
 
-- the overhead is localized
-- the most likely place to notice latency is repeated auto-triggered completion inside large Pug style blocks
+### 4.2 Embedded style completions
 
-### Style Language Support Caveat
+This is the most performance-sensitive editor feature we own directly.
 
-Performance and support are different concerns, but they interact.
+When completion is requested inside a terminal Pug `style(...)` block, the extension must:
 
-Current editor support matrix:
+1. detect whether the cursor is inside a style block
+2. recover the extracted style content and cursor mapping
+3. update or create a hidden virtual style document
+4. delegate to VS Code's CSS/SCSS/Sass/Stylus providers
+5. map edits back to the real file
 
-- `css`: built-in VS Code support
-- `scss`: built-in VS Code support
-- `styl`: requires `sysoev.language-stylus`
-- `sass`: requires `Syler.sass-indented`
+This is localized work, but it is the most likely place for perceived latency while typing.
 
-If the underlying VS Code language support is missing, completion/highlighting quality drops regardless of `react-pug` performance.
+### 4.3 What is already good enough
 
-### Cost of Current Import/Style Diagnostics
+The extension does not generally make editing outside Pug slow. The expensive work is localized to:
 
-The extension and TS plugin also perform extra checks such as:
+- requests inside Pug
+- especially requests inside embedded style blocks
 
-- `requirePugImport`
-- automatic removal of used `pug` imports in shadow output
-- style-block placement validation
+That means broad repo-wide performance claims about the extension are usually misleading.
 
-These checks are cheap compared to:
+## 5. Runtime / Compiler Adapter Performance
 
-- TypeScript semantic operations
-- completion requests
+The build adapters are:
 
-They piggyback on parsing or transform passes that already exist.
+- Babel plugin
+- SWC wrapper
+- esbuild plugin
 
-## Compiler and Lint Integration Performance
+All three reuse `transformSourceFile(...)` from core.
 
-Published runtime/build packages:
+### 5.1 Shared costs
 
-- `@react-pug/babel-plugin-react-pug`
-- `@react-pug/swc-plugin-react-pug`
-- `@react-pug/esbuild-plugin-react-pug`
-- `@react-pug/eslint-plugin-react-pug`
+Common work across all of them:
 
-All of them reuse `@react-pug/react-pug-core`.
+- find tagged templates
+- compile Pug regions
+- optionally extract and relocate terminal style blocks
+- build source maps or mapping metadata when requested
 
-### Common Shared Costs
+This work is mostly linear in file size and especially in transformed Pug region size.
 
-Across build/lint integrations, the main work is:
+### 5.2 Babel
 
-- locating matching tagged templates
-- compiling Pug content into JSX/TSX-like output
-- optionally extracting and relocating terminal `style(...)` blocks
-- optionally generating source maps back to original Pug ranges
-
-The transform itself is generally linear in the size of the input file and especially in the size of the matched Pug regions.
-
-### Babel Plugin
-
-Babel has two source-map modes:
-
-- `basic`
-- `detailed`
+Babel has two source-map modes.
 
 #### `basic`
 
-In `basic` mode, Babel replaces only matched `pug` tagged-template expressions and lets normal Babel parsing/transformation handle the rest.
+Cheaper and simpler.
 
-Performance characteristics:
-
-- relatively cheap
-- best compatibility/lowest complexity mode
-- coarse mapping inside transformed Pug, but fine for many build setups
+- replaces matched tagged-template expressions during traversal
+- keeps normal Babel ownership of the rest of the file
+- mapping inside transformed Pug is intentionally coarse
 
 #### `detailed`
 
-In `detailed` mode, the plugin rewrites the source and attaches a granular input source map so later Babel stages can preserve detailed mapping into Pug.
+More expensive.
 
-Performance characteristics:
+- pretransforms full source through core
+- attaches inline source map
+- uses `parserOverride`
+- allows downstream Babel stages to compose better mappings
 
-- more expensive than `basic`
-- more source-map work
-- still practical for normal builds
+Use `basic` unless detailed source-map fidelity is actually needed.
 
-Main takeaway:
+### 5.3 SWC
 
-- if detailed source maps are not important, `basic` is the cheaper and simpler mode
-- if debugger fidelity matters, `detailed` is the right tradeoff
+SWC integration is usually fast enough that the core transform is the main custom cost. Nothing in the current repo suggests SWC-specific optimization is urgent.
 
-### SWC Plugin
+### 5.4 esbuild
 
-SWC integration is generally efficient because SWC is fast at baseline.
+Same general story as SWC.
 
-Current cost characteristics:
+The esbuild wrapper is thin. If performance becomes a problem, it is more likely to be because of:
 
-- transform cost is mostly the Pug compile and shared source-transform work
-- source maps add overhead, but SWC itself is not the bottleneck here
+- many transformed files
+- large Pug regions
+- source-map generation
 
-Practical implication:
+not because of esbuild wrapper logic itself.
 
-- SWC is likely to remain one of the fastest integration paths for production builds
+## 6. ESLint Processor Performance
 
-### esbuild Plugin
+This is the most structurally complex performance surface after the editor path.
 
-esbuild integration is also efficient at baseline.
+### 6.1 What the processor now does
 
-Current cost characteristics:
+For files with Pug regions, the processor can do all of the following:
 
-- Pug analysis/transform is a custom pre-step around an otherwise very fast pipeline
-- source-map generation is the main extra cost beyond raw transformation
+- main lint-oriented transform through core
+- final formatting convergence passes
+- embedded source-faithful lint blocks for JS inside Pug
+- postprocess remapping back to original source
+- embedded autofix reconstruction
 
-Practical implication:
+This is more work than a plain preprocess/postprocess processor.
 
-- for projects already using esbuild, `react-pug` should not be the dominant build-time cost unless files contain very large or numerous Pug regions
+### 6.2 Why this is still acceptable
 
-### ESLint Processor
+Even though the processor is heavier than before:
 
-The ESLint processor preprocesses files before rules run.
+- ESLint rule execution is still often the main lint cost in real projects
+- the extra work is only paid on files with Pug regions
+- the added cost buys major UX improvements in diagnostics and autofix correctness
 
-Performance characteristics:
+That is the right tradeoff for this repo.
 
-- there is transform overhead before lint rules execute
-- however, linting itself is usually already expensive enough that the Pug preprocessing is not the dominant cost
-- no source-map emission is required in the same sense as Babel/SWC/esbuild output maps
+### 6.3 What is expensive in the ESLint path
 
-Practical implication:
+The most expensive parts are:
 
-- lint-time overhead is acceptable
-- performance pain in ESLint runs is more likely to come from ESLint rules than from the Pug preprocessing layer
+- formatter convergence passes
+- embedded-source lint block generation when there are many JS sites in a file
+- fix reconstruction for complex embedded/multiline attr cases
 
-## Source Map Performance
+### 6.4 What not to optimize prematurely
 
-Source maps have a real cost, but they are still secondary compared to correctness.
+Do not optimize away the second lint surface or embedded autofix reconstruction just because they add work.
 
-Current implementation uses:
+They exist to preserve user-facing correctness, and the current repo direction explicitly values that over a small amount of lint-time speed.
 
-- in-memory mapping structures for editor remapping
-- `@jridgewell/gen-mapping` for serialized compiler-facing maps
+## 7. Source Map and Mapping Costs
 
-Performance characteristics:
+Source maps and mapping helpers are not free.
 
-- generating detailed source maps is more expensive than plain code emission
-- mapping work scales with transformed output size
-- current implementation is correct and maintainable, even if not maximally optimized
+Current mapping costs come from:
 
-Important practical point:
+- generated/original offset tables
+- region boundary maps
+- shadow query helpers
+- serialized source-map generation for compiler adapters
 
-- source-map generation is not free
-- but removing fidelity to save a small amount of time would be a poor tradeoff for a tooling project like this
+But these are still justified because this repo is fundamentally a tooling project. Mapping fidelity is part of the product.
 
-## Future Performance Improvements
+A fast transform with bad remapping would be the wrong tradeoff.
 
-This section lists realistic future optimizations, with two separate costs:
+## 8. What We Learned From Recent Refactors
 
-- implementation difficulty
-- long-term maintenance cost
+Recent work matters for performance interpretation.
 
-Difficulty scale:
+### 8.1 Shared helpers reduced drift more than raw time
 
-- Low
-- Medium
-- High
+Moving mapping/query helpers into core probably did not create a dramatic speedup by itself. What it did do is:
 
-Maintenance scale:
+- reduce duplicate work
+- reduce repeated bespoke edge-case logic
+- make future optimization easier because behavior is centralized
 
-- Low
-- Medium
-- High
+### 8.2 ESLint got more expensive but more correct
 
-### 1. Cache Pug Analysis Per Document Version
+The ESLint processor now does more work than earlier versions because it supports:
 
-Idea:
+- source-faithful embedded JS diagnostics
+- source-faithful embedded autofix
+- attr-container reconstruction for multiline fixes
 
-- cache `extractPugAnalysis(...)` results keyed by document URI + version
-- reuse for repeated hover/completion/definition requests against the same unchanged document
+This should be treated as intentional product scope, not accidental overhead.
 
-Expected benefit:
+### 8.3 Vendored lexer fixes were correctness work, not performance work
 
-- reduces repeated full-file parsing in the VS Code extension
-- especially useful when many editor requests hit the same file in quick succession
+Recent lexer improvements for multiline `p= ...` and multiline `#{...}` are not primarily performance changes. They are correctness changes that prevent fallback and recovery paths from doing extra work.
 
-Implementation difficulty:
-
-- Low to Medium
-
-Maintenance cost:
-
-- Low
-
-Tradeoff:
-
-- strong candidate for future optimization
-- good payoff without making the codebase much harder to support
-
-### 2. Cache Compiled Pug Region Results Per Document Version
-
-Idea:
-
-- cache `compilePugToTsx(...)` output per region after analysis
-- reuse when repeated editor requests target the same region
-
-Expected benefit:
-
-- reduces repeated compilation cost for the same Pug block
-- especially useful for embedded style completion and repeated IntelliSense in one template
-
-Implementation difficulty:
-
-- Medium
-
-Maintenance cost:
-
-- Medium
-
-Tradeoff:
-
-- worthwhile if editor latency becomes noticeable
-- adds more cache invalidation complexity than analysis caching
-
-### 3. Reuse Hidden Embedded Style Documents More Aggressively
-
-Idea:
-
-- maintain stable virtual style documents per source document + region identity
-- update contents instead of creating many short-lived virtual docs
-
-Expected benefit:
-
-- reduces document creation churn
-- may help repeated completion scenarios inside the same style block
-
-Implementation difficulty:
-
-- Medium
-
-Maintenance cost:
-
-- Medium
-
-Tradeoff:
-
-- useful if style completions become a hotspot
-- manageable, but requires careful lifecycle handling and cleanup
-
-### 4. Incremental Region Reuse Instead of Reanalyzing Whole File
-
-Idea:
-
-- reuse previous analysis and update only affected regions after edits
-
-Expected benefit:
-
-- potentially significant on large files with multiple Pug templates
-
-Implementation difficulty:
-
-- High
-
-Maintenance cost:
-
-- High
-
-Tradeoff:
-
-- this would add substantial complexity
-- likely not worth it unless profiling shows a real bottleneck in very large codebases
-
-Recommendation:
-
-- avoid for now
-
-### 5. Build Source Maps Directly From Region Segments Instead of Character Scanning
-
-Idea:
-
-- generate serialized maps from structured mapping segments instead of scanning generated output character-by-character
-
-Expected benefit:
-
-- better source-map generation performance
-- cleaner asymptotics for large transformed outputs
-
-Implementation difficulty:
-
-- Medium to High
-
-Maintenance cost:
-
-- Medium
-
-Tradeoff:
-
-- promising if compiler-side source-map generation becomes measurable in large builds
-- still more specialized and harder to reason about than the current straightforward implementation
-
-Recommendation:
-
-- reasonable future optimization, but not urgent
-
-### 6. Specialized Fast Path for Completion-Only Style Context Lookup
-
-Idea:
-
-- use a lighter lookup path for "am I inside a style block and where?" without recompiling more than necessary
-
-Expected benefit:
-
-- lower latency for embedded style completions
-
-Implementation difficulty:
-
-- Medium
-
-Maintenance cost:
-
-- Medium to High
-
-Tradeoff:
-
-- fast paths tend to drift from the canonical transform logic
-- that increases correctness risk over time
-
-Recommendation:
-
-- only do this if profiling shows style completions are still too slow after caching
-
-### 7. Worker/Background Precomputation for Editor Features
-
-Idea:
-
-- precompute region analysis or style extraction off the critical request path
-
-Expected benefit:
-
-- could improve perceived completion latency
-
-Implementation difficulty:
-
-- High
-
-Maintenance cost:
-
-- High
-
-Tradeoff:
-
-- complexity is disproportionate for the current size of the problem
-- risks subtle consistency bugs between editor state and cached background results
-
-Recommendation:
-
-- not recommended unless the project grows far beyond current usage
-
-## Recommended Optimization Order
+## 9. Recommended Optimization Order
 
 If performance work becomes necessary, the recommended order is:
 
-1. Cache document analysis per document version
-2. Cache compiled region results per document version
-3. Reuse embedded style virtual documents more aggressively
-4. Optimize serialized source-map generation
-5. Consider any incremental/fast-path architecture only if profiling still shows real latency
+1. cache document analysis per document version
+2. cache compiled Pug region results per document version
+3. reuse hidden embedded style documents more aggressively
+4. optimize serialized source-map generation if profiling shows it matters
+5. only then consider more invasive approaches such as incremental reuse or specialized fast paths
 
-This order keeps the codebase maintainable while addressing the most likely hotspots first.
+## 10. Things That Are Probably Not Worth It Right Now
 
-## Current Recommendation
+Avoid these unless profiling shows real user pain:
 
-Do not optimize preemptively beyond documentation and basic profiling.
+- whole-file incremental diffing for Pug transforms
+- background precomputation machinery for editor features
+- separate fast-path parsers that drift from canonical transform logic
+- replacing the hybrid text/mapping architecture with a full-file AST reprint system in the name of speed
 
-Current implementation priorities are correct:
+Those changes would make the codebase harder to support and are not justified by current evidence.
 
-- correctness of mapping
-- correctness of IntelliSense behavior
-- stable compiler behavior
-- understandable shared transform logic
+## 11. Practical Profiling Guidance
 
-At the moment, the only area likely to justify further performance work soon is embedded style completions in the VS Code extension. Everything else is already in a reasonable place for normal project sizes.
+If you need to investigate a slowdown, isolate which surface you are on first.
+
+Questions to ask:
+
+1. Is this editor latency or build/lint latency?
+2. Is it inside Pug, inside a style block, or outside Pug?
+3. Is the time spent in our transform or in the underlying tool (TS, ESLint, Babel, VS Code CSS provider)?
+4. Is the issue in mapping/query helpers, or in repeated re-analysis of unchanged documents?
+
+Use real consumer repos when they are available locally or when there is an explicit local validation setup for them. Common public validation targets used by this repo include:
+
+- `../startupjs`
+- `../startupjs-ui`
+
+They are better performance signals than synthetic micro-benchmarks.
+
+## 12. Current Recommendation
+
+Do not optimize preemptively.
+
+Current priorities are still correct:
+
+- correctness of transforms
+- correctness of diagnostics/fix mapping
+- stable editor behavior
+- stable autofix behavior
+- maintainable shared architecture
+
+The only area that still looks like an obvious future performance target is embedded style completions in the VS Code extension. Everything else is currently in a reasonable place for normal project sizes.

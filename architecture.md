@@ -1,24 +1,36 @@
 # Architecture: `react-pug`
 
-## 1. Scope
+## 1. Purpose
 
-`react-pug` is a workspace monorepo that provides:
+`react-pug` is a monorepo for treating `pug\`...\`` as first-class code in JavaScript and TypeScript projects.
 
-- editor IntelliSense for `pug\`...\`` in VS Code
-- source transforms for build/lint pipelines (Babel, SWC, esbuild, ESLint)
-- shared source mapping utilities so diagnostics map back to original Pug text
+The repo provides:
+
+- shared Pug parsing and code generation
+- runtime/build transforms for Babel, SWC, and esbuild
+- a TypeScript language-service plugin for editor tooling
+- a VS Code extension for activation, grammar injection, and debugging commands
+- an ESLint processor that reports diagnostics and autofixes back on original Pug source
 
 Supported source file kinds:
 
-- `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs`, `.cjs`
+- `.js`, `.jsx`, `.mjs`, `.cjs`
+- `.ts`, `.tsx`, `.mts`, `.cts`
 
----
+The main design goal is not just "compile Pug". It is:
+
+- transform Pug correctly
+- map diagnostics, ranges, and edits back to original source correctly
+- keep the user-facing experience stable across editor, compiler, and lint flows
 
 ## 2. Workspace Layout
 
-```
+```text
 packages/
   react-pug-core/
+  pug-lexer/
+  is-expression/
+  check-types/
   typescript-plugin-react-pug/
   vscode-react-pug-tsx/
   babel-plugin-react-pug/
@@ -27,311 +39,531 @@ packages/
   eslint-plugin-react-pug/
 ```
 
-Top-level orchestration files:
+High-level roles:
 
-- `esbuild.config.mjs` build pipeline (extension + ts plugin bundles)
-- `package.json` workspace scripts
-- `vitest.config.ts` test discovery
-- `.github/workflows/ci.yml` CI jobs
-- `scripts/check-pug-types.mjs` project-level pug-aware checker
+- `react-pug-core`: shared transform, mapping, shadow-document, lint-transform logic
+- `pug-lexer`: vendored lexer with repo-specific JS/TS expression support
+- `is-expression`: expression validator used by the lexer
+- `check-types`: CLI wrapper over the TS plugin for typechecking Pug-enabled projects from the command line
+- `typescript-plugin-react-pug`: tsserver adapter over the core shadow model
+- `vscode-react-pug-tsx`: VS Code extension and TextMate grammar package
+- `babel-plugin-react-pug`, `swc-plugin-react-pug`, `esbuild-plugin-react-pug`: build/runtime adapters around core
+- `eslint-plugin-react-pug`: ESLint processor with source-faithful diagnostics and autofix
 
----
+## 3. Core Architectural Principles
 
-## 3. Package Responsibilities
+### 3.1 Hybrid text-and-mapping model
 
-### 3.1 `@react-pug/react-pug-core`
+The repo intentionally does **not** use a whole-file AST reprint pipeline as the main architecture.
 
-Shared language/compiler core:
+Instead it uses:
 
-- extract tagged template regions
-- compile Pug AST into JSX/TSX fragments
-- extract terminal `style` blocks and move them into scope-level helper calls
-- assemble transformed file output
-- produce mapping metadata for offset/range remapping
-- expose helpers for line/column conversions
+- original file text
+- extracted Pug regions
+- transformed replacement text for those regions
+- copied original-text segments around them
+- explicit synthetic insertions when needed
+- mapping utilities between original, shadow, and generated outputs
 
-Core entry points used across packages:
+Why:
 
-- `extractPugRegions(...)`
-- `compilePugToTsx(...)`
-- `buildShadowDocument(...)`
-- `transformSourceFile(...)`
-- `mapGeneratedRangeToOriginal(...)`
-- `mapGeneratedDiagnosticToOriginal(...)`
+- whole-file AST reprint would make untouched code unstable
+- node locations are not rich enough to replace our mapping metadata
+- editor/lint workflows need precise range remapping, not just emitted code
 
-### 3.2 `@react-pug/typescript-plugin-react-pug`
+### 3.2 Shared core, thin adapters
 
-TypeScript language-service plugin:
+The intended layering is:
 
-- patches `LanguageServiceHost` snapshots/versions
-- serves shadow documents to tsserver
-- remaps all returned positions/spans/edits to original Pug source
-- injects optional cssxjs/startupjs React attribute types in TS/TSX mode
+- `react-pug-core` owns parsing, compilation, mapping, and shared query helpers
+- adapters own environment-specific wiring only
 
-### 3.3 `vscode-react-pug-tsx`
+That means:
 
-VS Code extension host package:
+- compilers are thin wrappers over `transformSourceFile(...)`
+- the TS plugin is an adapter over the shadow-document and query helpers
+- the ESLint processor is an adapter over the lint transform and remapping model
 
-- contributes tsserver plugin registration
-- contributes grammar injection for Pug template literals
-- contributes `pugReact.*` settings
-- provides `Pug React: Show Shadow TSX` command for debugging
+### 3.3 Correctness first, suppression last
 
-### 3.4 `@react-pug/babel-plugin-react-pug`
+The repo tries hard to fix false positives and broken autofix by improving transform or mapping logic, not by suppressing rules broadly.
 
-Babel transform adapter:
+Narrow filtering exists only where the code is fundamentally synthetic and cannot be interpreted as user-authored logic.
 
-- rewrites `pug\`...\`` via `react-pug-core` runtime mode
-- supports `sourceMaps: 'basic' | 'detailed'`
-- `basic` mode parses region-level replacement expressions and swaps only matched `pug` tagged-template expressions during `Program` traversal
-- `detailed` mode uses `parserOverride` plus an inline input source map so later Babel transforms can compose mappings back to original Pug offsets
-- stores transform metadata on Babel file for downstream remapping
+## 4. Core Pipeline
 
-### 3.5 `@react-pug/swc-plugin-react-pug`
+### 4.1 Region extraction
 
-SWC adapter utilities:
-
-- pretransform with `react-pug-core`
-- optional convenience wrapper around `@swc/core.transformSync`
-- generated->original mapping helpers
-
-### 3.6 `@react-pug/esbuild-plugin-react-pug`
-
-esbuild plugin:
-
-- `onLoad` interception for JS/TS sources
-- runtime-safe source transform
-- loader inference by extension
-- diagnostic/range remapping helpers using esbuild-style line/column inputs
-
-### 3.7 `@react-pug/eslint-plugin-react-pug`
-
-ESLint processor:
-
-- preprocess transform before linting
-- postprocess location remap back to original files
-- supports autofix message flow
-
----
-
-## 4. Core Compilation Pipeline
-
-### 4.1 Region Extraction
-
-`extractRegions.ts` parses source with Babel parser and finds `TaggedTemplateExpression` nodes whose tag matches configured `tagFunction` (default: `pug`).
+`react-pug-core/src/language/extractRegions.ts` parses the host file with Babel and finds tagged templates matching the configured `tagFunction`.
 
 It also computes:
 
-- the target scope for terminal `style` block injection
-  - nearest enclosing block scope, or `Program`
-  - expression-bodied arrows are treated as their own insertion target and rewritten to block bodies later
-  - single-line statement bodies such as `if (...) return ...` are treated as statement-body targets and normalized into blocks later
-- the module source of the matched `pug` import
-- existing `css` / `styl` / `sass` / `scss` imports from that same source
-- the insertion point for any new helper import
+- the original source spans of Pug regions
+- import information needed for `requirePugImport`
+- terminal `style(...)` block insertion targets
+- class shorthand settings
+- region metadata needed for later shadow/generated mapping
 
-Fallback regex extraction is used when AST parse fails.
+Fallback regex extraction exists only for parse-failure recovery.
 
-### 4.2 Pug Parsing and Emission
+### 4.2 Pug lexing and parsing
 
-`pugToTsx.ts` pipeline:
+`react-pug-core/src/language/pugToTsx.ts` compiles region content through:
 
-1. lex (`@react-pug/pug-lexer`)
-2. strip comments
-3. parse Pug AST
-4. emit JSX/TSX text and mapping segments
+1. `@react-pug/pug-lexer`
+2. comment stripping / preprocessing
+3. Pug AST parsing
+4. JSX/TSX emission plus mapping metadata
 
 Supported constructs include:
 
 - tags/components
-- attributes/spreads
+- attrs/spreads
 - class/id shorthand
-- `#{}`, `!{}`, and `${}` interpolation
-- nested `pug` inside `${...}`
+- `#{...}`, `!{...}`, `${...}` interpolation
+- `tag= expr`
+- `-` code lines
 - `if/else`, `each`, `while`, `case/when`
-- `-` code lines and `tag= expr`
-- text nodes and `|` lines
-- terminal `style` blocks using `css`, `styl`, `sass`, or `scss`
+- terminal `style` blocks
 
-Terminal `style` blocks are extracted before normal Pug parsing. The `style` node itself is not emitted as JSX. Instead, its dedented body is returned as a separate payload so the shadow/runtime transform can inject a helper call at the top of the immediate enclosing JS scope. For `Program`, that insertion point is after the last import or directive. When the nearest target is a single-line statement body, the transform first normalizes that body into a block and then inserts the helper call before the original statement.
+Recent important contract details:
 
-### 4.3 Compile Modes
+- valid multiline `p= ...` is supported in the vendored lexer
+- valid multiline `#{...}` interpolation is supported in the vendored lexer
+- multiline `${...}` is handled in core preprocessing
+- attr expressions are classified structurally, not by raw quote heuristics
 
-- `languageService`: TS-oriented output for editor tooling
-- `runtime`: JS/JSX-safe output for compilers/linters
+### 4.3 Source transform
 
-Runtime mode is required for Babel/SWC/esbuild/ESLint adapters and must not emit TS-only syntax.
+`transformSourceFile(...)` is the main shared entry point for runtime/compiler flows.
 
-### 4.4 Source Transform API
-
-`transformSourceFile(...)` replaces all Pug regions in a source file and returns:
+It returns:
 
 - transformed `code`
-- `document` (original/shadow model)
-- `regions`
-- generated->original offset mapping helpers
+- the `document` model
+- mapped `regions`
+- generated-to-original mapping helpers
 
-All compiler adapters are thin wrappers around this API.
+All compiler wrappers depend on this path.
 
----
+### 4.4 Shadow document
 
-## 5. Mapping Model
+`buildShadowDocument(...)` creates the TS/VS Code shadow representation.
 
-Each region stores Volar-compatible mappings and `CodeInformation` feature flags. Mapping utilities support:
-
-- original -> generated offsets
-- generated -> original offsets
-- generated diagnostic range -> original range
-
-The shadow document now consists of:
+The shadow document consists of:
 
 - copied original-text segments
 - mapped generated Pug replacement regions
-- mapped generated style-helper-call regions
-- synthetic insertions such as helper imports and arrow-body wrappers
+- mapped style-helper insertions
+- synthetic import/wrapper insertions where required
 
-This model is shared by:
+This model is used by:
 
-- tsserver plugin remapping
-- Babel/SWC/esbuild diagnostic remap helpers
-- ESLint processor postprocess remapping
+- the TypeScript plugin
+- core mapping/query helpers
+- diagnostic span remapping
 
----
+### 4.5 Lint transform
 
-## 6. Class Shorthand Strategy
+`react-pug-core/src/language/lintTransform.ts` is the lint-oriented layer on top of the runtime transform.
 
-Core compile options:
+It owns:
+
+- lint-only semantic normalization of generated Pug JSX
+- mapped region rewriting
+- boundary maps for rewritten regions
+- region formatting context metadata
+- shared segmented-region rewrite plumbing
+- shared insertion-range helpers
+
+This is intentionally separate from runtime transforms because runtime-correct JSX is not always lint-correct JSX.
+
+Examples of lint-only normalization:
+
+- attrless `Fragment` -> fragment shorthand
+- safe repeated ternary simplification
+
+## 5. Mapping Model
+
+There are several mapping surfaces in the repo.
+
+### 5.1 Original <-> shadow
+
+Used by the TypeScript plugin and VS Code tooling.
+
+Current shared helpers in core cover:
+
+- original offset -> shadow offset
+- shadow offset -> original offset
+- region raw offset <-> stripped offset
+- original span -> shadow span
+- shadow span -> original span
+- encoded classification remapping
+- nearby same-line fallback for typing-time editor requests
+
+These now live in core so the TS plugin and VS Code extension do not each own their own offset math.
+
+### 5.2 Generated <-> original
+
+Used by:
+
+- Babel/SWC/esbuild diagnostics and source maps
+- ESLint main transformed-surface diagnostics
+
+### 5.3 Embedded-site mapping
+
+Used only by the ESLint processor.
+
+When user-authored JS exists inside Pug sites like:
+
+- attrs
+- `#{...}`
+- `${...}`
+- `tag= expr`
+- inline handler bodies
+
+ESLint can lint that JS through a source-faithful embedded block and map results back to the original site.
+
+## 6. Package Responsibilities
+
+### 6.1 `@react-pug/react-pug-core`
+
+Owns:
+
+- region extraction
+- Pug compilation
+- source transforms
+- shadow documents
+- mapping/query helpers
+- lint-oriented core transform
+- document issue shaping
+
+It is the shared source of truth for transform and mapping behavior.
+
+### 6.2 `@react-pug/typescript-plugin-react-pug`
+
+Owns only TS-specific adaptation:
+
+- patching `LanguageServiceHost`
+- serving shadow snapshots
+- delegating to TS on shadow text
+- remapping TS results back to original source
+- injecting core-owned document issues into TS diagnostics
+- narrow TS-specific filtering where generated shadow TSX would otherwise create false positives
+
+It should stay adapter-like.
+
+### 6.3 `@react-pug/check-types`
+
+Owns:
+
+- CLI entry point for typechecking files/projects that contain `pug\`...\``
+- wiring to the TS plugin in non-editor workflows
+
+It should remain thin. If a typechecking behavior bug appears here, it is usually really in:
+
+- the TS plugin
+- shared shadow/mapping logic in core
+- or the caller's TypeScript project configuration
+
+### 6.4 `vscode-react-pug-tsx`
+
+Owns:
+
+- extension activation
+- TS plugin registration
+- settings surface
+- `Show Shadow TSX` command
+- TextMate grammar injection
+- embedded style completion integration via VS Code APIs
+
+Important boundary:
+
+- TextMate highlighting is separate from the shadow-document path
+- it should share assumptions where useful, but it is not part of the same mapping architecture
+
+### 6.5 `@react-pug/babel-plugin-react-pug`
+
+Owns Babel integration only.
+
+Modes:
+
+- `sourceMaps: 'basic'`
+  - replace matched tagged templates during traversal
+  - coarse mapping inside transformed Pug
+  - compatibility-first
+- `sourceMaps: 'detailed'`
+  - pretransform full source through core
+  - inject inline input map
+  - parse through `parserOverride`
+  - preserve detailed mapping through downstream Babel transforms
+
+Basic mode is intentionally simpler and does not promise detailed original-Pug mapping.
+
+### 6.6 `@react-pug/swc-plugin-react-pug`
+
+Thin wrapper over core runtime transform plus SWC invocation and remap helpers.
+
+### 6.7 `@react-pug/esbuild-plugin-react-pug`
+
+Thin wrapper over core runtime transform inside esbuild `onLoad`.
+
+### 6.8 `@react-pug/eslint-plugin-react-pug`
+
+The ESLint plugin is the most structurally specialized adapter.
+
+It owns:
+
+- preprocess transform before lint
+- postprocess remap back to original source
+- dual lint surfaces
+- embedded-site autofix reconstruction
+- final stylistic shaping for the lint surface
+
+It intentionally does **not** own semantic lint normalization anymore. That is in core.
+
+## 7. ESLint Architecture
+
+### 7.1 Two lint surfaces
+
+The processor uses two different lint surfaces.
+
+#### Main transformed surface
+
+This is lint-oriented JSX/TSX produced from the core lint transform.
+
+Used for:
+
+- JSX/React/semantic rules that need the whole transformed file
+- broader AST-aware rules over generated structure
+
+#### Embedded source-faithful surface
+
+This is used only for embedded JS sites inside Pug.
+
+Used for:
+
+- source-faithful stylistic diagnostics
+- source-faithful embedded autofix
+- a narrow set of safe expression-local rules
+
+This split is deliberate. It improves UX because transformed JSX indentation often does not correspond to what the user actually typed inside an embedded JS site.
+
+### 7.2 Why embedded rule allowlisting exists
+
+Embedded blocks are isolated snippets. They do not always preserve real outer scope.
+
+So the processor intentionally does **not** trust every ESLint rule on that surface.
+
+Current rule of thumb:
+
+- stylistic embedded diagnostics are allowed
+- only a narrow set of safe non-stylistic rules are allowed on embedded expression sites
+- broader scope-sensitive rules still come from the main transformed surface
+
+This is a correctness decision, not a convenience suppression.
+
+### 7.3 Embedded autofix model
+
+Embedded autofix is now stable because fixes are reconstructed at the correct structural layer.
+
+There are two cases:
+
+#### Single embedded site replacement
+
+- fix the normalized embedded JS site
+- stabilize it through formatting
+- restore the surrounding Pug indentation baseline
+- replace the whole original site once
+
+#### Multiline attr-container replacement
+
+If a multiline embedded fix occurs inside an inline attr container with sibling attrs, the processor does **not** try to rewrite each site independently.
+
+Instead it:
+
+- aggregates fixes at the attr-container level
+- rebuilds the whole attr list once
+- uses the vendored Pug lexer to split attrs correctly
+- converges the container to multiline when that is the stable shape
+
+This prevents corruption in cases like inline handlers expanding to multiline JS.
+
+### 7.4 Current ESLint limitations
+
+Still true today:
+
+- generated-JSX-surface fixes are not mapped back generically the same way embedded-source fixes are
+- multiline unbuffered `- ...` statements across several lines are not covered by the same source-faithful embedded formatting contract
+- the internal formatter still depends on deprecated `@stylistic/jsx-indent` / `@stylistic/jsx-indent-props` compatibility rules for convergence
+
+These are known limitations and should be treated as explicit contract boundaries.
+
+## 8. VS Code and TS Plugin Flow
+
+### 8.1 TypeScript request flow
+
+High-level:
+
+1. TS asks for snapshot/version
+2. plugin serves shadow text if Pug exists
+3. TS computes diagnostics/completions/etc on shadow text
+4. plugin remaps results back to original Pug source
+
+The plugin currently covers:
+
+- completions
+- hover / quick info
+- navigation / references / rename
+- semantic diagnostics
+- classifications
+- code-fix / refactor span remapping
+
+### 8.2 VS Code highlighting and style support
+
+The extension contributes:
+
+- TextMate grammar injection for `pug\`...\``
+- embedded style language scopes
+- debug command for showing shadow TSX
+- embedded style completion support via hidden virtual documents
+
+Important correctness rule already fixed:
+
+- the Pug grammar must **not** inject inside host comments or strings
+
+## 9. Class Shorthand Strategy
+
+Core class-related options:
 
 - `classAttribute`: `auto | className | class | styleName`
 - `classMerge`: `auto | concatenate | classnames`
 - `startupjsCssxjs`: `auto | true | false`
-- `componentPathFromUppercaseClassShorthand`: `boolean` (default `true`)
+- `componentPathFromUppercaseClassShorthand`: `boolean`
 
 Default behavior:
 
-- `auto` => `className + concatenate`
-- if startupjs/cssxjs marker is detected and auto mode is active:
+- default React-like output: `className + concatenate`
+- if startupjs/cssxjs markers are detected under auto mode:
   - `styleName + classnames`
-- if `componentPathFromUppercaseClassShorthand` is enabled:
-  - leading uppercase dot-segments after a component are treated as component path
-  - first lowercase segment starts class shorthand mode for the rest of the chain
 
-`styleName + classnames` emit supports nested array/object forms.
+The classnames-style merge path supports:
 
-VS Code settings pass these options to the TS plugin:
+- nested arrays
+- object forms
+- dashed computed keys such as `['non-responsive']`
 
-- `pugReact.classShorthandProperty`
-- `pugReact.classShorthandMerge`
-- `pugReact.injectCssxjsTypes`
+## 10. Operational Notes That Matter
 
----
+These are the things a fresh agent is likely to trip over if they are not written down.
 
-## 7. TypeScript Plugin Flow
+### 10.1 If testing local ESLint changes in a consumer repo, override both plugin and core
 
-High-level request path:
+The ESLint plugin and `react-pug-core` move together.
 
-1. tsserver requests snapshot/version
-2. plugin returns shadow snapshot if Pug regions exist
-3. TS language service computes diagnostics/completions/etc on shadow text
-4. plugin remaps outputs back to original source ranges
+If a consumer repo points at a local `eslint-plugin-react-pug` but still uses a published older `react-pug-core`, preprocess can fail because the plugin expects newer core fields.
 
-Intercepted API families include completions, quick-info/navigation, references/rename, diagnostics, classifications, and code-fix/refactor edits.
+For local validation in external repos, override both:
 
-Plugin behavior is fail-soft: on internal errors it falls back to base TS behavior.
+- the actual ESLint plugin package that the consumer repo uses
+  - usually `@react-pug/eslint-plugin-react-pug`
+  - some older repos may still point at `eslint-plugin-cssxjs`
+- `@react-pug/react-pug-core`
 
----
+The same coupling matters when publishing:
 
-## 8. VS Code Extension Flow
+- plugin and core releases need to move together
+- testing a new plugin against an old published core is not a valid release signal
 
-Extension contributes:
+### 10.2 Real consumer repos matter
 
-- tsserver plugin activation for TS/JS files
-- Pug template literal grammar injection
-- configuration schema
-- shadow document debug command
+Synthetic fixtures are useful, but real-project validation is also important when those repos are available locally or when there is an explicit validation flow for them.
 
-Grammar is focused on rich highlighting while semantic correctness remains TS-plugin-driven.
+Common public validation targets used by this repo include:
 
-For embedded `style` blocks, the grammar switches the terminal block body into CSS / Stylus / Sass / SCSS scopes and keeps `${...}` segments in embedded TS/TSX mode.
+- `../startupjs`
+- `../startupjs-ui`
 
----
+Use them for tricky lint/autofix behavior when they are available. Do not assume every checkout has those repos in the same parent directory.
 
-## 9. Compiler Adapter Flows
+### 10.3 Do not “fix” false positives by broad suppression
 
-### Babel
+The recent architecture work explicitly moved in the opposite direction:
 
-- `basic` mode:
-  - transform source text with core runtime mode
-  - parse each transformed Pug region as a replacement expression
-  - replace only the matched `pug` tagged-template expressions during `Program` traversal
-  - preserve normal Babel locations for surrounding non-Pug AST
-- `detailed` mode:
-  - transform source text with core runtime mode
-  - attach the core source map as an inline input map
-  - parse transformed result via Babel `parserOverride`
-  - let later Babel plugins operate on the transformed AST while Babel composes the final source map chain
+- improve shared parsing/mapping
+- improve core lint transform
+- improve embedded-source lint/autofix
+- keep suppressions narrow and synthetic-only
 
-### SWC
+### 10.4 Compiler behavior and ESLint behavior have different contracts
 
-- pretransform text via core
-- run `@swc/core` on transformed text (optional helper)
+A thing that is runtime-correct is not always lint-correct.
 
-### esbuild
+That is why:
 
-- plugin `onLoad` reads source and transforms before parse stage
-- returns transformed contents with original loader type
+- runtime transforms stay in core runtime mode
+- ESLint gets an additional lint-oriented transform surface
 
-### ESLint
+Do not force one output mode to satisfy every consumer.
 
-- processor preprocess transforms source before lint
-- postprocess remaps lint message coordinates back to originals
+## 11. Testing Strategy
 
----
+The repo relies on layered tests.
 
-## 10. Testing Strategy
+### 11.1 Core tests
 
-Test layers:
+- Pug compile output
+- mapping utilities
+- shadow document
+- lint transform
+- extracted region behavior
 
-- core unit/integration tests
-- TS plugin unit/integration tests
-- VS Code extension unit + extension-host tests
-- compiler adapter unit tests for Babel/SWC/esbuild/ESLint
-- shared compiler fixture matrix for parity/stress coverage
+### 11.2 Vendored tests
 
-Important coverage themes:
+- `is-expression`
+- `pug-lexer`
 
-- nested `${pug\`...\`}` transforms
-- multi-region files
-- runtime TS-syntax safety for JS/JSX
-- source map generation in compiler flows
-- moved style-block helper-call mapping fidelity
-- Babel source-map chaining through a downstream JSX transform
-- generated->original diagnostic mapping fidelity
+These are important because many bugs that first appear in ESLint are actually lexer/core bugs.
 
----
+### 11.3 Adapter tests
 
-## 11. Scripts and CI
+- Babel / SWC / esbuild wrapper tests
+- ESLint processor tests
+- TS plugin tests
+- VS Code extension-host tests
 
-Key scripts:
+### 11.4 Fixture tests
 
-- `npm run test:core`
-- `npm run test:ts-plugin`
-- `npm run test:vscode:unit`
-- `npm run test:vscode`
-- `npm test` (unit + VS Code)
+- unformatted example fixture diagnostics
+- fixed snapshots after `eslint --fix`
+- real-project compiler snapshots
+- startupjs / startupjs-ui regression repros
 
-CI jobs:
+### 11.5 Current testing philosophy
 
-- `quality-gates`: typecheck, build, and full test flow (with xvfb for VS Code tests)
+Prefer:
 
----
+- exact snapshots for transformed code shapes
+- real repros distilled to minimal public-safe cases
+- explicit regression matrices for complex autofix behavior
 
-## 12. Current Boundaries
+Avoid overly loose `toContain(...)` assertions when the full output shape is the contract.
 
-- VS Code extension targets desktop extension host (no web extension host build).
-- Runtime transform equivalence is behavior-oriented, not intended to be byte-identical to legacy Babel plugins.
-- Babel `sourceMaps: 'basic'` is the compatibility-first default and only provides coarse source maps within transformed Pug regions.
-- Babel `sourceMaps: 'detailed'` provides granular maps, but does so by taking ownership of parsing via `parserOverride`, which is less composable with other parse-owning Babel plugins.
-- Terminal `style` blocks require an explicit `pug` import so the matching helper import source can be derived.
-- Embedded Stylus editor support depends on a VS Code extension contributing `source.stylus`.
-- During very incomplete edits, temporary IntelliSense mapping may be approximate until syntax stabilizes.
+## 12. Current Known Boundaries
+
+- Babel `basic` mode is intentionally coarse and should not promise detailed Pug mapping
+- generated-JSX-surface ESLint fixes are still a weaker contract than embedded-source fixes
+- the deprecated `@stylistic/jsx-indent` / `@stylistic/jsx-indent-props` compatibility dependency is still present for formatter convergence
+- syntax highlighting is a separate correctness surface from the TS/shadow path
+- very incomplete in-progress edits can still produce approximate editor behavior until syntax stabilizes
+
+## 13. What A New Agent Should Assume
+
+If you are starting fresh in this repo, assume:
+
+1. `react-pug-core` is the source of truth for transform and mapping logic.
+2. If an ESLint bug looks structural, first ask whether it is actually a lexer/core problem.
+3. If a change only affects lint formatting or fix reconstruction, it probably belongs in the ESLint plugin.
+4. If a change affects parsing, expression emission, or mapping math, it probably belongs in core or the vendored lexer.
+5. Validate tricky behavior against a real consumer repo, not only synthetic fixtures.
+6. Prefer stronger tests and explicit contract notes over clever but implicit behavior.
