@@ -129,6 +129,17 @@ describe('babel-plugin-react-pug transform', () => {
     `);
   });
 
+  it('supports buffered ${} interpolation containing nested tagged template literals', () => {
+    const out = transform([
+      'const view = pug`Span.header-title= ${t(msg`Manage subscription for {name}`, { name: orgName })}`;',
+    ].join('\n'));
+    expect(out).toMatchInlineSnapshot(`
+      "const view = <Span className="header-title">{t(msg\`Manage subscription for {name}\`, {
+          name: orgName
+        })}</Span>;"
+    `);
+  });
+
   it('supports conditional and each control flow', () => {
     const out = transform([
       'const view = pug`',

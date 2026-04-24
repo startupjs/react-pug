@@ -287,6 +287,12 @@ describe('text content', () => {
     `);
   });
 
+  it('supports ${} buffered text interpolation containing nested tagged template literals', () => {
+    const result = compilePugToTsx('Span.header-title= ${t(msg`Manage subscription for {name}`, { name: orgName })}');
+    expect(result.parseError).toBeNull();
+    expect(result.tsx).toMatchInlineSnapshot(`"(<Span className=\"header-title\">{t(msg\`Manage subscription for {name}\`, { name: orgName })}</Span>)"`);
+  });
+
   it('supports piped text nodes across multiple lines', () => {
     const pug = [
       'span',
