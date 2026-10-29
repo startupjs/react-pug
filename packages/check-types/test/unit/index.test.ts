@@ -109,6 +109,30 @@ describe('@react-pug/check-types', () => {
     expect(result.selectedFiles).toEqual([resolve(projectRoot, 'src/App.tsx')])
   })
 
+  it('reads each file version once per check, not once per diagnosed file', async () => {
+    const calls = new Map<string, number>()
+    const countingTs = {
+      ...ts,
+      sys: {
+        ...ts.sys,
+        getModifiedTime: (fileName: string) => {
+          calls.set(fileName, (calls.get(fileName) ?? 0) + 1)
+          return ts.sys.getModifiedTime?.(fileName)
+        }
+      }
+    }
+    const result = await checkTypes({
+      cwd: resolve(repoRoot, 'example'),
+      loadPluginModule,
+      loadTypeScriptModule: async () => countingTs
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.fileCount).toBeGreaterThan(1)
+    expect(calls.size).toBeGreaterThan(0)
+    expect(Math.max(...calls.values())).toBe(1)
+  })
+
   it('reports exact pug diagnostic positions for the broken example-unformatted fixture', async () => {
     const projectRoot = resolve(repoRoot, 'test/fixtures/example-unformatted')
     const filePath = resolve(projectRoot, 'src/TypeScriptErrorsInPug.tsx')

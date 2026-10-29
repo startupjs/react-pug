@@ -147,9 +147,21 @@ export function createLanguageServiceFromTsconfig ({ ts, tsconfigPath, pluginIni
   const configDir = path.dirname(tsconfigPath)
   const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, configDir)
 
+  // A one-shot check reads each file's version once. The language service asks for the version of every
+  // project file on every per-file diagnostics call, so an uncached stat is O(files²) and dominated large
+  // projects (about 200 s of a 2,250-file check). Callers that keep the service alive across edits must
+  // create a new one to see changed files.
+  const scriptVersions = new Map()
   const host = {
     getScriptFileNames: () => parsedConfig.fileNames,
-    getScriptVersion: fileName => String(ts.sys.getModifiedTime?.(fileName)?.valueOf() ?? 0),
+    getScriptVersion: fileName => {
+      let version = scriptVersions.get(fileName)
+      if (version === undefined) {
+        version = String(ts.sys.getModifiedTime?.(fileName)?.valueOf() ?? 0)
+        scriptVersions.set(fileName, version)
+      }
+      return version
+    },
     getScriptSnapshot: fileName => {
       const text = ts.sys.readFile(fileName)
       return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text)
